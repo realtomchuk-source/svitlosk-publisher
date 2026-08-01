@@ -1,0 +1,5 @@
+repository = "https://github.com/svitlosk/svitlosk-specification"
+version = "v1.0.0"
+commit = "HEAD"
+freeze = "2026-08-01"
+compatible = "v1.0.x"
