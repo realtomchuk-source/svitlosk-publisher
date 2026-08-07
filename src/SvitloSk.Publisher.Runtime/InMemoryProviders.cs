@@ -5,7 +5,7 @@ using SvitloSk.Publisher.Domain;
 
 namespace SvitloSk.Publisher.Runtime;
 
-public class DummyEditionRepository : IEditionRepository
+public class InMemoryEditionRepository : IEditionRepository
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Edition> _editions = new();
 
@@ -31,16 +31,16 @@ public class DummyEditionRepository : IEditionRepository
     }
 }
 
-public class DummyInputPackageProvider : IInputPackageProvider
+public class InMemoryInputPackageProvider : IInputPackageProvider
 {
     public Task<InputPackage> GetLatestAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult(new InputPackage(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
-            "dummy_source",
-            "dummy_territory",
-            "dummy_payload"
+            "inmemory_source",
+            "inmemory_territory",
+            "inmemory_payload"
         ));
     }
 }

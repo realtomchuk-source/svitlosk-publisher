@@ -36,10 +36,10 @@ public class EndToEndScenarioTests
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
         services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
 
-        var repository = new DummyEditionRepository();
+        var repository = new InMemoryEditionRepository();
         services.AddSingleton<IEditionRepository>(repository);
         
-        var packageProvider = new DummyInputPackageProvider();
+        var packageProvider = new InMemoryInputPackageProvider();
         services.AddSingleton<IInputPackageProvider>(packageProvider);
 
         var dispatcher = new InMemoryDispatcher();
@@ -62,6 +62,6 @@ public class EndToEndScenarioTests
 
         var dispatchedRequests = dispatcher.DispatchedRequests;
         Assert.NotEmpty(dispatchedRequests);
-        Assert.Contains("Content for dummy_territory", dispatchedRequests.First().Edition);
+        Assert.Contains("Content for inmemory_territory", dispatchedRequests.First().Edition);
     }
 }

@@ -100,14 +100,14 @@ public class SynchronizationEngine : ISynchronizationEngine
                             edition.Activate();
                             if (package != null && !string.IsNullOrEmpty(package.TerritorialScope))
                             {
-                                var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload);
+                                var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload ?? string.Empty);
                                 newPublications.Add(pub);
                                 artifactsToBuild.Add(pub);
                             }
                         }
                         else if (situation.Type == Situation.TerritoryAppeared && situation.TerritoryId != null)
                         {
-                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload);
+                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package?.RawPayload ?? string.Empty);
                             newPublications.Add(pub);
                             artifactsToBuild.Add(pub);
                         }
@@ -118,7 +118,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
-                            var updatedPub = existing with { ContentHash = package.RawPayload };
+                            var updatedPub = existing with { ContentHash = package?.RawPayload ?? string.Empty };
                             newPublications.Add(updatedPub);
                             artifactsToBuild.Add(updatedPub);
                         }

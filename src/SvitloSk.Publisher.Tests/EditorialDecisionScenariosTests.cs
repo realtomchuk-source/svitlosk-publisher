@@ -17,7 +17,7 @@ namespace SvitloSk.Publisher.Tests;
 
 public class EditorialDecisionScenariosTests
 {
-    private (IServiceProvider, DummyEditionRepository, InMemoryDispatcher, DummyInputPackageProvider) SetupContainer(InputPackage initialPackage)
+    private (IServiceProvider, InMemoryEditionRepository, InMemoryDispatcher, TestInputPackageProvider) SetupContainer(InputPackage initialPackage)
     {
         var services = new ServiceCollection();
 
@@ -33,10 +33,10 @@ public class EditorialDecisionScenariosTests
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
         services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
 
-        var repository = new DummyEditionRepository();
+        var repository = new InMemoryEditionRepository();
         services.AddSingleton<IEditionRepository>(repository);
 
-        var packageProvider = new DummyInputPackageProvider(initialPackage);
+        var packageProvider = new TestInputPackageProvider(initialPackage);
         services.AddSingleton<IInputPackageProvider>(packageProvider);
 
         var dispatcher = new InMemoryDispatcher();
@@ -46,11 +46,11 @@ public class EditorialDecisionScenariosTests
         return (services.BuildServiceProvider(), repository, dispatcher, packageProvider);
     }
 
-    private class DummyInputPackageProvider : IInputPackageProvider
+    private class TestInputPackageProvider : IInputPackageProvider
     {
         public InputPackage CurrentPackage { get; set; }
 
-        public DummyInputPackageProvider(InputPackage initialPackage)
+        public TestInputPackageProvider(InputPackage initialPackage)
         {
             CurrentPackage = initialPackage;
         }

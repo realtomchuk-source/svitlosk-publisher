@@ -44,9 +44,9 @@ class Program
                 services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
                 services.AddHostedService<SynchronizationWorker>();
 
-                // Stubs for runtime activation
-                services.AddSingleton<IEditionRepository, DummyEditionRepository>();
-                services.AddSingleton<IInputPackageProvider, DummyInputPackageProvider>();
+                // Runtime (in-memory defaults for production readiness where no external systems are defined)
+                services.AddSingleton<IEditionRepository, InMemoryEditionRepository>();
+                services.AddSingleton<IInputPackageProvider, InMemoryInputPackageProvider>();
 
                 // Adapters
                 services.AddSingleton<InMemoryDispatcher>();

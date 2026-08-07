@@ -4,6 +4,10 @@
     <ProjectReference Include="..\SvitloSk.Publisher.Channels\SvitloSk.Publisher.Channels.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

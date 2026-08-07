@@ -43,10 +43,10 @@ public class EditionUpdateWorkflowTests
         return services.BuildServiceProvider();
     }
 
-    private class DummyInputPackageProvider : IInputPackageProvider
+    private class TestInputPackageProvider : IInputPackageProvider
     {
         private readonly InputPackage _package;
-        public DummyInputPackageProvider(InputPackage package) => _package = package;
+        public TestInputPackageProvider(InputPackage package) => _package = package;
         public Task<InputPackage> GetLatestAsync(CancellationToken cancellationToken) => Task.FromResult(_package);
     }
 
@@ -55,7 +55,7 @@ public class EditionUpdateWorkflowTests
     {
         // Arrange
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var repository = new DummyEditionRepository();
+        var repository = new InMemoryEditionRepository();
         
         var edition = new EditionFactory().Create(today);
         edition.Activate();
@@ -66,7 +66,7 @@ public class EditionUpdateWorkflowTests
         repository.Save(edition);
 
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_1"); // same hash
-        var provider = new DummyInputPackageProvider(package);
+        var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
         var sp = BuildServiceProvider(repository, provider, dispatcher);
@@ -85,7 +85,7 @@ public class EditionUpdateWorkflowTests
     {
         // Arrange
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var repository = new DummyEditionRepository();
+        var repository = new InMemoryEditionRepository();
         
         var edition = new EditionFactory().Create(today);
         edition.Activate();
@@ -96,7 +96,7 @@ public class EditionUpdateWorkflowTests
         repository.Save(edition);
 
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_2"); // changed hash
-        var provider = new DummyInputPackageProvider(package);
+        var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
         var sp = BuildServiceProvider(repository, provider, dispatcher);
@@ -118,14 +118,14 @@ public class EditionUpdateWorkflowTests
     {
         // Arrange
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var repository = new DummyEditionRepository();
+        var repository = new InMemoryEditionRepository();
         
         var edition = new EditionFactory().Create(today);
         edition.Activate();
         repository.Save(edition);
 
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_3"); // new pub
-        var provider = new DummyInputPackageProvider(package);
+        var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
         var sp = BuildServiceProvider(repository, provider, dispatcher);
