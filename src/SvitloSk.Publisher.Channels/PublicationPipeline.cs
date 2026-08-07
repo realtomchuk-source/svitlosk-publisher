@@ -16,6 +16,6 @@ public class PublicationPipeline : IPublicationPipeline
 
     public void Dispatch(PublicationRequest request)
     {
-        throw new NotImplementedException();
+        _port.Publish(request);
     }
 }

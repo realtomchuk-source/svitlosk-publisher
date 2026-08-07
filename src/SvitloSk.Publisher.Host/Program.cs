@@ -48,7 +48,8 @@ class Program
                 services.AddSingleton<IInputPackageProvider, DummyInputPackageProvider>();
 
                 // Adapters
-                services.AddTransient<IPublicationPort, TelegramAdapter>();
+                services.AddSingleton<InMemoryDispatcher>();
+                services.AddSingleton<IPublicationPort>(sp => sp.GetRequiredService<InMemoryDispatcher>());
             });
 
         var host = builder.Build();
