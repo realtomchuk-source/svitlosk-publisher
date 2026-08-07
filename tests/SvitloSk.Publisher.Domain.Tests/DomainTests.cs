@@ -21,7 +21,6 @@ public class DomainTests
         var publication = new Publication(
             id, 
             "T1", 
-            "Content", 
             PublicationClassification.Persistent,
             PublicationType.Text,
             now,
@@ -31,7 +30,6 @@ public class DomainTests
         
         Assert.Equal(id, publication.Id);
         Assert.Equal("T1", publication.TerritoryId);
-        Assert.Equal("Content", publication.Content);
         Assert.Equal(PublicationClassification.Persistent, publication.Classification);
         Assert.Equal(PublicationType.Text, publication.Type);
         Assert.Equal(now, publication.CreatedAt);
@@ -66,7 +64,7 @@ public class DomainTests
     public void Edition_Should_Manage_Publications()
     {
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
-        var publication = new Publication(Guid.NewGuid(), "T1", "Content", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
+        var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
         edition.AddPublication(publication);
         
@@ -80,7 +78,7 @@ public class DomainTests
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
         edition.Close();
         
-        var publication = new Publication(Guid.NewGuid(), "T1", "Content", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
+        var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
         Assert.Throws<InvalidOperationException>(() => edition.AddPublication(publication));
     }
@@ -89,7 +87,7 @@ public class DomainTests
     public void Edition_Should_Support_Removing_Publications()
     {
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
-        var publication = new Publication(Guid.NewGuid(), "T1", "Content", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
+        var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
         edition.AddPublication(publication);
         Assert.Single(edition.Publications);
@@ -102,7 +100,7 @@ public class DomainTests
     public void Edition_Should_Not_Allow_Removing_Publications_When_Closed()
     {
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
-        var publication = new Publication(Guid.NewGuid(), "T1", "Content", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
+        var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
         edition.AddPublication(publication);
         edition.Close();

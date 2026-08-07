@@ -20,7 +20,6 @@ public enum PublicationType
 public record Publication(
     Guid Id, 
     string TerritoryId, 
-    string Content, 
     PublicationClassification Classification,
     PublicationType Type,
     DateTimeOffset CreatedAt,

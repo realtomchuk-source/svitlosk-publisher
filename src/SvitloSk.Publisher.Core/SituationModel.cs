@@ -17,7 +17,7 @@ public class SituationModel : ISituationModel
         var situations = new List<DetectedSituation>();
 
         // S-01 Morning Startup
-        if (currentEdition == null || currentEdition.State == EditionState.Closed)
+        if (currentEdition == null || currentEdition.State == EditionState.Closed || currentEdition.State == EditionState.Created)
         {
             situations.Add(new DetectedSituation(Situation.MorningStartup));
         }

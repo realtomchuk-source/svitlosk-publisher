@@ -81,6 +81,17 @@ public class SynchronizationEngine : ISynchronizationEngine
                 if (decision.DecisionResult != DecisionResult.NO_ACTION)
                 {
                     hasChanges = true;
+                    if (decision.DecisionResult == DecisionResult.CREATE && edition.State == SvitloSk.Publisher.Domain.EditionState.Created)
+                    {
+                        edition.Activate();
+                        // Add a dummy publication from the package to simulate processing
+                        var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
+                        edition.AddPublication(pub);
+                    }
+                    else if (decision.DecisionResult == DecisionResult.CLOSE && edition.State != SvitloSk.Publisher.Domain.EditionState.Closed)
+                    {
+                        edition.Close();
+                    }
                 }
             }
 
@@ -88,7 +99,13 @@ public class SynchronizationEngine : ISynchronizationEngine
             {
                 _editionRepository.Save(edition);
                 
-                var editionArtifact = _editionAssembly.Assemble(edition, Array.Empty<PublicationArtifact>());
+                var artifacts = new List<PublicationArtifact>();
+                foreach (var pub in edition.Publications)
+                {
+                    artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId}"));
+                }
+                
+                var editionArtifact = _editionAssembly.Assemble(edition, artifacts);
                 var content = string.Join("\n", editionArtifact.OrderedContent);
                 _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
             }
