@@ -81,17 +81,16 @@ public class SynchronizationEngine : ISynchronizationEngine
                 if (decision.DecisionResult != DecisionResult.NO_ACTION)
                 {
                     hasChanges = true;
-                    var decisions = new[] { decision };
-                    var editionArtifact = _editionAssembly.Assemble(decisions, new SvitloSk.Publisher.Execution.EditionState("active"), Array.Empty<PublicationArtifact>(), Array.Empty<PackageArtifact>());
-                    
-                    var content = string.Join("\n", editionArtifact.OrderedContent);
-                    _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
                 }
             }
 
             if (hasChanges)
             {
                 _editionRepository.Save(edition);
+                
+                var editionArtifact = _editionAssembly.Assemble(edition, Array.Empty<PublicationArtifact>());
+                var content = string.Join("\n", editionArtifact.OrderedContent);
+                _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
             }
         }
         catch (Exception ex)

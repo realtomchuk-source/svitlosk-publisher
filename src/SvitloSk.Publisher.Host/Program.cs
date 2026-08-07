@@ -32,6 +32,7 @@ class Program
                 services.AddSingleton<IReasoningModel, ReasoningModel>();
 
                 // Execution
+                services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
                 services.AddScoped<IEditionAssembly, EditionAssembly>();
                 services.AddScoped<IGraphicPublisher, GraphicPublisher>();
                 services.AddScoped<IGraphicAssembly, GraphicAssembly>();

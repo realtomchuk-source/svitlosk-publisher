@@ -2,15 +2,12 @@
 // Section: 01
 
 using System.Collections.Generic;
-using SvitloSk.Publisher.Core;
+using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Domain.Artifacts;
 
 namespace SvitloSk.Publisher.Execution;
 
 public interface IEditionAssembly
 {
-    EditionArtifact Assemble(
-        IEnumerable<EditorialDecision> decisions,
-        EditionState currentState,
-        IEnumerable<PublicationArtifact> publications,
-        IEnumerable<PackageArtifact> packages);
+    EditionArtifact Assemble(Edition edition, IEnumerable<PublicationArtifact> publications);
 }
