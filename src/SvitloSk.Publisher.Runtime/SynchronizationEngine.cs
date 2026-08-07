@@ -123,6 +123,14 @@ public class SynchronizationEngine : ISynchronizationEngine
                             artifactsToBuild.Add(updatedPub);
                         }
                     }
+                    else if (decision.DecisionResult == DecisionResult.DELETE && situation.TerritoryId != null)
+                    {
+                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId);
+                        if (existing != null)
+                        {
+                            removedPublications.Add(existing);
+                        }
+                    }
                     else if (decision.DecisionResult == DecisionResult.CLOSE && edition.State != SvitloSk.Publisher.Domain.EditionState.Closed)
                     {
                         edition.Close();
@@ -138,7 +146,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                 _editionRepository.Save(edition);
                 
                 var artifacts = new List<PublicationArtifact>();
-                foreach (var pub in artifactsToBuild)
+                foreach (var pub in pkg.Publications)
                 {
                     artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
                 }

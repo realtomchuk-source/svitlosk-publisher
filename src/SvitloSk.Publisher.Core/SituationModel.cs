@@ -41,17 +41,28 @@ public class SituationModel : ISituationModel
             if (inputPackage != null && !string.IsNullOrEmpty(inputPackage.TerritorialScope))
             {
                 var existingPub = System.Linq.Enumerable.FirstOrDefault(System.Linq.Enumerable.SelectMany(currentEdition.Packages, pkg => pkg.Publications), p => p.TerritoryId == inputPackage.TerritorialScope);
+                
                 if (existingPub == null)
                 {
-                    situations.Add(new DetectedSituation(Situation.TerritoryAppeared, inputPackage.TerritorialScope));
-                }
-                else if (existingPub.ContentHash != inputPackage.RawPayload)
-                {
-                    situations.Add(new DetectedSituation(Situation.ChangedAddresses, inputPackage.TerritorialScope));
+                    if (inputPackage.PackageState != "Clear" && inputPackage.RawPayload != "CLEAR")
+                    {
+                        situations.Add(new DetectedSituation(Situation.TerritoryAppeared, inputPackage.TerritorialScope));
+                    }
                 }
                 else
                 {
-                    situations.Add(new DetectedSituation(Situation.NoChangesDetected, inputPackage.TerritorialScope));
+                    if (inputPackage.PackageState == "Clear" || inputPackage.RawPayload == "CLEAR")
+                    {
+                        situations.Add(new DetectedSituation(Situation.TerritoryDisappeared, inputPackage.TerritorialScope));
+                    }
+                    else if (existingPub.ContentHash != inputPackage.RawPayload)
+                    {
+                        situations.Add(new DetectedSituation(Situation.ChangedAddresses, inputPackage.TerritorialScope));
+                    }
+                    else
+                    {
+                        situations.Add(new DetectedSituation(Situation.NoChangesDetected, inputPackage.TerritorialScope));
+                    }
                 }
             }
         }
