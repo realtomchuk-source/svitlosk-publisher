@@ -61,11 +61,11 @@ public class PublicationPackageTests
 
         var result = assembly.Assemble(edition, artifacts);
         
-        // A_Package comes before B_Package based on OrderBy(p => p.Name)
         Assert.Equal(2, result.OrderedContent.Count());
         var orderedList = result.OrderedContent.ToList();
-        Assert.Equal("Content 2", orderedList[0]);
-        Assert.Equal("Content 1", orderedList[1]);
+        // T1 comes before T2 in canonical EditorialOrder (Alphabetical by TerritoryId)
+        Assert.Equal("Content 1", orderedList[0]);
+        Assert.Equal("Content 2", orderedList[1]);
     }
 
     [Fact]
