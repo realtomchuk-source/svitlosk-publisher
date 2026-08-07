@@ -1,0 +1,30 @@
+Graphic Reference v0.1
+
+This image is NOT a specification.
+
+It is NOT the final publication layout.
+
+It is NOT a UI design.
+
+It is NOT a rendering template.
+
+It is only a visual reference demonstrating the class of graphical artifact expected from Graphic Publisher.
+
+The renderer MUST NOT depend on this exact composition.
+
+The following may change at any time:
+
+logo
+typography
+spacing
+iconography
+branding
+block arrangement
+legends
+footer
+QR position
+service information
+
+Only the semantic information structure is expected to remain compatible.
+
+The Graphic Publisher shall be capable of rendering future templates without changing the Publisher business logic.
