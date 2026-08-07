@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using SvitloSk.Publisher.Core;
 using SvitloSk.Publisher.Core.Reasoning;
 using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Domain.Artifacts;
 using SvitloSk.Publisher.Domain.Factories;
 using SvitloSk.Publisher.Execution;
 using SvitloSk.Publisher.Channels;
@@ -55,8 +56,15 @@ public class SynchronizationEngine : ISynchronizationEngine
         try
         {
             var package = await _packageProvider.GetLatestAsync(cancellationToken);
-            var edition = _editionRepository.GetByDate(DateOnly.FromDateTime(DateTime.UtcNow)) 
-                ?? _editionFactory.Create(DateOnly.FromDateTime(DateTime.UtcNow));
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            
+            bool hasChanges = false;
+            var edition = _editionRepository.GetByDate(today);
+            if (edition == null)
+            {
+                edition = _editionFactory.Create(today);
+                hasChanges = true;
+            }
 
             var infraState = new InfrastructureState(false, false, false);
             var currentTime = DateTimeOffset.UtcNow;
@@ -72,12 +80,18 @@ public class SynchronizationEngine : ISynchronizationEngine
 
                 if (decision.DecisionResult != DecisionResult.NO_ACTION)
                 {
+                    hasChanges = true;
                     var decisions = new[] { decision };
                     var editionArtifact = _editionAssembly.Assemble(decisions, new SvitloSk.Publisher.Execution.EditionState("active"), Array.Empty<PublicationArtifact>(), Array.Empty<PackageArtifact>());
                     
                     var content = string.Join("\n", editionArtifact.OrderedContent);
                     _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
                 }
+            }
+
+            if (hasChanges)
+            {
+                _editionRepository.Save(edition);
             }
         }
         catch (Exception ex)
