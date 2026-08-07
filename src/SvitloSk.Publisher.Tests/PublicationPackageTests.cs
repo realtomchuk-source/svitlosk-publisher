@@ -29,8 +29,8 @@ public class PublicationPackageTests
         };
 
         var result = assembly.Assemble(edition, artifacts);
-        Assert.Single(result.OrderedContent);
-        Assert.Equal("Content 1", result.OrderedContent.First());
+        Assert.Single(result.OrderedPublications);
+        Assert.Equal("Content 1", result.OrderedPublications.First().Content);
     }
 
     [Fact]
@@ -61,8 +61,8 @@ public class PublicationPackageTests
 
         var result = assembly.Assemble(edition, artifacts);
         
-        Assert.Equal(2, result.OrderedContent.Count());
-        var orderedList = result.OrderedContent.ToList();
+        Assert.Equal(2, result.OrderedPublications.Count());
+        var orderedList = result.OrderedPublications.Select(p => p.Content).ToList();
         // T1 comes before T2 in canonical EditorialOrder (Alphabetical by TerritoryId)
         Assert.Equal("Content 1", orderedList[0]);
         Assert.Equal("Content 2", orderedList[1]);
@@ -81,6 +81,6 @@ public class PublicationPackageTests
         var artifacts = new List<PublicationArtifact>();
 
         var result = assembly.Assemble(edition, artifacts);
-        Assert.Empty(result.OrderedContent);
+        Assert.Empty(result.OrderedPublications);
     }
 }

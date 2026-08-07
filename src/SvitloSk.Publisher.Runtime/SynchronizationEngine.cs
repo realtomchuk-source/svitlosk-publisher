@@ -2,6 +2,8 @@
 // Section: 4
 
 using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -154,7 +156,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                 if (pkg.Publications.Any())
                 {
                     var editionArtifact = _editionAssembly.Assemble(edition, artifacts);
-                    var content = string.Join("\n", editionArtifact.OrderedContent);
+                    var content = string.Join("\n", editionArtifact.OrderedPublications.Select(p => p.Content));
                     _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
                 }
             }

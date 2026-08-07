@@ -1,9 +1,10 @@
-// Source: GRAPHIC_PUBLISHER_SPECIFICATION.md
-// Section: 1
+using System.Collections.Generic;
+using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Domain.Artifacts;
 
 namespace SvitloSk.Publisher.Execution;
 
 public interface IGraphicPublisher
 {
-    void Orchestrate();
+    IReadOnlyCollection<GraphicPublication> Publish(Edition edition, IReadOnlyCollection<PublicationArtifact> artifacts);
 }

@@ -7,17 +7,17 @@ namespace SvitloSk.Publisher.Execution;
 
 public class CanonicalOrderingStrategy : IEditorialOrderingStrategy
 {
-    public IEnumerable<string> Order(Edition edition, IEnumerable<PublicationArtifact> publications)
+    public IEnumerable<PublicationArtifact> Order(Edition edition, IEnumerable<PublicationArtifact> publications)
     {
         var editorialOrder = new EditorialOrder(edition);
         var pubDict = publications.ToDictionary(p => p.PublicationId);
         
-        var ordered = new List<string>();
+        var ordered = new List<PublicationArtifact>();
         foreach (var id in editorialOrder.OrderedPublicationIds)
         {
             if (pubDict.TryGetValue(id, out var art))
             {
-                ordered.Add(art.Content);
+                ordered.Add(art);
             }
         }
         

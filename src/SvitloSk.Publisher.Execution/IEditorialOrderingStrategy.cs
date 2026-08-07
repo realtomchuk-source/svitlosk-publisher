@@ -6,5 +6,5 @@ namespace SvitloSk.Publisher.Execution;
 
 public interface IEditorialOrderingStrategy
 {
-    IEnumerable<string> Order(Edition edition, IEnumerable<PublicationArtifact> publications);
+    IEnumerable<PublicationArtifact> Order(Edition edition, IEnumerable<PublicationArtifact> publications);
 }
