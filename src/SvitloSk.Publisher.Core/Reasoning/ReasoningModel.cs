@@ -14,6 +14,10 @@ public class ReasoningModel : IReasoningModel
             Situation.ExternalProducerUnavailable => new ReasonedConclusion("IGNORE", "PRODUCER_DOWN"),
             Situation.GraphicUnavailable => new ReasonedConclusion("IGNORE", "GRAPHIC_DOWN"),
             Situation.CommentFlood => new ReasonedConclusion("IGNORE", "COMMENT_FLOOD"),
+            Situation.TerritoryAppeared => new ReasonedConclusion("SIGNIFICANT (NEW TERRITORY)", "TERRITORY_APPEARED"),
+            Situation.ChangedAddresses => new ReasonedConclusion("SIGNIFICANT (CHANGED CONTENT)", "CONTENT_CHANGED"),
+            Situation.TerritoryDisappeared => new ReasonedConclusion("SIGNIFICANT (MISSING TERRITORY)", "EPHEMERAL"),
+            Situation.NoChangesDetected => new ReasonedConclusion("INSIGNIFICANT", "NO_CHANGES"),
             _ => new ReasonedConclusion("IGNORE", "DEFAULT")
         };
     }

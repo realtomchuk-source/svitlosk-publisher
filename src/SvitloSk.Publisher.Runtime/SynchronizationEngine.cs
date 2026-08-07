@@ -73,6 +73,11 @@ public class SynchronizationEngine : ISynchronizationEngine
 
             var situations = _situationModel.Detect(edition, package, currentTime, cleanupThreshold, closeThreshold, infraState);
 
+            var affectedPublications = new HashSet<Publication>();
+            var newPublications = new List<Publication>();
+            var removedPublications = new List<Publication>();
+            var artifactsToBuild = new List<Publication>();
+
             foreach (var situation in situations)
             {
                 var conclusion = _reasoningModel.Evaluate(situation, edition);
@@ -81,12 +86,35 @@ public class SynchronizationEngine : ISynchronizationEngine
                 if (decision.DecisionResult != DecisionResult.NO_ACTION)
                 {
                     hasChanges = true;
-                    if (decision.DecisionResult == DecisionResult.CREATE && edition.State == SvitloSk.Publisher.Domain.EditionState.Created)
+                    if (decision.DecisionResult == DecisionResult.CREATE)
                     {
-                        edition.Activate();
-                        // Add a dummy publication from the package to simulate processing
-                        var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
-                        edition.AddPublication(pub);
+                        if (situation.Type == Situation.MorningStartup && edition.State == SvitloSk.Publisher.Domain.EditionState.Created)
+                        {
+                            edition.Activate();
+                            if (package != null && !string.IsNullOrEmpty(package.TerritorialScope))
+                            {
+                                var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload);
+                                newPublications.Add(pub);
+                                artifactsToBuild.Add(pub);
+                            }
+                        }
+                        else if (situation.Type == Situation.TerritoryAppeared && situation.TerritoryId != null)
+                        {
+                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload);
+                            newPublications.Add(pub);
+                            artifactsToBuild.Add(pub);
+                        }
+                    }
+                    else if (decision.DecisionResult == DecisionResult.UPDATE && situation.Type == Situation.ChangedAddresses && situation.TerritoryId != null)
+                    {
+                        var existing = System.Linq.Enumerable.FirstOrDefault(edition.Publications, p => p.TerritoryId == situation.TerritoryId);
+                        if (existing != null)
+                        {
+                            removedPublications.Add(existing);
+                            var updatedPub = existing with { ContentHash = package.RawPayload };
+                            newPublications.Add(updatedPub);
+                            artifactsToBuild.Add(updatedPub);
+                        }
                     }
                     else if (decision.DecisionResult == DecisionResult.CLOSE && edition.State != SvitloSk.Publisher.Domain.EditionState.Closed)
                     {
@@ -95,14 +123,17 @@ public class SynchronizationEngine : ISynchronizationEngine
                 }
             }
 
+            foreach (var p in removedPublications) edition.RemovePublication(p);
+            foreach (var p in newPublications) edition.AddPublication(p);
+
             if (hasChanges)
             {
                 _editionRepository.Save(edition);
                 
                 var artifacts = new List<PublicationArtifact>();
-                foreach (var pub in edition.Publications)
+                foreach (var pub in artifactsToBuild)
                 {
-                    artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId}"));
+                    artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
                 }
                 
                 var editionArtifact = _editionAssembly.Assemble(edition, artifacts);

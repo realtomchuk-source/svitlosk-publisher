@@ -36,6 +36,24 @@ public class SituationModel : ISituationModel
             {
                 situations.Add(new DetectedSituation(Situation.CleanupStarted));
             }
+
+            // Detect package changes
+            if (inputPackage != null && !string.IsNullOrEmpty(inputPackage.TerritorialScope))
+            {
+                var existingPub = System.Linq.Enumerable.FirstOrDefault(currentEdition.Publications, p => p.TerritoryId == inputPackage.TerritorialScope);
+                if (existingPub == null)
+                {
+                    situations.Add(new DetectedSituation(Situation.TerritoryAppeared, inputPackage.TerritorialScope));
+                }
+                else if (existingPub.ContentHash != inputPackage.RawPayload)
+                {
+                    situations.Add(new DetectedSituation(Situation.ChangedAddresses, inputPackage.TerritorialScope));
+                }
+                else
+                {
+                    situations.Add(new DetectedSituation(Situation.NoChangesDetected, inputPackage.TerritorialScope));
+                }
+            }
         }
 
         // Infrastructure-based situations (S-14, S-15, S-16)

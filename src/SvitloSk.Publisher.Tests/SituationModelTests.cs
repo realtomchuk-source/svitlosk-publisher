@@ -30,18 +30,20 @@ public class SituationModelTests
     }
 
     [Fact]
-    public void Detect_ActiveEdition_NoTimeTriggers_NoInfraIssues_ReturnsEmpty()
+    public void Detect_ActiveEdition_NoTimeTriggers_NoInfraIssues_ReturnsNoChangesDetected()
     {
         var targetDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var edition = new Edition(Guid.NewGuid(), targetDate);
         edition.Activate();
+        edition.AddPublication(new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "payload"));
         
         var currentTime = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(30);
         var infraState = new InfrastructureState(false, false, false);
         
-        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", "payload"), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         
-        Assert.Empty(result);
+        Assert.Single(result);
+        Assert.Equal(Situation.NoChangesDetected, result.First().Type);
     }
 
     [Fact]
