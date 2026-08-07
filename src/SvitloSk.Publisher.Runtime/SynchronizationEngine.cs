@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using SvitloSk.Publisher.Core;
 using SvitloSk.Publisher.Core.Reasoning;
 using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Domain.Factories;
 using SvitloSk.Publisher.Execution;
 using SvitloSk.Publisher.Channels;
 
@@ -18,6 +19,7 @@ public class SynchronizationEngine : ISynchronizationEngine
     private readonly ILogger<SynchronizationEngine> _logger;
     private readonly IInputPackageProvider _packageProvider;
     private readonly IEditionRepository _editionRepository;
+    private readonly IEditionFactory _editionFactory;
     private readonly ISituationModel _situationModel;
     private readonly IReasoningModel _reasoningModel;
     private readonly IEditorialDecisionEngine _decisionEngine;
@@ -28,6 +30,7 @@ public class SynchronizationEngine : ISynchronizationEngine
         ILogger<SynchronizationEngine> logger,
         IInputPackageProvider packageProvider,
         IEditionRepository editionRepository,
+        IEditionFactory editionFactory,
         ISituationModel situationModel,
         IReasoningModel reasoningModel,
         IEditorialDecisionEngine decisionEngine,
@@ -37,6 +40,7 @@ public class SynchronizationEngine : ISynchronizationEngine
         _logger = logger;
         _packageProvider = packageProvider;
         _editionRepository = editionRepository;
+        _editionFactory = editionFactory;
         _situationModel = situationModel;
         _reasoningModel = reasoningModel;
         _decisionEngine = decisionEngine;
@@ -52,7 +56,7 @@ public class SynchronizationEngine : ISynchronizationEngine
         {
             var package = await _packageProvider.GetLatestAsync(cancellationToken);
             var edition = _editionRepository.GetByDate(DateOnly.FromDateTime(DateTime.UtcNow)) 
-                ?? new Edition(Guid.NewGuid(), DateOnly.FromDateTime(DateTime.UtcNow));
+                ?? _editionFactory.Create(DateOnly.FromDateTime(DateTime.UtcNow));
 
             var infraState = new InfrastructureState(false, false, false);
             var currentTime = DateTimeOffset.UtcNow;

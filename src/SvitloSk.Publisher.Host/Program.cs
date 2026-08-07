@@ -1,6 +1,3 @@
-// Source: Host Infrastructure
-// Section: Startup
-
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,6 +9,7 @@ using SvitloSk.Publisher.Channels;
 using SvitloSk.Publisher.Runtime;
 using SvitloSk.Publisher.Adapters.Telegram;
 using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Domain.Factories;
 
 namespace SvitloSk.Publisher.Host;
 
@@ -24,6 +22,9 @@ class Program
             {
                 // Logging
                 services.AddLogging(configure => configure.AddConsole());
+
+                // Domain
+                services.AddSingleton<IEditionFactory, EditionFactory>();
 
                 // Core
                 services.AddSingleton<IEditorialDecisionEngine, EditorialDecisionEngine>();
