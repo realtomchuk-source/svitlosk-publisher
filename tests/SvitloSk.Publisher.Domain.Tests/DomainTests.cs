@@ -66,10 +66,13 @@ public class DomainTests
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
         var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
-        edition.AddPublication(publication);
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
+        pkg.AddPublication(publication);
         
-        Assert.Single(edition.Publications);
-        Assert.Contains(publication, edition.Publications);
+        Assert.Single(edition.Packages);
+        Assert.Single(edition.Packages.First().Publications);
+        Assert.Contains(publication, edition.Packages.First().Publications);
     }
 
     [Fact]
@@ -80,7 +83,8 @@ public class DomainTests
         
         var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
-        Assert.Throws<InvalidOperationException>(() => edition.AddPublication(publication));
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        Assert.Throws<InvalidOperationException>(() => edition.AddPackage(pkg));
     }
 
     [Fact]
@@ -89,22 +93,29 @@ public class DomainTests
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
         var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
-        edition.AddPublication(publication);
-        Assert.Single(edition.Publications);
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
+        pkg.AddPublication(publication);
 
-        edition.RemovePublication(publication);
-        Assert.Empty(edition.Publications);
+        // Act
+        pkg.RemovePublication(publication);
+
+        // Assert
+        Assert.Empty(pkg.Publications);
     }
 
     [Fact]
-    public void Edition_Should_Not_Allow_Removing_Publications_When_Closed()
+    public void Edition_Should_Not_Allow_Removing_Packages_When_Closed()
     {
         var edition = new Edition(Guid.NewGuid(), new DateOnly(2026, 8, 6));
-        var publication = new Publication(Guid.NewGuid(), "T1", PublicationClassification.Ephemeral, PublicationType.Text, DateTimeOffset.UtcNow, "hash");
         
-        edition.AddPublication(publication);
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
+        
+        // Act
         edition.Close();
-        
-        Assert.Throws<InvalidOperationException>(() => edition.RemovePublication(publication));
+
+        // Assert
+        Assert.Throws<InvalidOperationException>(() => edition.RemovePackage(pkg));
     }
 }

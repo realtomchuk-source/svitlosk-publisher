@@ -40,7 +40,7 @@ public class SituationModel : ISituationModel
             // Detect package changes
             if (inputPackage != null && !string.IsNullOrEmpty(inputPackage.TerritorialScope))
             {
-                var existingPub = System.Linq.Enumerable.FirstOrDefault(currentEdition.Publications, p => p.TerritoryId == inputPackage.TerritorialScope);
+                var existingPub = System.Linq.Enumerable.FirstOrDefault(System.Linq.Enumerable.SelectMany(currentEdition.Packages, pkg => pkg.Publications), p => p.TerritoryId == inputPackage.TerritorialScope);
                 if (existingPub == null)
                 {
                     situations.Add(new DetectedSituation(Situation.TerritoryAppeared, inputPackage.TerritorialScope));

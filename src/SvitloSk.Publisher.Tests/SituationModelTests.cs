@@ -35,7 +35,9 @@ public class SituationModelTests
         var targetDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var edition = new Edition(Guid.NewGuid(), targetDate);
         edition.Activate();
-        edition.AddPublication(new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "payload"));
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
+        pkg.AddPublication(new Publication(Guid.NewGuid(), "T1", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "payload"));
         
         var currentTime = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(30);
         var infraState = new InfrastructureState(false, false, false);

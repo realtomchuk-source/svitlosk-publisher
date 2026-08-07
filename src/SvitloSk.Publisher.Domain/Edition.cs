@@ -16,8 +16,8 @@ public class Edition
     public DateOnly TargetDate { get; }
     public EditionState State { get; private set; }
     
-    private readonly List<Publication> _publications = new();
-    public IReadOnlyCollection<Publication> Publications => _publications.AsReadOnly();
+    private readonly List<PublicationPackage> _packages = new();
+    public IReadOnlyCollection<PublicationPackage> Packages => _packages.AsReadOnly();
 
     public Edition(Guid id, DateOnly targetDate)
     {
@@ -40,21 +40,21 @@ public class Edition
         State = EditionState.Closed;
     }
 
-    public void AddPublication(Publication publication)
+    public void AddPackage(PublicationPackage package)
     {
         if (State == EditionState.Closed)
         {
-            throw new InvalidOperationException("Cannot add publication to a closed edition.");
+            throw new InvalidOperationException("Cannot add package to a closed edition.");
         }
-        _publications.Add(publication);
+        _packages.Add(package);
     }
 
-    public void RemovePublication(Publication publication)
+    public void RemovePackage(PublicationPackage package)
     {
         if (State == EditionState.Closed)
         {
-            throw new InvalidOperationException("Cannot remove publication from a closed edition.");
+            throw new InvalidOperationException("Cannot remove package from a closed edition.");
         }
-        _publications.Remove(publication);
+        _packages.Remove(package);
     }
 }

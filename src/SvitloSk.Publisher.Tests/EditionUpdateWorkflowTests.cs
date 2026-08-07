@@ -59,8 +59,10 @@ public class EditionUpdateWorkflowTests
         
         var edition = new EditionFactory().Create(today);
         edition.Activate();
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
         var pub = new Publication(Guid.NewGuid(), "Staro", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash_1");
-        edition.AddPublication(pub);
+        pkg.AddPublication(pub);
         repository.Save(edition);
 
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_1"); // same hash
@@ -75,7 +77,7 @@ public class EditionUpdateWorkflowTests
 
         // Assert
         Assert.Empty(dispatcher.DispatchedRequests);
-        Assert.Single(repository.GetByDate(today)!.Publications);
+        Assert.Single(repository.GetByDate(today)!.Packages.SelectMany(p => p.Publications));
     }
 
     [Fact]
@@ -87,8 +89,10 @@ public class EditionUpdateWorkflowTests
         
         var edition = new EditionFactory().Create(today);
         edition.Activate();
+        var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+        edition.AddPackage(pkg);
         var pub = new Publication(Guid.NewGuid(), "Staro", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash_1");
-        edition.AddPublication(pub);
+        pkg.AddPublication(pub);
         repository.Save(edition);
 
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_2"); // changed hash
@@ -104,8 +108,9 @@ public class EditionUpdateWorkflowTests
         // Assert
         Assert.Single(dispatcher.DispatchedRequests);
         var savedEdition = repository.GetByDate(today);
-        Assert.Single(savedEdition!.Publications);
-        Assert.Equal("hash_2", savedEdition.Publications.First().ContentHash);
+        Assert.Single(savedEdition!.Packages);
+        Assert.Single(savedEdition.Packages.First().Publications);
+        Assert.Equal("hash_2", savedEdition.Packages.First().Publications.First().ContentHash);
     }
 
     [Fact]
@@ -132,8 +137,9 @@ public class EditionUpdateWorkflowTests
         // Assert
         Assert.Single(dispatcher.DispatchedRequests);
         var savedEdition = repository.GetByDate(today);
-        Assert.Single(savedEdition!.Publications);
-        Assert.Equal("Staro", savedEdition.Publications.First().TerritoryId);
-        Assert.Equal("hash_3", savedEdition.Publications.First().ContentHash);
+        Assert.Single(savedEdition!.Packages);
+        Assert.Single(savedEdition.Packages.First().Publications);
+        Assert.Equal("Staro", savedEdition.Packages.First().Publications.First().TerritoryId);
+        Assert.Equal("hash_3", savedEdition.Packages.First().Publications.First().ContentHash);
     }
 }

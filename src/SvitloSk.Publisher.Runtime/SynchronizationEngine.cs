@@ -78,6 +78,13 @@ public class SynchronizationEngine : ISynchronizationEngine
             var removedPublications = new List<Publication>();
             var artifactsToBuild = new List<Publication>();
 
+            var pkg = System.Linq.Enumerable.FirstOrDefault(edition.Packages, p => p.Name == "Default Package");
+            if (pkg == null)
+            {
+                pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
+                edition.AddPackage(pkg);
+            }
+
             foreach (var situation in situations)
             {
                 var conclusion = _reasoningModel.Evaluate(situation, edition);
@@ -107,7 +114,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                     }
                     else if (decision.DecisionResult == DecisionResult.UPDATE && situation.Type == Situation.ChangedAddresses && situation.TerritoryId != null)
                     {
-                        var existing = System.Linq.Enumerable.FirstOrDefault(edition.Publications, p => p.TerritoryId == situation.TerritoryId);
+                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId);
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
@@ -123,8 +130,8 @@ public class SynchronizationEngine : ISynchronizationEngine
                 }
             }
 
-            foreach (var p in removedPublications) edition.RemovePublication(p);
-            foreach (var p in newPublications) edition.AddPublication(p);
+            foreach (var p in removedPublications) pkg.RemovePublication(p);
+            foreach (var p in newPublications) pkg.AddPublication(p);
 
             if (hasChanges)
             {
@@ -136,9 +143,12 @@ public class SynchronizationEngine : ISynchronizationEngine
                     artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
                 }
                 
-                var editionArtifact = _editionAssembly.Assemble(edition, artifacts);
-                var content = string.Join("\n", editionArtifact.OrderedContent);
-                _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
+                if (pkg.Publications.Any())
+                {
+                    var editionArtifact = _editionAssembly.Assemble(edition, artifacts);
+                    var content = string.Join("\n", editionArtifact.OrderedContent);
+                    _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
+                }
             }
         }
         catch (Exception ex)

@@ -58,7 +58,7 @@ public class EndToEndScenarioTests
         
         Assert.NotNull(edition);
         Assert.Equal(SvitloSk.Publisher.Domain.EditionState.Active, edition.State);
-        Assert.NotEmpty(edition.Publications);
+        Assert.NotEmpty(edition.Packages.SelectMany(p => p.Publications));
 
         var dispatchedRequests = dispatcher.DispatchedRequests;
         Assert.NotEmpty(dispatchedRequests);
