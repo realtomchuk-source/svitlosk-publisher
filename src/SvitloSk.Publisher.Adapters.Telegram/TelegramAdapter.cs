@@ -17,22 +17,45 @@ public class TelegramAdapter : IPublicationPort
 
     public TelegramAdapter(HttpClient httpClient, IOptions<TelegramOptions> options, ILogger<TelegramAdapter> logger)
     {
-        _httpClient = httpClient;
-        _options = options.Value;
-        _logger = logger;
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        if (string.IsNullOrWhiteSpace(_options.BotToken))
+            throw new InvalidOperationException("Telegram BotToken is missing from configuration.");
+        if (string.IsNullOrWhiteSpace(_options.TargetChatId))
+            throw new InvalidOperationException("Telegram TargetChatId is missing from configuration.");
     }
 
-    public AcceptedPublication Publish(TransportArtifact artifact)
+    public Task<AcceptedPublication> PublishAsync(TransportArtifact artifact, CancellationToken cancellationToken = default)
     {
         if (artifact == null) throw new ArgumentNullException(nameof(artifact));
 
         _logger.LogInformation("TelegramAdapter publishing artifact: {RequestId}", artifact.RequestId);
 
-        // Synchronous wrapper to match interface, though real implementation should probably be async
-        return PublishAsync(artifact).GetAwaiter().GetResult();
+        return CorePublishAsync(artifact, cancellationToken);
     }
 
-    private async Task<AcceptedPublication> PublishAsync(TransportArtifact artifact)
+    private string EscapeMarkdownV2(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        
+        var specialChars = new[] { '_', '*', '[', ']', '(', ')', '~', '\\', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
+        var sb = new StringBuilder(text.Length * 2);
+        
+        foreach (var c in text)
+        {
+            if (Array.IndexOf(specialChars, c) >= 0)
+            {
+                sb.Append('\\');
+            }
+            sb.Append(c);
+        }
+        
+        return sb.ToString();
+    }
+
+    private async Task<AcceptedPublication> CorePublishAsync(TransportArtifact artifact, CancellationToken cancellationToken)
     {
         string endpoint;
         object payload;
@@ -40,23 +63,21 @@ public class TelegramAdapter : IPublicationPort
         // TELEGRAM_MAPPING_SPECIFICATION.md
         if (artifact.Operation == TransportOperation.DELETE)
         {
-            // STOP CONDITION: How do we get the message_id to delete if SynchronizationRegistry is not implemented?
-            // The specification states that the adapter needs chat_id and message_id for deleteMessage.
-            // Since we do not have externalId (MessageId) attached to the artifact (it lacks it), this is a missing spec statement.
             throw new InvalidOperationException("Cannot perform DELETE: Synchronization identity resolution is missing from Pipeline.");
         }
         else if (artifact.Operation == TransportOperation.CREATE)
         {
+            if (string.IsNullOrWhiteSpace(artifact.Payload))
+            {
+                throw new InvalidOperationException("Cannot publish empty message.");
+            }
+
+            var escapedPayload = EscapeMarkdownV2(artifact.Payload);
+
             if (artifact.Type == TransportArtifactType.TEXT_ONLY)
             {
                 endpoint = "sendMessage";
-                payload = new { chat_id = _options.TargetChatId, text = artifact.Payload };
-            }
-            else if (artifact.Type == TransportArtifactType.SINGLE_MEDIA)
-            {
-                endpoint = "sendPhoto";
-                payload = new { chat_id = _options.TargetChatId, photo = "attach://media", caption = artifact.Payload }; // Simplified for now
-                // Actually the tests use fake transport, we can just pass payload.
+                payload = new { chat_id = _options.TargetChatId, text = escapedPayload, parse_mode = "MarkdownV2" };
             }
             else
             {
@@ -73,24 +94,61 @@ public class TelegramAdapter : IPublicationPort
         }
 
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var url = $"https://api.telegram.org/bot{_options.BotToken}/{endpoint}";
-        var response = await _httpClient.PostAsync(url, content);
+        using var response = await _httpClient.PostAsync(url, content, cancellationToken);
         
-        response.EnsureSuccessStatusCode();
-        var responseString = await response.Content.ReadAsStringAsync();
-        
-        using var doc = JsonDocument.Parse(responseString);
-        var root = doc.RootElement;
-        
-        // TELEGRAM_SYNCHRONIZATION_SPECIFICATION.md
-        // 1. The Adapter extracts the message_id and the chat.id from the JSON response.
-        // 2. These values are combined (e.g., chatId:messageId) to form the generic externalId string.
-        var messageId = root.GetProperty("result").GetProperty("message_id").GetRawText();
-        var chatId = root.GetProperty("result").GetProperty("chat").GetProperty("id").GetRawText();
-        var externalId = $"{chatId}:{messageId}";
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Telegram API HTTP Error: {StatusCode}", response.StatusCode);
+            throw new HttpRequestException($"Telegram API returned {(int)response.StatusCode}: {error}");
+        }
 
-        return new AcceptedPublication(externalId, _options.TargetChatId);
+        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+        
+        try
+        {
+            using var doc = JsonDocument.Parse(responseString);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("ok", out var okProp) || !okProp.GetBoolean())
+            {
+                var description = root.TryGetProperty("description", out var descProp) ? descProp.GetString() : "Unknown";
+                _logger.LogError("Telegram API Logic Error: ok=false, description: {Description}", description);
+                throw new InvalidOperationException($"Telegram API returned ok=false: {description}");
+            }
+            
+            if (!root.TryGetProperty("result", out var resultObj))
+            {
+                _logger.LogError("Telegram API response missing 'result' object.");
+                throw new InvalidOperationException("Telegram API response missing 'result' object.");
+            }
+
+            if (!resultObj.TryGetProperty("message_id", out var msgIdProp))
+            {
+                _logger.LogError("Telegram API response missing 'message_id' property.");
+                throw new InvalidOperationException("Telegram API response missing 'message_id' property.");
+            }
+
+            if (!resultObj.TryGetProperty("chat", out var chatObj) || !chatObj.TryGetProperty("id", out var chatIdProp))
+            {
+                _logger.LogError("Telegram API response missing 'chat.id' property.");
+                throw new InvalidOperationException("Telegram API response missing 'chat.id' property.");
+            }
+
+            var messageId = msgIdProp.GetRawText();
+            var chatId = chatIdProp.GetRawText();
+            var externalId = $"{chatId}:{messageId}";
+
+            _logger.LogInformation("Successfully published artifact {RequestId} with identity {ExternalId}", artifact.RequestId, externalId);
+            return new AcceptedPublication(externalId, _options.TargetChatId);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Malformed JSON from Telegram API.");
+            throw new InvalidOperationException("Malformed JSON from Telegram API.", ex);
+        }
     }
 }

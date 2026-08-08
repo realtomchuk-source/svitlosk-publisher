@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SvitloSk.Publisher.Channels;
 
@@ -11,7 +13,7 @@ public class PublicationPipeline : IPublicationPipeline
         _port = port;
     }
 
-    public AcceptedPublication Dispatch(PublicationRequest request)
+    public Task<AcceptedPublication> DispatchAsync(PublicationRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(request.Edition))
         {
@@ -19,9 +21,9 @@ public class PublicationPipeline : IPublicationPipeline
         }
         
         var op = TransportOperation.CREATE;
-        var type = TransportArtifactType.SINGLE_MEDIA;
+        var type = TransportArtifactType.TEXT_ONLY;
         
         var artifact = new TransportArtifact(request.Id, type, op, request.Edition);
-        return _port.Publish(artifact);
+        return _port.PublishAsync(artifact, cancellationToken);
     }
 }

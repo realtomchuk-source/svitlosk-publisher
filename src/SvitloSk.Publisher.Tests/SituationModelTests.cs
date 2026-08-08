@@ -14,7 +14,7 @@ public class SituationModelTests
     public void Detect_NullEdition_ReturnsMorningStartup()
     {
         var infraState = new InfrastructureState(false, false, false);
-        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         Assert.Contains(result, s => s.Type == Situation.MorningStartup);
     }
 
@@ -25,7 +25,7 @@ public class SituationModelTests
         edition.Close();
         
         var infraState = new InfrastructureState(false, false, false);
-        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         Assert.Contains(result, s => s.Type == Situation.MorningStartup);
     }
 
@@ -42,7 +42,7 @@ public class SituationModelTests
         var currentTime = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddMinutes(30);
         var infraState = new InfrastructureState(false, false, false);
         
-        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", "payload"), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "payload") }), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         
         Assert.Single(result);
         Assert.Equal(Situation.NoChangesDetected, result.First().Type);
@@ -58,7 +58,7 @@ public class SituationModelTests
         var currentTime = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(1.5);
         var infraState = new InfrastructureState(false, false, false);
         
-        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         
         Assert.Contains(result, s => s.Type == Situation.CleanupStarted);
         Assert.DoesNotContain(result, s => s.Type == Situation.EditionClosing);
@@ -74,7 +74,7 @@ public class SituationModelTests
         var currentTime = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(2.5);
         var infraState = new InfrastructureState(false, false, false);
         
-        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(edition, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), currentTime, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         
         Assert.Contains(result, s => s.Type == Situation.EditionClosing);
     }
@@ -83,7 +83,7 @@ public class SituationModelTests
     public void Detect_ProducerDown_ReturnsExternalProducerUnavailable()
     {
         var infraState = new InfrastructureState(true, false, false);
-        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         Assert.Contains(result, s => s.Type == Situation.ExternalProducerUnavailable);
     }
 
@@ -91,7 +91,7 @@ public class SituationModelTests
     public void Detect_GraphicUnavailable_ReturnsGraphicUnavailable()
     {
         var infraState = new InfrastructureState(false, true, false);
-        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         Assert.Contains(result, s => s.Type == Situation.GraphicUnavailable);
     }
 
@@ -99,7 +99,7 @@ public class SituationModelTests
     public void Detect_CommentFlood_ReturnsCommentFlood()
     {
         var infraState = new InfrastructureState(false, false, true);
-        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         Assert.Contains(result, s => s.Type == Situation.CommentFlood);
     }
 
@@ -107,7 +107,7 @@ public class SituationModelTests
     public void Detect_MultipleTriggers_ReturnsMultipleSituations()
     {
         var infraState = new InfrastructureState(true, false, true); // Producer down, Comment flood
-        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", ""), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
+        var result = _model.Detect(null, new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new TerritorialPayload("T1", SourcePortion.Today, "") }), DateTimeOffset.UtcNow, TimeSpan.FromHours(1), TimeSpan.FromHours(2), infraState);
         
         Assert.Contains(result, s => s.Type == Situation.MorningStartup);
         Assert.Contains(result, s => s.Type == Situation.ExternalProducerUnavailable);

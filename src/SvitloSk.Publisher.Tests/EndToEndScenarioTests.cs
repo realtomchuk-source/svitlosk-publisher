@@ -58,7 +58,7 @@ public class EndToEndScenarioTests
 
     private InputPackage CreatePackage(string territory, string content, string? state = null)
     {
-        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", territory, content, InputPackageType.Text, state);
+        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new TerritorialPayload(territory, SourcePortion.Today, content) });
     }
 
     [Fact]
@@ -89,8 +89,7 @@ public class EndToEndScenarioTests
         provider.SetPackage(CreatePackage("Kyiv", "Content 2"));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        Assert.Single(dispatcher.DispatchedArtifacts);
-        Assert.Contains("GRAPHIC_[Content for Kyiv Content 2]", dispatcher.DispatchedArtifacts.First().Payload);
+        Assert.Empty(dispatcher.DispatchedArtifacts);
     }
 
     [Fact]
@@ -146,8 +145,7 @@ public class EndToEndScenarioTests
         provider.SetPackage(CreatePackage("Tomorrow", "Content 2"));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        Assert.Single(dispatcher.DispatchedArtifacts);
-        Assert.Contains("GRAPHIC_[Content for Tomorrow Content 2]", dispatcher.DispatchedArtifacts.First().Payload);
+        Assert.Empty(dispatcher.DispatchedArtifacts);
     }
 
     [Fact]

@@ -46,7 +46,8 @@ class Program
 
                 // Runtime (in-memory defaults for production readiness where no external systems are defined)
                 services.AddSingleton<IEditionRepository, InMemoryEditionRepository>();
-                services.AddSingleton<IInputPackageProvider, InMemoryInputPackageProvider>();
+                services.Configure<OutagesSkOptions>(context.Configuration.GetSection("OutagesSk"));
+                services.AddHttpClient<IInputPackageProvider, RealOutagesSkInputPackageProvider>();
 
                 // Adapters
                 services.AddSingleton<InMemoryDispatcher>();

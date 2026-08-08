@@ -101,39 +101,47 @@ public class SynchronizationEngine : ISynchronizationEngine
                 if (decision.DecisionResult != DecisionResult.NO_ACTION)
                 {
                     hasChanges = true;
+                    
+                    bool isTomorrow = situation.Type == Situation.TomorrowForecastAppeared || 
+                                      situation.Type == Situation.TomorrowForecastDisappeared;
+                    
+                    string payloadText = string.Empty;
+                    if (package?.Payloads != null && situation.TerritoryId != null)
+                    {
+                        var portion = isTomorrow ? SourcePortion.Tomorrow : SourcePortion.Today;
+                        payloadText = System.Linq.Enumerable.FirstOrDefault(package.Payloads, p => p.TerritoryId == situation.TerritoryId && p.Portion == portion)?.RawText ?? string.Empty;
+                    }
+                    
+                    PublicationType pubType = isTomorrow ? PublicationType.Tomorrow : PublicationType.Text;
+                    Classification classification = isTomorrow ? Classification.Ephemeral : Classification.Persistent;
+
                     if (decision.DecisionResult == DecisionResult.CREATE)
                     {
                         if (situation.Type == Situation.MorningStartup && edition.State == SvitloSk.Publisher.Domain.EditionState.Created)
                         {
                             edition.Activate();
-                            if (package != null && !string.IsNullOrEmpty(package.TerritorialScope) && package.TerritorialScope != "None")
-                            {
-                                var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload ?? string.Empty);
-                                newPublications.Add(pub);
-                                artifactsToBuild.Add(pub);
-                            }
                         }
-                        else if (situation.Type == Situation.TerritoryAppeared && situation.TerritoryId != null)
+                        else if ((situation.Type == Situation.TerritoryAppeared || situation.Type == Situation.TomorrowForecastAppeared) && situation.TerritoryId != null)
                         {
-                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package?.RawPayload ?? string.Empty);
+                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, (PublicationClassification)classification, pubType, DateTimeOffset.UtcNow, payloadText);
                             newPublications.Add(pub);
                             artifactsToBuild.Add(pub);
                         }
                     }
-                    else if (decision.DecisionResult == DecisionResult.UPDATE && situation.Type == Situation.ChangedAddresses && situation.TerritoryId != null)
+                    else if (decision.DecisionResult == DecisionResult.UPDATE && (situation.Type == Situation.ChangedAddresses || situation.Type == Situation.TomorrowForecastAppeared) && situation.TerritoryId != null)
                     {
-                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId);
+                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId && p.Type == pubType);
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
-                            var updatedPub = existing with { ContentHash = package?.RawPayload ?? string.Empty };
+                            var updatedPub = existing with { ContentHash = payloadText };
                             newPublications.Add(updatedPub);
                             artifactsToBuild.Add(updatedPub);
                         }
                     }
                     else if (decision.DecisionResult == DecisionResult.DELETE && situation.TerritoryId != null)
                     {
-                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId);
+                        var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId && p.Type == pubType);
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
@@ -165,7 +173,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                     {
                         try
                         {
-                            _publicationPipeline.Dispatch(new PublicationRequest(p.Id.ToString(), ""));
+                            await _publicationPipeline.DispatchAsync(new PublicationRequest(p.Id.ToString(), ""), cancellationToken);
                         }
                         catch (NotSupportedException ex)
                         {
@@ -180,8 +188,21 @@ public class SynchronizationEngine : ISynchronizationEngine
                     var graphicPubs = _graphicPublisher.Publish(edition, builtArtifacts);
                     foreach (var gp in graphicPubs)
                     {
-                        var accepted = _publicationPipeline.Dispatch(new PublicationRequest(gp.PublicationId.ToString(), gp.GraphicContent));
-                        _identityResolver.RecordExternalIdentity(gp.PublicationId.ToString(), accepted.MessageId);
+                        try 
+                        {
+                            var existingId = _identityResolver.ResolveExternalIdentity(gp.PublicationId.ToString());
+                            if (existingId != null)
+                            {
+                                throw new NotSupportedException($"Update operations are not supported by the current publisher architecture. PublicationId: {gp.PublicationId}");
+                            }
+
+                            var accepted = await _publicationPipeline.DispatchAsync(new PublicationRequest(gp.PublicationId.ToString(), gp.GraphicContent), cancellationToken);
+                            _identityResolver.RecordExternalIdentity(gp.PublicationId.ToString(), accepted.MessageId);
+                        }
+                        catch (NotSupportedException ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to dispatch update for {PublicationId}: operation not supported", gp.PublicationId);
+                        }
                     }
                 }
             }

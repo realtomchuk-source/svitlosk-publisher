@@ -67,7 +67,7 @@ public class EditionUpdateWorkflowTests
         pkg.AddPublication(pub);
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_1"); // same hash
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_1") }); // same hash
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
@@ -97,7 +97,7 @@ public class EditionUpdateWorkflowTests
         pkg.AddPublication(pub);
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_2"); // changed hash
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_2") }); // changed hash
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
@@ -126,7 +126,7 @@ public class EditionUpdateWorkflowTests
         edition.Activate();
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", "hash_3"); // new pub
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_3") }); // new pub
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();

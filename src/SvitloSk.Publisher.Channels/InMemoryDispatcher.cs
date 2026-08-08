@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SvitloSk.Publisher.Channels;
 
@@ -9,11 +11,11 @@ public class InMemoryDispatcher : IPublicationPort
 
     public IReadOnlyCollection<TransportArtifact> DispatchedArtifacts => _artifacts.AsReadOnly();
 
-    public AcceptedPublication Publish(TransportArtifact artifact)
+    public Task<AcceptedPublication> PublishAsync(TransportArtifact artifact, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Dispatching publication artifact: {artifact.RequestId}");
         _artifacts.Add(artifact);
-        return new AcceptedPublication(artifact.RequestId, "in-memory-channel");
+        return Task.FromResult(new AcceptedPublication(artifact.RequestId, "in-memory-channel"));
     }
 
     public void Clear() => _artifacts.Clear();

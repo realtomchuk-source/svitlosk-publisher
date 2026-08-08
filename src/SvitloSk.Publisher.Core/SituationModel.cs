@@ -36,32 +36,44 @@ public class SituationModel : ISituationModel
             {
                 situations.Add(new DetectedSituation(Situation.CleanupStarted));
             }
+        }
 
-            // Detect package changes
-            if (inputPackage != null && !string.IsNullOrEmpty(inputPackage.TerritorialScope))
+        // Detect package changes
+        if (inputPackage != null && inputPackage.Payloads != null)
+        {
+            foreach (var payload in inputPackage.Payloads)
             {
-                var existingPub = System.Linq.Enumerable.FirstOrDefault(System.Linq.Enumerable.SelectMany(currentEdition.Packages, pkg => pkg.Publications), p => p.TerritoryId == inputPackage.TerritorialScope);
+                if (string.IsNullOrEmpty(payload.TerritoryId)) continue;
+                
+                var existingPub = currentEdition == null ? null : System.Linq.Enumerable.FirstOrDefault(
+                    System.Linq.Enumerable.SelectMany(currentEdition.Packages, pkg => pkg.Publications), 
+                    p => p.TerritoryId == payload.TerritoryId && 
+                         (payload.Portion == SourcePortion.Tomorrow ? p.Type == PublicationType.Tomorrow : p.Type != PublicationType.Tomorrow));
                 
                 if (existingPub == null)
                 {
-                    if (inputPackage.PackageState != "Clear" && inputPackage.RawPayload != "CLEAR")
+                    if (payload.RawText != "CLEAR" && !string.IsNullOrWhiteSpace(payload.RawText))
                     {
-                        situations.Add(new DetectedSituation(Situation.TerritoryAppeared, inputPackage.TerritorialScope));
+                        var sit = payload.Portion == SourcePortion.Tomorrow ? Situation.TomorrowForecastAppeared : Situation.TerritoryAppeared;
+                        situations.Add(new DetectedSituation(sit, payload.TerritoryId));
                     }
                 }
                 else
                 {
-                    if (inputPackage.PackageState == "Clear" || inputPackage.RawPayload == "CLEAR")
+                    if (payload.RawText == "CLEAR" || string.IsNullOrWhiteSpace(payload.RawText))
                     {
-                        situations.Add(new DetectedSituation(Situation.TerritoryDisappeared, inputPackage.TerritorialScope));
+                        var sit = payload.Portion == SourcePortion.Tomorrow ? Situation.TomorrowForecastDisappeared : Situation.TerritoryDisappeared;
+                        situations.Add(new DetectedSituation(sit, payload.TerritoryId));
                     }
-                    else if (existingPub.ContentHash != inputPackage.RawPayload)
+                    else if (existingPub.ContentHash != payload.RawText)
                     {
-                        situations.Add(new DetectedSituation(Situation.ChangedAddresses, inputPackage.TerritorialScope));
+                        var sit = payload.Portion == SourcePortion.Tomorrow ? Situation.TomorrowForecastAppeared : Situation.ChangedAddresses;
+                        situations.Add(new DetectedSituation(sit, payload.TerritoryId));
                     }
                     else
                     {
-                        situations.Add(new DetectedSituation(Situation.NoChangesDetected, inputPackage.TerritorialScope));
+                        var sit = payload.Portion == SourcePortion.Tomorrow ? Situation.NoChangesDetected : Situation.NoChangesDetected;
+                        situations.Add(new DetectedSituation(sit, payload.TerritoryId));
                     }
                 }
             }

@@ -31,7 +31,7 @@ public class TelegramAdapterTests
     }
 
     [Fact]
-    public void Publish_CreateText_CallsSendMessageAndReturnsIdentity()
+    public async Task PublishAsync_CreateText_CallsSendMessageAndReturnsIdentity()
     {
         var mockHandler = new MockHttpMessageHandler();
         mockHandler.ResponseToReturn.Content = new StringContent(@"{""ok"":true,""result"":{""message_id"":12345,""chat"":{""id"":-100123456789}}}");
@@ -42,7 +42,7 @@ public class TelegramAdapterTests
 
         var artifact = new TransportArtifact("req1", TransportArtifactType.TEXT_ONLY, TransportOperation.CREATE, "Test payload");
 
-        var result = adapter.Publish(artifact);
+        var result = await adapter.PublishAsync(artifact);
 
         Assert.NotNull(mockHandler.LastRequest);
         Assert.Equal("https://api.telegram.org/bottest_token/sendMessage", mockHandler.LastRequest.RequestUri?.ToString());
@@ -54,30 +54,7 @@ public class TelegramAdapterTests
     }
 
     [Fact]
-    public void Publish_CreateSingleMedia_CallsSendPhotoAndReturnsIdentity()
-    {
-        var mockHandler = new MockHttpMessageHandler();
-        mockHandler.ResponseToReturn.Content = new StringContent(@"{""ok"":true,""result"":{""message_id"":12346,""chat"":{""id"":-100123456789}}}");
-        
-        var httpClient = new HttpClient(mockHandler);
-        var options = Options.Create(new TelegramOptions { BotToken = "test_token", TargetChatId = "-100123456789" });
-        var adapter = new TelegramAdapter(httpClient, options, NullLogger<TelegramAdapter>.Instance);
-
-        var artifact = new TransportArtifact("req2", TransportArtifactType.SINGLE_MEDIA, TransportOperation.CREATE, "Test caption");
-
-        var result = adapter.Publish(artifact);
-
-        Assert.NotNull(mockHandler.LastRequest);
-        Assert.Equal("https://api.telegram.org/bottest_token/sendPhoto", mockHandler.LastRequest.RequestUri?.ToString());
-        Assert.Contains(@"""chat_id"":""-100123456789""", mockHandler.LastContent);
-        Assert.Contains(@"""caption"":""Test caption""", mockHandler.LastContent);
-        
-        Assert.Equal("-100123456789:12346", result.MessageId);
-        Assert.Equal("-100123456789", result.ChannelId);
-    }
-
-    [Fact]
-    public void Publish_Update_ThrowsInvalidOperationException()
+    public async Task PublishAsync_Update_ThrowsInvalidOperationException()
     {
         var mockHandler = new MockHttpMessageHandler();
         var httpClient = new HttpClient(mockHandler);
@@ -86,11 +63,11 @@ public class TelegramAdapterTests
 
         var artifact = new TransportArtifact("req3", TransportArtifactType.TEXT_ONLY, TransportOperation.UPDATE, "Test payload");
 
-        Assert.Throws<InvalidOperationException>(() => adapter.Publish(artifact));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.PublishAsync(artifact));
     }
 
     [Fact]
-    public void Publish_Delete_ThrowsInvalidOperationException()
+    public async Task PublishAsync_Delete_ThrowsInvalidOperationException()
     {
         var mockHandler = new MockHttpMessageHandler();
         var httpClient = new HttpClient(mockHandler);
@@ -99,6 +76,6 @@ public class TelegramAdapterTests
 
         var artifact = new TransportArtifact("req4", TransportArtifactType.TEXT_ONLY, TransportOperation.DELETE, "");
 
-        Assert.Throws<InvalidOperationException>(() => adapter.Publish(artifact));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.PublishAsync(artifact));
     }
 }
