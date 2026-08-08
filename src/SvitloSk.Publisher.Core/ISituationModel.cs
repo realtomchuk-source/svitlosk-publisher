@@ -9,7 +9,7 @@ public record InfrastructureState(bool IsProducerUnavailable, bool IsGraphicUnav
 public interface ISituationModel
 {
     IReadOnlyCollection<DetectedSituation> Detect(
-        Edition currentEdition,
+        Edition? currentEdition,
         InputPackage inputPackage,
         DateTimeOffset currentTime,
         TimeSpan cleanupThreshold,

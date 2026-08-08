@@ -1,6 +1,3 @@
-// Source: DELIVERY_PIPELINE.md
-// Section: Orchestrator
-
 using System;
 
 namespace SvitloSk.Publisher.Channels;
@@ -14,8 +11,17 @@ public class PublicationPipeline : IPublicationPipeline
         _port = port;
     }
 
-    public void Dispatch(PublicationRequest request)
+    public AcceptedPublication Dispatch(PublicationRequest request)
     {
-        _port.Publish(request);
+        if (string.IsNullOrEmpty(request.Edition))
+        {
+            throw new NotSupportedException("PublicationRequest payload is empty. Cannot safely infer operation (CREATE/UPDATE/DELETE).");
+        }
+        
+        var op = TransportOperation.CREATE;
+        var type = TransportArtifactType.SINGLE_MEDIA;
+        
+        var artifact = new TransportArtifact(request.Id, type, op, request.Edition);
+        return _port.Publish(artifact);
     }
 }

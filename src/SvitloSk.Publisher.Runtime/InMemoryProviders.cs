@@ -44,3 +44,19 @@ public class InMemoryInputPackageProvider : IInputPackageProvider
         ));
     }
 }
+
+public class InMemoryExternalPublicationIdentityResolver : IExternalPublicationIdentityResolver
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _identities = new();
+
+    public void RecordExternalIdentity(string publicationId, string externalId)
+    {
+        _identities[publicationId] = externalId;
+    }
+
+    public string? ResolveExternalIdentity(string publicationId)
+    {
+        _identities.TryGetValue(publicationId, out var id);
+        return id;
+    }
+}

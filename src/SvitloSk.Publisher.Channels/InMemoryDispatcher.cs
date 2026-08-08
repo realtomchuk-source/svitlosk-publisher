@@ -5,14 +5,16 @@ namespace SvitloSk.Publisher.Channels;
 
 public class InMemoryDispatcher : IPublicationPort
 {
-    private readonly List<PublicationRequest> _requests = new();
+    private readonly List<TransportArtifact> _artifacts = new();
 
-    public IReadOnlyCollection<PublicationRequest> DispatchedRequests => _requests.AsReadOnly();
+    public IReadOnlyCollection<TransportArtifact> DispatchedArtifacts => _artifacts.AsReadOnly();
 
-    public AcceptedPublication Publish(PublicationRequest request)
+    public AcceptedPublication Publish(TransportArtifact artifact)
     {
-        Console.WriteLine($"Dispatching publication request: {request.Id}");
-        _requests.Add(request);
-        return new AcceptedPublication(request.Id, "in-memory-channel");
+        Console.WriteLine($"Dispatching publication artifact: {artifact.RequestId}");
+        _artifacts.Add(artifact);
+        return new AcceptedPublication(artifact.RequestId, "in-memory-channel");
     }
+
+    public void Clear() => _artifacts.Clear();
 }

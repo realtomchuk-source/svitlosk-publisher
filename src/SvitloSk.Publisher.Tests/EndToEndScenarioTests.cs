@@ -12,18 +12,25 @@ using SvitloSk.Publisher.Runtime;
 using SvitloSk.Publisher.Domain;
 using SvitloSk.Publisher.Domain.Factories;
 using Xunit;
+using System.Collections.Generic;
 
 namespace SvitloSk.Publisher.Tests;
 
+public class TestInputPackageProvider : IInputPackageProvider
+{
+    private InputPackage? _currentPackage;
+    public void SetPackage(InputPackage? package) => _currentPackage = package;
+    public Task<InputPackage> GetLatestAsync(CancellationToken cancellationToken) => Task.FromResult(_currentPackage!);
+}
+
 public class EndToEndScenarioTests
 {
-    [Fact]
-    public async Task CompleteBusinessScenario_ExecutesSuccessfully()
+    private (IServiceProvider, InMemoryEditionRepository, InMemoryDispatcher, TestInputPackageProvider) SetupContainer()
     {
-        // Arrange
         var services = new ServiceCollection();
 
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<SynchronizationEngine>>(NullLogger<SynchronizationEngine>.Instance);
+        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<GraphicPublisher>>(NullLogger<GraphicPublisher>.Instance);
         
         services.AddSingleton<IEditionFactory, EditionFactory>();
         services.AddSingleton<IEditorialDecisionEngine, EditorialDecisionEngine>();
@@ -32,36 +39,138 @@ public class EndToEndScenarioTests
         services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
         services.AddScoped<IEditionAssembly, EditionAssembly>();
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
-        services.AddScoped<IGraphicAssembly, GraphicAssembly>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
         services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
 
         var repository = new InMemoryEditionRepository();
         services.AddSingleton<IEditionRepository>(repository);
         
-        var packageProvider = new InMemoryInputPackageProvider();
+        var packageProvider = new TestInputPackageProvider();
         services.AddSingleton<IInputPackageProvider>(packageProvider);
 
         var dispatcher = new InMemoryDispatcher();
         services.AddSingleton<InMemoryDispatcher>(dispatcher);
         services.AddSingleton<IPublicationPort>(dispatcher);
 
-        var serviceProvider = services.BuildServiceProvider();
-        var engine = serviceProvider.GetRequiredService<ISynchronizationEngine>();
+        return (services.BuildServiceProvider(), repository, dispatcher, packageProvider);
+    }
 
-        // Act
+    private InputPackage CreatePackage(string territory, string content, string? state = null)
+    {
+        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", territory, content, InputPackageType.Text, state);
+    }
+
+    [Fact]
+    public async Task Scenario1_MorningStartup_CreatesEditionAndGeneratesPublication()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        provider.SetPackage(CreatePackage("Kyiv", "Content 1"));
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        // Assert
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var edition = repository.GetByDate(today);
-        
-        Assert.NotNull(edition);
-        Assert.Equal(SvitloSk.Publisher.Domain.EditionState.Active, edition.State);
-        Assert.NotEmpty(edition.Packages.SelectMany(p => p.Publications));
+        Assert.Single(dispatcher.DispatchedArtifacts);
+        Assert.Contains("GRAPHIC_[Content for Kyiv Content 1]", dispatcher.DispatchedArtifacts.First().Payload);
+    }
 
-        var dispatchedRequests = dispatcher.DispatchedRequests;
-        Assert.NotEmpty(dispatchedRequests);
-        Assert.Contains("Content for inmemory_territory", dispatchedRequests.First().Edition);
+    [Fact]
+    public async Task Scenario2_IncrementalUpdate_OnlyOneRequestDispatched()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
+        // Morning startup
+        provider.SetPackage(CreatePackage("Kyiv", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        dispatcher.Clear();
+
+        // Incremental update
+        provider.SetPackage(CreatePackage("Kyiv", "Content 2"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        Assert.Single(dispatcher.DispatchedArtifacts);
+        Assert.Contains("GRAPHIC_[Content for Kyiv Content 2]", dispatcher.DispatchedArtifacts.First().Payload);
+    }
+
+    [Fact]
+    public async Task Scenario3_Deletion_FailsSafely_WithoutDispatch()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
+        // Morning startup
+        provider.SetPackage(CreatePackage("Kyiv", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        
+        var pubId = dispatcher.DispatchedArtifacts.First().RequestId;
+        dispatcher.Clear();
+
+        // Disappears -> package becomes null
+        provider.SetPackage(CreatePackage("Kyiv", "CLEAR", "Clear"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        Assert.Empty(dispatcher.DispatchedArtifacts);
+    }
+
+    [Fact]
+    public async Task Scenario4_NoChanges_NoDispatch()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
+        // Morning startup
+        provider.SetPackage(CreatePackage("Kyiv", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        dispatcher.Clear();
+
+        // No changes
+        provider.SetPackage(CreatePackage("Kyiv", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        Assert.Empty(dispatcher.DispatchedArtifacts);
+    }
+
+    [Fact]
+    public async Task Scenario5_TomorrowScheduleUpdate_OnlyTomorrowDispatched()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
+        // Morning startup
+        provider.SetPackage(CreatePackage("Tomorrow", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        dispatcher.Clear();
+
+        // Incremental update
+        provider.SetPackage(CreatePackage("Tomorrow", "Content 2"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        Assert.Single(dispatcher.DispatchedArtifacts);
+        Assert.Contains("GRAPHIC_[Content for Tomorrow Content 2]", dispatcher.DispatchedArtifacts.First().Payload);
+    }
+
+    [Fact]
+    public async Task Scenario6_MultipleTerritories_ThreeRequestsDispatched()
+    {
+        var (sp, repo, dispatcher, provider) = SetupContainer();
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
+
+        // Morning startup with first territory
+        provider.SetPackage(CreatePackage("T1", "Content 1"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        // Second territory
+        provider.SetPackage(CreatePackage("T2", "Content 2"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        // Third territory
+        provider.SetPackage(CreatePackage("T3", "Content 3"));
+        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+
+        Assert.Equal(3, dispatcher.DispatchedArtifacts.Count);
+        Assert.Contains("GRAPHIC_[Content for T1 Content 1]", dispatcher.DispatchedArtifacts.ElementAt(0).Payload);
+        Assert.Contains("GRAPHIC_[Content for T2 Content 2]", dispatcher.DispatchedArtifacts.ElementAt(1).Payload);
+        Assert.Contains("GRAPHIC_[Content for T3 Content 3]", dispatcher.DispatchedArtifacts.ElementAt(2).Payload);
     }
 }

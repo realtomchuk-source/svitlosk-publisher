@@ -7,7 +7,7 @@ namespace SvitloSk.Publisher.Core;
 public class SituationModel : ISituationModel
 {
     public IReadOnlyCollection<DetectedSituation> Detect(
-        Edition currentEdition,
+        Edition? currentEdition,
         InputPackage inputPackage,
         DateTimeOffset currentTime,
         TimeSpan cleanupThreshold,

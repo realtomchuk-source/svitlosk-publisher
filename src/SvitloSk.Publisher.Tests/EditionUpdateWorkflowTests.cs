@@ -31,9 +31,11 @@ public class EditionUpdateWorkflowTests
         services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
         services.AddScoped<IEditionAssembly, EditionAssembly>();
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
-        services.AddScoped<IGraphicAssembly, GraphicAssembly>();
+        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<GraphicPublisher>>(NullLogger<GraphicPublisher>.Instance);
+        services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
         services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
 
         services.AddSingleton(repository);
         services.AddSingleton(packageProvider);
@@ -76,7 +78,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Empty(dispatcher.DispatchedRequests);
+        Assert.Empty(dispatcher.DispatchedArtifacts);
         Assert.Single(repository.GetByDate(today)!.Packages.SelectMany(p => p.Publications));
     }
 
@@ -106,7 +108,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Single(dispatcher.DispatchedRequests);
+        Assert.Single(dispatcher.DispatchedArtifacts);
         var savedEdition = repository.GetByDate(today);
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);
@@ -135,7 +137,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Single(dispatcher.DispatchedRequests);
+        Assert.Single(dispatcher.DispatchedArtifacts);
         var savedEdition = repository.GetByDate(today);
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);

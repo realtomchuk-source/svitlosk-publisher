@@ -35,12 +35,12 @@ class Program
                 services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
                 services.AddScoped<IEditionAssembly, EditionAssembly>();
                 services.AddScoped<IGraphicPublisher, GraphicPublisher>();
-                services.AddScoped<IGraphicAssembly, GraphicAssembly>();
 
                 // Channels
                 services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
 
                 // Runtime
+                services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
                 services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
                 services.AddHostedService<SynchronizationWorker>();
 

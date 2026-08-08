@@ -5,5 +5,5 @@ namespace SvitloSk.Publisher.Channels;
 
 public interface IPublicationPort
 {
-    AcceptedPublication Publish(PublicationRequest request);
+    AcceptedPublication Publish(TransportArtifact artifact);
 }

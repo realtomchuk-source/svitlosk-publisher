@@ -26,6 +26,7 @@
     <ProjectReference Include="..\SvitloSk.Publisher.Core\SvitloSk.Publisher.Core.csproj" />
     <ProjectReference Include="..\SvitloSk.Publisher.Domain\SvitloSk.Publisher.Domain.csproj" />
     <ProjectReference Include="..\SvitloSk.Publisher.Runtime\SvitloSk.Publisher.Runtime.csproj" />
+    <ProjectReference Include="..\SvitloSk.Publisher.Adapters.Telegram\SvitloSk.Publisher.Adapters.Telegram.csproj" />
   </ItemGroup>
 
 </Project>

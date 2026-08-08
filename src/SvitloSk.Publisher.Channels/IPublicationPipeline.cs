@@ -5,5 +5,5 @@ namespace SvitloSk.Publisher.Channels;
 
 public interface IPublicationPipeline
 {
-    void Dispatch(PublicationRequest request);
+    AcceptedPublication Dispatch(PublicationRequest request);
 }

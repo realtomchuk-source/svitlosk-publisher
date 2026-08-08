@@ -29,9 +29,11 @@ public class EditorialDecisionScenariosTests
         services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
         services.AddScoped<IEditionAssembly, EditionAssembly>();
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
-        services.AddScoped<IGraphicAssembly, GraphicAssembly>();
+        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<GraphicPublisher>>(NullLogger<GraphicPublisher>.Instance);
+        services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
         services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
 
         var repository = new InMemoryEditionRepository();
         services.AddSingleton<IEditionRepository>(repository);
@@ -77,7 +79,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.Equal("T1", pubs[0].TerritoryId);
-        Assert.NotEmpty(dispatcher.DispatchedRequests);
+        Assert.NotEmpty(dispatcher.DispatchedArtifacts);
     }
 
     [Fact]
@@ -101,7 +103,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.Equal("Payload2", pubs[0].ContentHash);
-        Assert.True(dispatcher.DispatchedRequests.Count >= 2);
+        Assert.True(dispatcher.DispatchedArtifacts.Count >= 2);
     }
 
     [Fact]
@@ -124,8 +126,8 @@ public class EditorialDecisionScenariosTests
         var pubs = edition!.Packages.SelectMany(p => p.Publications).ToList();
         
         Assert.Empty(pubs);
-        // Dispatcher will not have a second dispatch because the edition is now empty (pkg.Publications.Any() is false)
-        Assert.Equal(1, dispatcher.DispatchedRequests.Count); 
+        // Dispatcher will not have a second dispatch because deletion is not supported.
+        Assert.Single(dispatcher.DispatchedArtifacts); 
     }
 
     [Fact]
@@ -137,7 +139,7 @@ public class EditorialDecisionScenariosTests
         var engine = provider.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        var dispatchCountBefore = dispatcher.DispatchedRequests.Count;
+        var dispatchCountBefore = dispatcher.DispatchedArtifacts.Count;
 
         // 2. Only Metadata Changes (Timestamp changed, but Payload same)
         pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(5), "src", "T1", "Payload1");
@@ -150,7 +152,7 @@ public class EditorialDecisionScenariosTests
         var pubs = edition!.Packages.SelectMany(p => p.Publications).ToList();
         
         Assert.Single(pubs);
-        Assert.Equal(dispatchCountBefore, dispatcher.DispatchedRequests.Count); // No dispatch because NO_ACTION
+        Assert.Equal(dispatchCountBefore, dispatcher.DispatchedArtifacts.Count); // No dispatch because NO_ACTION
     }
 
     [Fact]
@@ -174,6 +176,6 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.Equal("TomorrowPayload2", pubs[0].ContentHash);
-        Assert.True(dispatcher.DispatchedRequests.Count >= 2);
+        Assert.True(dispatcher.DispatchedArtifacts.Count >= 2);
     }
 }

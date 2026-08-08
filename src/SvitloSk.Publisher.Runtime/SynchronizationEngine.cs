@@ -27,7 +27,9 @@ public class SynchronizationEngine : ISynchronizationEngine
     private readonly IReasoningModel _reasoningModel;
     private readonly IEditorialDecisionEngine _decisionEngine;
     private readonly IEditionAssembly _editionAssembly;
+    private readonly IGraphicPublisher _graphicPublisher;
     private readonly IPublicationPipeline _publicationPipeline;
+    private readonly IExternalPublicationIdentityResolver _identityResolver;
 
     public SynchronizationEngine(
         ILogger<SynchronizationEngine> logger,
@@ -38,7 +40,9 @@ public class SynchronizationEngine : ISynchronizationEngine
         IReasoningModel reasoningModel,
         IEditorialDecisionEngine decisionEngine,
         IEditionAssembly editionAssembly,
-        IPublicationPipeline publicationPipeline)
+        IGraphicPublisher graphicPublisher,
+        IPublicationPipeline publicationPipeline,
+        IExternalPublicationIdentityResolver identityResolver)
     {
         _logger = logger;
         _packageProvider = packageProvider;
@@ -48,7 +52,9 @@ public class SynchronizationEngine : ISynchronizationEngine
         _reasoningModel = reasoningModel;
         _decisionEngine = decisionEngine;
         _editionAssembly = editionAssembly;
+        _graphicPublisher = graphicPublisher;
         _publicationPipeline = publicationPipeline;
+        _identityResolver = identityResolver;
     }
 
     public async Task MaintainPublisherStateAsync(CancellationToken cancellationToken)
@@ -100,7 +106,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                         if (situation.Type == Situation.MorningStartup && edition.State == SvitloSk.Publisher.Domain.EditionState.Created)
                         {
                             edition.Activate();
-                            if (package != null && !string.IsNullOrEmpty(package.TerritorialScope))
+                            if (package != null && !string.IsNullOrEmpty(package.TerritorialScope) && package.TerritorialScope != "None")
                             {
                                 var pub = new Publication(Guid.NewGuid(), package.TerritorialScope, PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, package.RawPayload ?? string.Empty);
                                 newPublications.Add(pub);
@@ -153,11 +159,30 @@ public class SynchronizationEngine : ISynchronizationEngine
                     artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
                 }
                 
-                if (pkg.Publications.Any())
+                foreach (var p in removedPublications)
                 {
-                    var editionArtifact = _editionAssembly.Assemble(edition, artifacts);
-                    var content = string.Join("\n", editionArtifact.OrderedPublications.Select(p => p.Content));
-                    _publicationPipeline.Dispatch(new PublicationRequest(Guid.NewGuid().ToString(), content));
+                    if (!newPublications.Any(n => n.Id == p.Id))
+                    {
+                        try
+                        {
+                            _publicationPipeline.Dispatch(new PublicationRequest(p.Id.ToString(), ""));
+                        }
+                        catch (NotSupportedException ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to dispatch delete for {PublicationId}: operation not supported", p.Id);
+                        }
+                    }
+                }
+                
+                if (artifactsToBuild.Any())
+                {
+                    var builtArtifacts = artifacts.Where(a => artifactsToBuild.Any(b => b.Id == a.PublicationId)).ToList();
+                    var graphicPubs = _graphicPublisher.Publish(edition, builtArtifacts);
+                    foreach (var gp in graphicPubs)
+                    {
+                        var accepted = _publicationPipeline.Dispatch(new PublicationRequest(gp.PublicationId.ToString(), gp.GraphicContent));
+                        _identityResolver.RecordExternalIdentity(gp.PublicationId.ToString(), accepted.MessageId);
+                    }
                 }
             }
         }
