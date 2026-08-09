@@ -15,14 +15,12 @@ public class PublicationPipeline : IPublicationPipeline
 
     public Task<AcceptedPublication> DispatchAsync(PublicationRequest request, CancellationToken cancellationToken = default)
     {
-        if (request.Operation == TransportOperation.CREATE && string.IsNullOrEmpty(request.Edition))
+        if (request.Operation == TransportOperation.CREATE && string.IsNullOrEmpty(request.Payload))
         {
             throw new NotSupportedException("PublicationRequest payload is empty for CREATE.");
         }
         
-        var type = TransportArtifactType.TEXT_ONLY;
-        
-        var artifact = new TransportArtifact(request.Id, type, request.Operation, request.Edition, request.ExternalIdentity);
+        var artifact = new TransportArtifact(request.Id, request.ArtifactType, request.Operation, request.Payload, request.ExternalIdentity);
         return _port.PublishAsync(artifact, cancellationToken);
     }
 }

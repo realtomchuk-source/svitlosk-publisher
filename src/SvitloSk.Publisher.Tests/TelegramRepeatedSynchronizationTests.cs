@@ -16,6 +16,7 @@ using SvitloSk.Publisher.Domain;
 using SvitloSk.Publisher.Domain.Factories;
 using SvitloSk.Publisher.Execution;
 using SvitloSk.Publisher.Runtime;
+using SvitloSk.Publisher.Runtime.Persistence;
 using Xunit;
 
 namespace SvitloSk.Publisher.Tests;
@@ -58,7 +59,7 @@ public class TelegramRepeatedSynchronizationTests
         services.AddScoped<IEditionAssembly, EditionAssembly>();
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
-        services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository, InMemoryOutboxRepository>(); services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IUnitOfWork, InMemoryUnitOfWork>(); services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
         
         services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
         services.AddSingleton<IEditionRepository, InMemoryEditionRepository>();
@@ -68,6 +69,29 @@ public class TelegramRepeatedSynchronizationTests
         services.AddSingleton<IPublicationPort>(telegramAdapter);
 
         return services.BuildServiceProvider();
+    }
+
+    private async Task DispatchOutbox(IServiceProvider sp)
+    {
+        var outbox = sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>();
+        var pipeline = sp.GetRequiredService<IPublicationPipeline>();
+        var resolver = sp.GetRequiredService<IExternalPublicationIdentityResolver>();
+
+        var pending = outbox.GetPendingMessages(100);
+        foreach (var msg in pending.ToList())
+        {
+            var req = new PublicationRequest(msg.PublicationId, msg.Payload, msg.OperationType, msg.ExternalIdentity, msg.ArtifactType);
+            var result = await pipeline.DispatchAsync(req, CancellationToken.None);
+            if (result != null && msg.OperationType == TransportOperation.CREATE)
+            {
+                resolver.RecordExternalIdentity(msg.PublicationId, result.MessageId);
+            }
+            else if (msg.OperationType == TransportOperation.DELETE)
+            {
+                resolver.RemoveExternalIdentity(msg.PublicationId);
+            }
+            msg.Status = OutboxOperationStatus.Completed;
+        }
     }
 
     [Fact]
@@ -85,7 +109,7 @@ public class TelegramRepeatedSynchronizationTests
         packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
 
         // Run 1 - Initial publish
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox(sp);
         
         var initialRequestCount = mockHandler.RequestCount;
         Assert.Equal(1, initialRequestCount); // Tomorrow not processed, only "Alpha"
@@ -98,7 +122,7 @@ public class TelegramRepeatedSynchronizationTests
 
         // Run 2 - Exact same input
         // Using the same provider state, simulating the same package arriving or polling yielding same result
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox(sp);
 
         // Verify No duplicate publication
         Assert.Equal(0, mockHandler.RequestCount);
@@ -122,7 +146,7 @@ public class TelegramRepeatedSynchronizationTests
         packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
 
         // Run 1 - Publish
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox(sp);
         
         // Find the publication and get its identity
         var repository = sp.GetRequiredService<IEditionRepository>();
@@ -138,7 +162,7 @@ public class TelegramRepeatedSynchronizationTests
         
         // This should run the UPDATE logic in SynchronizationEngine, which detects existing identity and catches NotSupportedException.
         // It shouldn't crash, but it shouldn't send anything to Telegram.
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox(sp);
 
         Assert.Equal(0, mockHandler.RequestCount);
 

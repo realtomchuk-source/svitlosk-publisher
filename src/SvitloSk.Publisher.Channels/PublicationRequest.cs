@@ -1,3 +1,3 @@
 namespace SvitloSk.Publisher.Channels;
 
-public record PublicationRequest(string Id, string? Edition = null, TransportOperation Operation = TransportOperation.CREATE, string? ExternalIdentity = null);
+public record PublicationRequest(string Id, string? Payload = null, TransportOperation Operation = TransportOperation.CREATE, string? ExternalIdentity = null, TransportArtifactType ArtifactType = TransportArtifactType.TEXT_ONLY);

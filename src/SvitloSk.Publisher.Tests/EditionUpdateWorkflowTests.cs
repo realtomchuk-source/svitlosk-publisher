@@ -34,7 +34,7 @@ public class EditionUpdateWorkflowTests
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<GraphicPublisher>>(NullLogger<GraphicPublisher>.Instance);
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
-        services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository, InMemoryOutboxRepository>(); services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IUnitOfWork, InMemoryUnitOfWork>(); services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
         services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
 
         services.AddSingleton(repository);
@@ -89,7 +89,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Empty(dispatcher.DispatchedArtifacts);
+        Assert.Empty(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
         Assert.Single(repository.GetByDate(today)!.Packages.SelectMany(p => p.Publications));
     }
 
@@ -119,7 +119,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Single(dispatcher.DispatchedArtifacts);
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
         var savedEdition = repository.GetByDate(today);
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);
@@ -148,7 +148,7 @@ public class EditionUpdateWorkflowTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
-        Assert.Single(dispatcher.DispatchedArtifacts);
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
         var savedEdition = repository.GetByDate(today);
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);

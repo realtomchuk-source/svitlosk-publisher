@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Domain;
+using SvitloSk.Publisher.Runtime.Persistence;
 
 namespace SvitloSk.Publisher.Runtime;
 
@@ -54,9 +57,57 @@ public class InMemoryExternalPublicationIdentityResolver : IExternalPublicationI
         _identities[publicationId] = externalId;
     }
 
+    public void RemoveExternalIdentity(string publicationId)
+    {
+        _identities.Remove(publicationId, out _);
+    }
+
     public string? ResolveExternalIdentity(string publicationId)
     {
         _identities.TryGetValue(publicationId, out var id);
         return id;
+    }
+}
+
+public class InMemoryOutboxRepository : IOutboxRepository
+{
+    private readonly List<OutboxMessage> _messages = new();
+
+    public void Add(OutboxMessage message)
+    {
+        _messages.Add(message);
+    }
+
+    public OutboxMessage? GetById(Guid id)
+    {
+        return _messages.FirstOrDefault(m => m.OperationId == id);
+    }
+
+    public IReadOnlyCollection<OutboxMessage> GetPendingMessages(int batchSize)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return _messages
+            .Where(m => m.Status == OutboxOperationStatus.Pending)
+            .GroupBy(m => m.PublicationId)
+            .Select(g => g.OrderBy(m => m.CreatedAt).First())
+            .Where(m => m.NextRetryAt == null || m.NextRetryAt <= now)
+            .OrderBy(m => m.CreatedAt)
+            .Take(batchSize)
+            .ToList();
+    }
+
+    public void Clear()
+    {
+        _messages.Clear();
+    }
+
+    public IEnumerable<OutboxMessage> GetAll() => _messages;
+}
+
+public class InMemoryUnitOfWork : IUnitOfWork
+{
+    public Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
     }
 }

@@ -95,6 +95,13 @@ public class TelegramAdapter : IPublicationPort
                 endpoint = "sendMessage";
                 payload = new { chat_id = _options.TargetChatId, text = escapedPayload, parse_mode = "MarkdownV2" };
             }
+            else if (artifact.Type == TransportArtifactType.SINGLE_MEDIA)
+            {
+                endpoint = "sendPhoto";
+                // Payload contains the photo URL or file id. Caption can be empty or we just send it.
+                // Assuming artifact.Payload is a valid URL or file_id for sendPhoto
+                payload = new { chat_id = _options.TargetChatId, photo = escapedPayload }; 
+            }
             else
             {
                 throw new NotSupportedException($"Artifact type {artifact.Type} is not supported.");
@@ -102,7 +109,41 @@ public class TelegramAdapter : IPublicationPort
         }
         else if (artifact.Operation == TransportOperation.UPDATE)
         {
-            throw new InvalidOperationException("Cannot perform UPDATE: Synchronization identity resolution is missing from Pipeline.");
+            if (string.IsNullOrWhiteSpace(artifact.ExternalIdentity)) 
+            {
+                 throw new InvalidOperationException("Cannot perform UPDATE: missing external identity.");
+            }
+            
+            var parts = artifact.ExternalIdentity.Split(':');
+            string chatId = _options.TargetChatId;
+            string messageId = artifact.ExternalIdentity;
+            
+            if (parts.Length == 2)
+            {
+                 chatId = parts[0];
+                 messageId = parts[1];
+            }
+
+            var escapedPayload = EscapeMarkdownV2(artifact.Payload ?? string.Empty);
+
+            if (artifact.Type == TransportArtifactType.TEXT_ONLY)
+            {
+                endpoint = "editMessageText";
+                payload = new { chat_id = chatId, message_id = int.Parse(messageId), text = escapedPayload, parse_mode = "MarkdownV2" };
+            }
+            else if (artifact.Type == TransportArtifactType.SINGLE_MEDIA)
+            {
+                endpoint = "editMessageMedia";
+                payload = new { 
+                    chat_id = chatId, 
+                    message_id = int.Parse(messageId), 
+                    media = new { type = "photo", media = escapedPayload } 
+                };
+            }
+            else
+            {
+                throw new NotSupportedException($"Artifact type {artifact.Type} is not supported.");
+            }
         }
         else
         {
@@ -115,15 +156,20 @@ public class TelegramAdapter : IPublicationPort
         var url = $"https://api.telegram.org/bot{_options.BotToken}/{endpoint}";
         using var response = await _httpClient.PostAsync(url, content, cancellationToken);
         
+        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+
         if (!response.IsSuccessStatusCode)
         {
-            var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Telegram API HTTP Error: {StatusCode}", response.StatusCode);
-            throw new HttpRequestException($"Telegram API returned {(int)response.StatusCode}: {error}");
+            _logger.LogError("Telegram API HTTP Error: {StatusCode} {Response}", response.StatusCode, responseString);
+            
+            // Handle HTTP errors mapping
+            if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500)
+            {
+                 throw new HttpRequestException($"Telegram API returned retryable error {(int)response.StatusCode}: {responseString}");
+            }
+            // Will throw non-retryable inside the JSON parser if ok=false is in responseString
         }
 
-        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
-        
         try
         {
             using var doc = JsonDocument.Parse(responseString);
@@ -133,6 +179,18 @@ public class TelegramAdapter : IPublicationPort
             {
                 var description = root.TryGetProperty("description", out var descProp) ? descProp.GetString() : "Unknown";
                 _logger.LogError("Telegram API Logic Error: ok=false, description: {Description}", description);
+                
+                // Idempotency semantic handling
+                if (artifact.Operation == TransportOperation.DELETE && description != null && description.Contains("message to delete not found"))
+                {
+                     return new AcceptedPublication(artifact.ExternalIdentity ?? string.Empty, _options.TargetChatId);
+                }
+                
+                if (artifact.Operation == TransportOperation.UPDATE && description != null && description.Contains("message is not modified"))
+                {
+                     return new AcceptedPublication(artifact.ExternalIdentity ?? string.Empty, _options.TargetChatId);
+                }
+
                 throw new InvalidOperationException($"Telegram API returned ok=false: {description}");
             }
             

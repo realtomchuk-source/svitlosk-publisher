@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using SvitloSk.Publisher.Runtime;
 using Xunit;
@@ -10,14 +11,30 @@ namespace SvitloSk.Publisher.Tests;
 
 public class SynchronizationWorkerTests
 {
+    private Mock<IServiceScopeFactory> CreateScopeFactoryMock(ISynchronizationEngine engine)
+    {
+        var scopeFactoryMock = new Mock<IServiceScopeFactory>();
+        var scopeMock = new Mock<IServiceScope>();
+        var serviceProviderMock = new Mock<IServiceProvider>();
+
+        serviceProviderMock.Setup(sp => sp.GetService(typeof(ISynchronizationEngine)))
+                           .Returns(engine);
+
+        scopeMock.Setup(s => s.ServiceProvider).Returns(serviceProviderMock.Object);
+        scopeFactoryMock.Setup(sf => sf.CreateScope()).Returns(scopeMock.Object);
+
+        return scopeFactoryMock;
+    }
+
     [Fact]
     public async Task Worker_Starts_And_Invokes_Engine()
     {
         // Arrange
         var loggerMock = new Mock<ILogger<SynchronizationWorker>>();
         var engineMock = new Mock<ISynchronizationEngine>();
+        var scopeFactoryMock = CreateScopeFactoryMock(engineMock.Object);
         
-        var worker = new SynchronizationWorker(loggerMock.Object, engineMock.Object);
+        var worker = new SynchronizationWorker(loggerMock.Object, scopeFactoryMock.Object);
         var cts = new CancellationTokenSource();
         
         // Act
@@ -43,7 +60,8 @@ public class SynchronizationWorkerTests
                   .ThrowsAsync(new Exception("Transient error"))
                   .Returns(Task.CompletedTask);
 
-        var worker = new SynchronizationWorker(loggerMock.Object, engineMock.Object);
+        var scopeFactoryMock = CreateScopeFactoryMock(engineMock.Object);
+        var worker = new SynchronizationWorker(loggerMock.Object, scopeFactoryMock.Object);
         var cts = new CancellationTokenSource();
         
         // Act

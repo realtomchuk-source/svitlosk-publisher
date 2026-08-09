@@ -32,7 +32,7 @@ public class EditorialDecisionScenariosTests
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<GraphicPublisher>>(NullLogger<GraphicPublisher>.Instance);
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
-        services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository, InMemoryOutboxRepository>(); services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IUnitOfWork, InMemoryUnitOfWork>(); services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
         services.AddSingleton<IExternalPublicationIdentityResolver, InMemoryExternalPublicationIdentityResolver>();
 
         var repository = new InMemoryEditionRepository();
@@ -67,8 +67,8 @@ public class EditorialDecisionScenariosTests
     public async Task Scenario1_NewOutageAppears_CreatesPublication()
     {
         var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
-        var (provider, repo, dispatcher, pkgProvider) = SetupContainer(package);
-        var engine = provider.GetRequiredService<ISynchronizationEngine>();
+        var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package);
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
 
         // Act
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -79,7 +79,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.Equal("T1", pubs[0].TerritoryId);
-        Assert.NotEmpty(dispatcher.DispatchedArtifacts);
+        Assert.NotEmpty(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
     }
 
     [Fact]
@@ -87,8 +87,8 @@ public class EditorialDecisionScenariosTests
     {
         // 1. Initial State
         var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
-        var (provider, repo, dispatcher, pkgProvider) = SetupContainer(package1);
-        var engine = provider.GetRequiredService<ISynchronizationEngine>();
+        var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Change Payload
@@ -103,7 +103,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.NotNull(pubs[0].ContentHash);
-        Assert.Single(dispatcher.DispatchedArtifacts); // UPDATE fails safely, no duplicate dispatch
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll()); // UPDATE fails safely, no duplicate dispatch
     }
 
     [Fact]
@@ -111,8 +111,8 @@ public class EditorialDecisionScenariosTests
     {
         // 1. Initial State
         var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
-        var (provider, repo, dispatcher, pkgProvider) = SetupContainer(package1);
-        var engine = provider.GetRequiredService<ISynchronizationEngine>();
+        var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Disappear (Clear State)
@@ -127,7 +127,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         // Dispatcher will not have a second dispatch because persistent today publication disappearing does not trigger physical DELETE.
-        Assert.Single(dispatcher.DispatchedArtifacts); 
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll()); 
     }
 
     [Fact]
@@ -135,11 +135,11 @@ public class EditorialDecisionScenariosTests
     {
         // 1. Initial State
         var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
-        var (provider, repo, dispatcher, pkgProvider) = SetupContainer(package1);
-        var engine = provider.GetRequiredService<ISynchronizationEngine>();
+        var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        var dispatchCountBefore = dispatcher.DispatchedArtifacts.Count;
+        var dispatchCountBefore = sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().Count();
 
         // 2. Only Metadata Changes (Timestamp changed, but Payload same)
         pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(5), "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
@@ -152,7 +152,7 @@ public class EditorialDecisionScenariosTests
         var pubs = edition!.Packages.SelectMany(p => p.Publications).ToList();
         
         Assert.Single(pubs);
-        Assert.Equal(dispatchCountBefore, dispatcher.DispatchedArtifacts.Count); // No dispatch because NO_ACTION
+        Assert.Equal(dispatchCountBefore, sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().Count()); // No dispatch because NO_ACTION
     }
 
     [Fact]
@@ -160,8 +160,8 @@ public class EditorialDecisionScenariosTests
     {
         // 1. Initial State
         var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
-        var (provider, repo, dispatcher, pkgProvider) = SetupContainer(package1);
-        var engine = provider.GetRequiredService<ISynchronizationEngine>();
+        var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
+        var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Change Tomorrow
@@ -176,7 +176,7 @@ public class EditorialDecisionScenariosTests
         
         Assert.Single(pubs);
         Assert.NotNull(pubs[0].ContentHash);
-        Assert.Single(dispatcher.DispatchedArtifacts); // UPDATE fails safely, no duplicate dispatch
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll()); // UPDATE fails safely, no duplicate dispatch
     }
 }
 

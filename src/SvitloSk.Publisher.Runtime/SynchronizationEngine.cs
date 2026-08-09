@@ -14,6 +14,7 @@ using SvitloSk.Publisher.Domain.Artifacts;
 using SvitloSk.Publisher.Domain.Factories;
 using SvitloSk.Publisher.Execution;
 using SvitloSk.Publisher.Channels;
+using SvitloSk.Publisher.Runtime.Persistence;
 
 namespace SvitloSk.Publisher.Runtime;
 
@@ -30,6 +31,8 @@ public class SynchronizationEngine : ISynchronizationEngine
     private readonly IGraphicPublisher _graphicPublisher;
     private readonly IPublicationPipeline _publicationPipeline;
     private readonly IExternalPublicationIdentityResolver _identityResolver;
+    private readonly IOutboxRepository _outboxRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
     public SynchronizationEngine(
         ILogger<SynchronizationEngine> logger,
@@ -42,7 +45,9 @@ public class SynchronizationEngine : ISynchronizationEngine
         IEditionAssembly editionAssembly,
         IGraphicPublisher graphicPublisher,
         IPublicationPipeline publicationPipeline,
-        IExternalPublicationIdentityResolver identityResolver)
+        IExternalPublicationIdentityResolver identityResolver,
+        IOutboxRepository outboxRepository,
+        IUnitOfWork unitOfWork)
     {
         _logger = logger;
         _packageProvider = packageProvider;
@@ -55,6 +60,8 @@ public class SynchronizationEngine : ISynchronizationEngine
         _graphicPublisher = graphicPublisher;
         _publicationPipeline = publicationPipeline;
         _identityResolver = identityResolver;
+        _outboxRepository = outboxRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task MaintainPublisherStateAsync(CancellationToken cancellationToken)
@@ -192,17 +199,21 @@ public class SynchronizationEngine : ISynchronizationEngine
                 {
                     if (!newPublications.Any(n => n.Id == p.Id))
                     {
-                        try
+                        var existingId = _identityResolver.ResolveExternalIdentity(p.Id.ToString());
+                        if (existingId != null)
                         {
-                            var existingId = _identityResolver.ResolveExternalIdentity(p.Id.ToString());
-                            if (existingId != null)
+                            var outboxMsg = new SvitloSk.Publisher.Runtime.Persistence.OutboxMessage
                             {
-                                await _publicationPipeline.DispatchAsync(new PublicationRequest(p.Id.ToString(), null, TransportOperation.DELETE, existingId), cancellationToken);
-                            }
-                        }
-                        catch (NotSupportedException ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to dispatch delete for {PublicationId}: operation not supported", p.Id);
+                                OperationId = Guid.NewGuid(),
+                                PublicationId = p.Id.ToString(),
+                                OperationType = TransportOperation.DELETE,
+                                ArtifactType = TransportArtifactType.TEXT_ONLY,
+                                ExternalIdentity = existingId,
+                                Payload = null,
+                                Status = SvitloSk.Publisher.Runtime.Persistence.OutboxOperationStatus.Pending,
+                                CreatedAt = DateTimeOffset.UtcNow
+                            };
+                            _outboxRepository.Add(outboxMsg);
                         }
                     }
                 }
@@ -213,23 +224,25 @@ public class SynchronizationEngine : ISynchronizationEngine
                     var graphicPubs = _graphicPublisher.Publish(edition, builtArtifacts);
                     foreach (var gp in graphicPubs)
                     {
-                        try 
+                        var existingId = _identityResolver.ResolveExternalIdentity(gp.PublicationId.ToString());
+                        var opType = existingId != null ? TransportOperation.UPDATE : TransportOperation.CREATE;
+                        
+                        var outboxMsg = new SvitloSk.Publisher.Runtime.Persistence.OutboxMessage
                         {
-                            var existingId = _identityResolver.ResolveExternalIdentity(gp.PublicationId.ToString());
-                            if (existingId != null)
-                            {
-                                throw new NotSupportedException($"Update operations are not supported by the current publisher architecture. PublicationId: {gp.PublicationId}");
-                            }
-
-                            var accepted = await _publicationPipeline.DispatchAsync(new PublicationRequest(gp.PublicationId.ToString(), gp.GraphicContent), cancellationToken);
-                            _identityResolver.RecordExternalIdentity(gp.PublicationId.ToString(), accepted.MessageId);
-                        }
-                        catch (NotSupportedException ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to dispatch update for {PublicationId}: operation not supported", gp.PublicationId);
-                        }
+                            OperationId = Guid.NewGuid(),
+                            PublicationId = gp.PublicationId.ToString(),
+                            OperationType = opType,
+                            ArtifactType = TransportArtifactType.SINGLE_MEDIA,
+                            ExternalIdentity = existingId,
+                            Payload = gp.GraphicContent,
+                            Status = SvitloSk.Publisher.Runtime.Persistence.OutboxOperationStatus.Pending,
+                            CreatedAt = DateTimeOffset.UtcNow
+                        };
+                        _outboxRepository.Add(outboxMsg);
                     }
                 }
+                
+                await _unitOfWork.CommitAsync(cancellationToken);
             }
         }
         catch (Exception ex)

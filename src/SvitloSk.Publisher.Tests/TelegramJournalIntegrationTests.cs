@@ -18,6 +18,7 @@ using SvitloSk.Publisher.Domain.Factories;
 using SvitloSk.Publisher.Execution;
 using SvitloSk.Publisher.Runtime;
 using Xunit;
+using SvitloSk.Publisher.Runtime.Persistence;
 
 namespace SvitloSk.Publisher.Tests;
 
@@ -63,7 +64,7 @@ public class TelegramJournalIntegrationTests
         services.AddScoped<IEditionAssembly, EditionAssembly>();
         services.AddScoped<IGraphicPublisher, GraphicPublisher>();
         services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
-        services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
+        services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository, SvitloSk.Publisher.Runtime.InMemoryOutboxRepository>(); services.AddSingleton<SvitloSk.Publisher.Runtime.Persistence.IUnitOfWork, SvitloSk.Publisher.Runtime.InMemoryUnitOfWork>(); services.AddSingleton<ISynchronizationEngine, SynchronizationEngine>();
         
         var identityResolver = new InMemoryExternalPublicationIdentityResolver();
         services.AddSingleton<IExternalPublicationIdentityResolver>(identityResolver);
@@ -79,13 +80,35 @@ public class TelegramJournalIntegrationTests
 
         var sp = services.BuildServiceProvider();
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
+        var outbox = sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>();
+        var pipeline = sp.GetRequiredService<IPublicationPipeline>();
+        var resolver = sp.GetRequiredService<IExternalPublicationIdentityResolver>();
+
+        async Task DispatchOutbox()
+        {
+            var pending = outbox.GetPendingMessages(100);
+            foreach (var msg in pending.ToList())
+            {
+                var req = new PublicationRequest(msg.PublicationId, msg.Payload, msg.OperationType, msg.ExternalIdentity, msg.ArtifactType);
+                var result = await pipeline.DispatchAsync(req, CancellationToken.None);
+                if (result != null && msg.OperationType == TransportOperation.CREATE)
+                {
+                    resolver.RecordExternalIdentity(msg.PublicationId, result.MessageId);
+                }
+                else if (msg.OperationType == TransportOperation.DELETE)
+                {
+                    resolver.RemoveExternalIdentity(msg.PublicationId);
+                }
+                msg.Status = OutboxOperationStatus.Completed;
+            }
+        }
 
         // Act - Complete Journal
         // According to EditorialOrder, order is: Tomorrow, Starokostiantyniv, Other territories (alphabetical), Technical.
         
         // 1. Send Tomorrow
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
         
         // 2. Send Technical
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Technical", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) })); // Not Tomorrow
@@ -98,10 +121,10 @@ public class TelegramJournalIntegrationTests
         // We can just feed packages with different territories: Starokostiantyniv, Alpha, Beta.
         // Let's do Starokostiantyniv first.
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv", new[] { new Event("Starokostiantyniv", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
         
         Assert.Equal(3, mockHandler.Contents.Count);
         var content = mockHandler.Contents[2]; // The Beta one
@@ -110,13 +133,13 @@ public class TelegramJournalIntegrationTests
         var root = doc.RootElement;
         
         Assert.Equal("-100123456789", root.GetProperty("chat_id").GetString());
-        Assert.Equal("MarkdownV2", root.GetProperty("parse_mode").GetString());
-        var textValue = root.TryGetProperty("caption", out var cap) ? cap.GetString() : root.GetProperty("text").GetString();
+        
+        var textValue = root.TryGetProperty("photo", out var photo) ? photo.GetString() : root.GetProperty("text").GetString();
         
         Assert.Contains("GRAPHIC\\_\\[Content for Beta", textValue);
 
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
         // Assert
         // Morning startup sends each immediately, so the sequence of dispatches is sequential, 
@@ -129,7 +152,7 @@ public class TelegramJournalIntegrationTests
 
         // This triggers an update for Beta.
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
-        await engine.MaintainPublisherStateAsync(CancellationToken.None);
+        await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
         Assert.Empty(mockHandler.Contents);
         
