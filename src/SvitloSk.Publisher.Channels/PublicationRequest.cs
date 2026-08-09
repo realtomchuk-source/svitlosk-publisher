@@ -1,6 +1,3 @@
-// Source: PUBLICATION_CHANNEL_INTERFACE.md
-// Section: DTO
-
 namespace SvitloSk.Publisher.Channels;
 
-public record PublicationRequest(string Id, string Edition);
+public record PublicationRequest(string Id, string? Edition = null, TransportOperation Operation = TransportOperation.CREATE, string? ExternalIdentity = null);

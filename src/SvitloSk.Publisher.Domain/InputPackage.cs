@@ -9,16 +9,12 @@ public enum InputPackageType
     Graphic
 }
 
-public enum SourcePortion
-{
-    Today,
-    Tomorrow
-}
+public record Interval(DateTimeOffset StartTime, DateTimeOffset EndTime);
 
-public record TerritorialPayload(
-    string TerritoryId,
-    SourcePortion Portion,
-    string RawText
+public record Event(
+    string Settlement,
+    IReadOnlyCollection<string> Streets,
+    IReadOnlyCollection<Interval> Intervals
 );
 
 public record InputPackage(
@@ -26,7 +22,7 @@ public record InputPackage(
     DateTimeOffset GenerationTimestamp,
     string SourceIdentifier,
     string TerritorialScope,
-    IReadOnlyCollection<TerritorialPayload> Payloads,
+    IReadOnlyCollection<Event> Events,
     InputPackageType Type = InputPackageType.Text,
     string? PackageState = null,
     DateOnly? TargetDate = null

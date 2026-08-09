@@ -18,5 +18,6 @@ public record TransportArtifact(
     string RequestId,
     TransportArtifactType Type,
     TransportOperation Operation,
-    string Payload
+    string? Payload = null,
+    string? ExternalIdentity = null
 );

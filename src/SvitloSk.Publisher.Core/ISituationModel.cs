@@ -14,5 +14,6 @@ public interface ISituationModel
         DateTimeOffset currentTime,
         TimeSpan cleanupThreshold,
         TimeSpan closeThreshold,
-        InfrastructureState infraState);
+        InfrastructureState infraState,
+        TimeSpan tomorrowEligibilityThreshold = default);
 }

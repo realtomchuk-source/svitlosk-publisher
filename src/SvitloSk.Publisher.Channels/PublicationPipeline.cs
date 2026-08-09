@@ -15,15 +15,14 @@ public class PublicationPipeline : IPublicationPipeline
 
     public Task<AcceptedPublication> DispatchAsync(PublicationRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(request.Edition))
+        if (request.Operation == TransportOperation.CREATE && string.IsNullOrEmpty(request.Edition))
         {
-            throw new NotSupportedException("PublicationRequest payload is empty. Cannot safely infer operation (CREATE/UPDATE/DELETE).");
+            throw new NotSupportedException("PublicationRequest payload is empty for CREATE.");
         }
         
-        var op = TransportOperation.CREATE;
         var type = TransportArtifactType.TEXT_ONLY;
         
-        var artifact = new TransportArtifact(request.Id, type, op, request.Edition);
+        var artifact = new TransportArtifact(request.Id, type, request.Operation, request.Edition, request.ExternalIdentity);
         return _port.PublishAsync(artifact, cancellationToken);
     }
 }

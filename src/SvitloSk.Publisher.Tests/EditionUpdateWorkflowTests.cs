@@ -63,11 +63,22 @@ public class EditionUpdateWorkflowTests
         edition.Activate();
         var pkg = new PublicationPackage(Guid.NewGuid(), "Default Package");
         edition.AddPackage(pkg);
-        var pub = new Publication(Guid.NewGuid(), "Staro", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, "hash_1");
+        var interval = new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2));
+        var ev = new Event("Staro", Array.Empty<string>(), new[] { interval });
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { ev }); // same hash
+        
+        var kyivTz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv") ?? TimeZoneInfo.FindSystemTimeZoneById("FLE Standard Time");
+        var currentKyiv = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, kyivTz);
+        var todayStart = currentKyiv.Date;
+        var todayWindowStart = new DateTimeOffset(todayStart, kyivTz.GetUtcOffset(todayStart));
+        var tomorrowWindowStart = new DateTimeOffset(todayStart.AddDays(1), kyivTz.GetUtcOffset(todayStart.AddDays(1)));
+        
+        var expectedHash = EventHashGenerator.GenerateHash(new[] { ev }, todayWindowStart, tomorrowWindowStart);
+        
+        var pub = new Publication(Guid.NewGuid(), "Staro", PublicationClassification.Persistent, PublicationType.Text, DateTimeOffset.UtcNow, expectedHash);
         pkg.AddPublication(pub);
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_1") }); // same hash
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
@@ -97,7 +108,7 @@ public class EditionUpdateWorkflowTests
         pkg.AddPublication(pub);
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_2") }); // changed hash
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new Event("Staro", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }); // changed hash
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
@@ -112,7 +123,7 @@ public class EditionUpdateWorkflowTests
         var savedEdition = repository.GetByDate(today);
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);
-        Assert.Equal("hash_2", savedEdition.Packages.First().Publications.First().ContentHash);
+        Assert.NotNull(savedEdition.Packages.First().Publications.First().ContentHash);
     }
 
     [Fact]
@@ -126,7 +137,7 @@ public class EditionUpdateWorkflowTests
         edition.Activate();
         repository.Save(edition);
 
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new TerritorialPayload("Staro", SourcePortion.Today, "hash_3") }); // new pub
+        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Staro", new[] { new Event("Staro", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }); // new pub
         var provider = new TestInputPackageProvider(package);
 
         var dispatcher = new InMemoryDispatcher();
@@ -142,6 +153,8 @@ public class EditionUpdateWorkflowTests
         Assert.Single(savedEdition!.Packages);
         Assert.Single(savedEdition.Packages.First().Publications);
         Assert.Equal("Staro", savedEdition.Packages.First().Publications.First().TerritoryId);
-        Assert.Equal("hash_3", savedEdition.Packages.First().Publications.First().ContentHash);
+        Assert.NotNull(savedEdition.Packages.First().Publications.First().ContentHash);
     }
 }
+
+

@@ -63,7 +63,23 @@ public class TelegramAdapter : IPublicationPort
         // TELEGRAM_MAPPING_SPECIFICATION.md
         if (artifact.Operation == TransportOperation.DELETE)
         {
-            throw new InvalidOperationException("Cannot perform DELETE: Synchronization identity resolution is missing from Pipeline.");
+            if (string.IsNullOrWhiteSpace(artifact.ExternalIdentity)) 
+            {
+                 throw new InvalidOperationException("Cannot perform DELETE: missing external identity.");
+            }
+            
+            var parts = artifact.ExternalIdentity.Split(':');
+            string chatId = _options.TargetChatId;
+            string messageId = artifact.ExternalIdentity;
+            
+            if (parts.Length == 2)
+            {
+                 chatId = parts[0];
+                 messageId = parts[1];
+            }
+
+            endpoint = "deleteMessage";
+            payload = new { chat_id = chatId, message_id = int.Parse(messageId) };
         }
         else if (artifact.Operation == TransportOperation.CREATE)
         {
@@ -124,6 +140,15 @@ public class TelegramAdapter : IPublicationPort
             {
                 _logger.LogError("Telegram API response missing 'result' object.");
                 throw new InvalidOperationException("Telegram API response missing 'result' object.");
+            }
+
+            if (artifact.Operation == TransportOperation.DELETE)
+            {
+                if (resultObj.ValueKind == JsonValueKind.True || resultObj.ValueKind == JsonValueKind.False)
+                {
+                    _logger.LogInformation("Successfully processed DELETE artifact {RequestId} with result {Result}", artifact.RequestId, resultObj.GetBoolean());
+                    return new AcceptedPublication(artifact.ExternalIdentity ?? string.Empty, _options.TargetChatId);
+                }
             }
 
             if (!resultObj.TryGetProperty("message_id", out var msgIdProp))

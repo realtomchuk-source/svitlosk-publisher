@@ -16,7 +16,9 @@ public class ReasoningModel : IReasoningModel
             Situation.CommentFlood => new ReasonedConclusion("IGNORE", "COMMENT_FLOOD"),
             Situation.TerritoryAppeared => new ReasonedConclusion("SIGNIFICANT (NEW TERRITORY)", "TERRITORY_APPEARED"),
             Situation.ChangedAddresses => new ReasonedConclusion("SIGNIFICANT (CHANGED CONTENT)", "CONTENT_CHANGED"),
-            Situation.TerritoryDisappeared => new ReasonedConclusion("SIGNIFICANT (MISSING TERRITORY)", "EPHEMERAL"),
+            Situation.TerritoryDisappeared => new ReasonedConclusion("SIGNIFICANT (MISSING TERRITORY)", "PERSISTENT"),
+            Situation.TomorrowForecastAppeared => new ReasonedConclusion("SIGNIFICANT (TOMORROW VISIBLE)", "TOMORROW_APPEARED"),
+            Situation.TomorrowForecastDisappeared => new ReasonedConclusion("SIGNIFICANT (MISSING TERRITORY)", "EPHEMERAL"),
             Situation.NoChangesDetected => new ReasonedConclusion("INSIGNIFICANT", "NO_CHANGES"),
             _ => new ReasonedConclusion("IGNORE", "DEFAULT")
         };

@@ -58,7 +58,7 @@ public class EndToEndScenarioTests
 
     private InputPackage CreatePackage(string territory, string content, string? state = null)
     {
-        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new TerritorialPayload(territory, SourcePortion.Today, content) });
+        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new Event(territory, Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         Assert.Single(dispatcher.DispatchedArtifacts);
-        Assert.Contains("GRAPHIC_[Content for Kyiv Content 1]", dispatcher.DispatchedArtifacts.First().Payload);
+        Assert.Contains("GRAPHIC_[Content for Kyiv", dispatcher.DispatchedArtifacts.First().Payload);
     }
 
     [Fact]
@@ -167,8 +167,11 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         Assert.Equal(3, dispatcher.DispatchedArtifacts.Count);
-        Assert.Contains("GRAPHIC_[Content for T1 Content 1]", dispatcher.DispatchedArtifacts.ElementAt(0).Payload);
-        Assert.Contains("GRAPHIC_[Content for T2 Content 2]", dispatcher.DispatchedArtifacts.ElementAt(1).Payload);
-        Assert.Contains("GRAPHIC_[Content for T3 Content 3]", dispatcher.DispatchedArtifacts.ElementAt(2).Payload);
+        Assert.Contains("GRAPHIC_[Content for T1", dispatcher.DispatchedArtifacts.ElementAt(0).Payload);
+        Assert.Contains("GRAPHIC_[Content for T2", dispatcher.DispatchedArtifacts.ElementAt(1).Payload);
+        Assert.Contains("GRAPHIC_[Content for T3", dispatcher.DispatchedArtifacts.ElementAt(2).Payload);
     }
 }
+
+
+

@@ -76,14 +76,16 @@ public class SynchronizationEngine : ISynchronizationEngine
 
             var infraState = new InfrastructureState(false, false, false);
             var currentTime = DateTimeOffset.UtcNow;
-            var cleanupThreshold = TimeSpan.FromHours(20);
+            var cleanupThreshold = TimeSpan.FromHours(23);
             var closeThreshold = TimeSpan.FromHours(24);
+            var tomorrowEligibilityThreshold = TimeSpan.FromHours(12);
 
-            var situations = _situationModel.Detect(edition, package, currentTime, cleanupThreshold, closeThreshold, infraState);
+            var situations = _situationModel.Detect(edition, package, currentTime, cleanupThreshold, closeThreshold, infraState, tomorrowEligibilityThreshold);
 
             var affectedPublications = new HashSet<Publication>();
             var newPublications = new List<Publication>();
             var removedPublications = new List<Publication>();
+            var publicationsToPhysicalDelete = new List<Publication>();
             var artifactsToBuild = new List<Publication>();
 
             var pkg = System.Linq.Enumerable.FirstOrDefault(edition.Packages, p => p.Name == "Default Package");
@@ -106,10 +108,25 @@ public class SynchronizationEngine : ISynchronizationEngine
                                       situation.Type == Situation.TomorrowForecastDisappeared;
                     
                     string payloadText = string.Empty;
-                    if (package?.Payloads != null && situation.TerritoryId != null)
+                    if (package?.Events != null && situation.TerritoryId != null)
                     {
-                        var portion = isTomorrow ? SourcePortion.Tomorrow : SourcePortion.Today;
-                        payloadText = System.Linq.Enumerable.FirstOrDefault(package.Payloads, p => p.TerritoryId == situation.TerritoryId && p.Portion == portion)?.RawText ?? string.Empty;
+                        var groupEvents = package.Events.Where(e => e.Settlement == situation.TerritoryId).ToList();
+                        
+                        var kyivTz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+                        var currentKyiv = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, kyivTz);
+                        var todayStart = currentKyiv.Date;
+                        var todayWindowStart = new DateTimeOffset(todayStart, kyivTz.GetUtcOffset(todayStart));
+                        var tomorrowWindowStart = new DateTimeOffset(todayStart.AddDays(1), kyivTz.GetUtcOffset(todayStart.AddDays(1)));
+                        var dayAfterWindowStart = new DateTimeOffset(todayStart.AddDays(2), kyivTz.GetUtcOffset(todayStart.AddDays(2)));
+
+                        if (isTomorrow)
+                        {
+                            payloadText = EventHashGenerator.GenerateHash(groupEvents, tomorrowWindowStart, dayAfterWindowStart);
+                        }
+                        else
+                        {
+                            payloadText = EventHashGenerator.GenerateHash(groupEvents, todayWindowStart, tomorrowWindowStart);
+                        }
                     }
                     
                     PublicationType pubType = isTomorrow ? PublicationType.Tomorrow : PublicationType.Text;
@@ -139,12 +156,16 @@ public class SynchronizationEngine : ISynchronizationEngine
                             artifactsToBuild.Add(updatedPub);
                         }
                     }
-                    else if (decision.DecisionResult == DecisionResult.DELETE && situation.TerritoryId != null)
+                    else if ((decision.DecisionResult == DecisionResult.DELETE || decision.DecisionResult == DecisionResult.REMOVE_EPHEMERAL) && situation.TerritoryId != null)
                     {
                         var existing = System.Linq.Enumerable.FirstOrDefault(pkg.Publications, p => p.TerritoryId == situation.TerritoryId && p.Type == pubType);
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
+                            if (decision.DecisionResult == DecisionResult.DELETE)
+                            {
+                                publicationsToPhysicalDelete.Add(existing);
+                            }
                         }
                     }
                     else if (decision.DecisionResult == DecisionResult.CLOSE && edition.State != SvitloSk.Publisher.Domain.EditionState.Closed)
@@ -167,13 +188,17 @@ public class SynchronizationEngine : ISynchronizationEngine
                     artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
                 }
                 
-                foreach (var p in removedPublications)
+                foreach (var p in publicationsToPhysicalDelete)
                 {
                     if (!newPublications.Any(n => n.Id == p.Id))
                     {
                         try
                         {
-                            await _publicationPipeline.DispatchAsync(new PublicationRequest(p.Id.ToString(), ""), cancellationToken);
+                            var existingId = _identityResolver.ResolveExternalIdentity(p.Id.ToString());
+                            if (existingId != null)
+                            {
+                                await _publicationPipeline.DispatchAsync(new PublicationRequest(p.Id.ToString(), null, TransportOperation.DELETE, existingId), cancellationToken);
+                            }
                         }
                         catch (NotSupportedException ex)
                         {

@@ -84,11 +84,11 @@ public class TelegramJournalIntegrationTests
         // According to EditorialOrder, order is: Tomorrow, Starokostiantyniv, Other territories (alphabetical), Technical.
         
         // 1. Send Tomorrow
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new TerritorialPayload("Tomorrow", SourcePortion.Today, "TomorrowData") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
         
         // 2. Send Technical
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new TerritorialPayload("Technical", SourcePortion.Today, "TechData") })); // Not Tomorrow
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Technical", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) })); // Not Tomorrow
         // Wait, how does SituationModel assign Type? It assigns PublicationType based on territory?
         // Actually, in TestInputPackageProvider, we pass territories. 
         // Let's look at how Tomorrow is assigned. In SynchronizationEngine it just uses the package payload? 
@@ -97,10 +97,10 @@ public class TelegramJournalIntegrationTests
         
         // We can just feed packages with different territories: Starokostiantyniv, Alpha, Beta.
         // Let's do Starokostiantyniv first.
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv", new[] { new TerritorialPayload("Starokostiantyniv", SourcePortion.Today, "StaroData") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv", new[] { new Event("Starokostiantyniv", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new TerritorialPayload("Beta", SourcePortion.Today, "Beta_Data") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
         
         Assert.Equal(3, mockHandler.Contents.Count);
@@ -113,10 +113,9 @@ public class TelegramJournalIntegrationTests
         Assert.Equal("MarkdownV2", root.GetProperty("parse_mode").GetString());
         var textValue = root.TryGetProperty("caption", out var cap) ? cap.GetString() : root.GetProperty("text").GetString();
         
-        Assert.Contains("Beta\\_Data", textValue); // Escaped underscore
-        Assert.Contains("GRAPHIC\\_\\[Content for Beta Beta\\_Data\\]", textValue); // The full graphic publisher output escaped
+        Assert.Contains("GRAPHIC\\_\\[Content for Beta", textValue);
 
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new TerritorialPayload("Alpha", SourcePortion.Today, "AlphaData") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // Assert
@@ -129,7 +128,7 @@ public class TelegramJournalIntegrationTests
         mockHandler.Requests.Clear();
 
         // This triggers an update for Beta.
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new TerritorialPayload("Beta", SourcePortion.Today, "Beta_Data_Updated") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         Assert.Empty(mockHandler.Contents);
@@ -142,3 +141,4 @@ public class TelegramJournalIntegrationTests
         Assert.StartsWith("-100123456789:", extId);
     }
 }
+

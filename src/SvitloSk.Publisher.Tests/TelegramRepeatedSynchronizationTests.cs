@@ -82,7 +82,7 @@ public class TelegramRepeatedSynchronizationTests
 
         var packageId = Guid.NewGuid();
         var payload = "Identical Payload";
-        packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new TerritorialPayload("Alpha", SourcePortion.Today, payload) }));
+        packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
 
         // Run 1 - Initial publish
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -119,7 +119,7 @@ public class TelegramRepeatedSynchronizationTests
         var identityResolver = sp.GetRequiredService<IExternalPublicationIdentityResolver>();
 
         var packageId = Guid.NewGuid();
-        packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new TerritorialPayload("Beta", SourcePortion.Today, "Original Payload") }));
+        packageProvider.SetPackage(new InputPackage(packageId, DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
 
         // Run 1 - Publish
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -134,7 +134,7 @@ public class TelegramRepeatedSynchronizationTests
         mockHandler.ResetCount();
 
         // Run 2 - Changed input
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new TerritorialPayload("Beta", SourcePortion.Today, "Changed Payload") }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         
         // This should run the UPDATE logic in SynchronizationEngine, which detects existing identity and catches NotSupportedException.
         // It shouldn't crash, but it shouldn't send anything to Telegram.
@@ -147,3 +147,4 @@ public class TelegramRepeatedSynchronizationTests
         Assert.Equal(initialExtId, finalExtId);
     }
 }
+

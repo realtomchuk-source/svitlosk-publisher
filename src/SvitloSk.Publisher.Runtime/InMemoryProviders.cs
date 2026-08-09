@@ -40,7 +40,7 @@ public class InMemoryInputPackageProvider : IInputPackageProvider
             DateTimeOffset.UtcNow,
             "inmemory_source",
             "Starokostiantyniv Urban Territorial Community",
-            new[] { new TerritorialPayload("inmemory_territory", SourcePortion.Today, "inmemory_payload") }
+            new[] { new Event("inmemory_territory", new string[0], new Interval[0]) }
         ));
     }
 }
