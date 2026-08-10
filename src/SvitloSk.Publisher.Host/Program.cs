@@ -1,4 +1,7 @@
 using System;
+using System.Linq;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,85 +19,115 @@ using SvitloSk.Publisher.Domain.Factories;
 
 namespace SvitloSk.Publisher.Host;
 
-class Program
+public class Program
 {
-    static void Main(string[] args)
+    public static int Main(string[] args)
     {
-        var builder = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder(args)
-            .ConfigureAppConfiguration((hostingContext, config) =>
-            {
-                config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-                config.AddEnvironmentVariables();
-            })
-            .ConfigureServices((context, services) =>
-            {
-                // Logging
-                services.AddLogging(configure => configure.AddConsole());
+        var isMigrate = args.Contains("--migrate");
 
-                // Database
-                var connectionString = context.Configuration.GetConnectionString("DefaultConnection") 
-                    ?? "Host=localhost;Database=svitlosk;Username=postgres;Password=postgres";
-                
-                services.AddDbContext<SvitloSkDbContext>(options =>
-                    options.UseNpgsql(connectionString));
+        var builder = WebApplication.CreateBuilder(args);
 
-                // Domain
-                services.AddSingleton<IEditionFactory, EditionFactory>();
+        // Logging
+        builder.Services.AddLogging(configure => configure.AddConsole());
 
-                // Core
-                services.AddSingleton<IEditorialDecisionEngine, EditorialDecisionEngine>();
-                services.AddSingleton<ISituationModel, SituationModel>();
-                services.AddSingleton<IReasoningModel, ReasoningModel>();
+        // Database
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+            ?? "Host=localhost;Database=svitlosk;Username=postgres;Password=postgres";
+        
+        builder.Services.AddDbContext<SvitloSkDbContext>(options =>
+            options.UseNpgsql(connectionString));
 
-                // Execution
-                services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
-                services.AddScoped<IEditionAssembly, EditionAssembly>();
-                services.AddScoped<IGraphicPublisher, GraphicPublisher>();
+        // Domain
+        builder.Services.AddSingleton<IEditionFactory, EditionFactory>();
 
-                // Channels
-                services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
+        // Core
+        builder.Services.AddSingleton<IEditorialDecisionEngine, EditorialDecisionEngine>();
+        builder.Services.AddSingleton<ISituationModel, SituationModel>();
+        builder.Services.AddSingleton<IReasoningModel, ReasoningModel>();
 
-                // Runtime
-                services.AddScoped<IExternalPublicationIdentityResolver, EfExternalPublicationIdentityResolver>();
-                services.AddScoped<IOutboxRepository, EfOutboxRepository>();
-                services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        // Execution
+        builder.Services.AddScoped<IEditorialOrderingStrategy, CanonicalOrderingStrategy>();
+        builder.Services.AddScoped<IEditionAssembly, EditionAssembly>();
+        builder.Services.AddScoped<IGraphicPublisher, GraphicPublisher>();
 
-                // Workers
-                services.AddScoped<ISynchronizationEngine, SynchronizationEngine>();
-                services.AddHostedService<SynchronizationWorker>();
-                services.AddHostedService<OutboxDispatcherWorker>();
+        // Channels
+        builder.Services.AddSingleton<IPublicationPipeline, PublicationPipeline>();
 
-                // Runtime Persistence
-                services.AddScoped<IEditionRepository, EfEditionRepository>();
-                services.Configure<OutagesSkOptions>(context.Configuration.GetSection("OutagesSk"));
-                services.AddHttpClient<IInputPackageProvider, RealOutagesSkInputPackageProvider>();
+        // Runtime
+        builder.Services.AddScoped<IExternalPublicationIdentityResolver, EfExternalPublicationIdentityResolver>();
+        builder.Services.AddScoped<IOutboxRepository, EfOutboxRepository>();
+        builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
-                // Adapters
-                services.AddOptions<TelegramOptions>()
-                    .Bind(context.Configuration.GetSection("Telegram"))
-                    .Validate(opts => !string.IsNullOrWhiteSpace(opts.BotToken), "Telegram BotToken is required.")
-                    .Validate(opts => !string.IsNullOrWhiteSpace(opts.TargetChatId), "Telegram TargetChatId is required.")
-                    .ValidateOnStart();
-
-                services.AddHttpClient<IPublicationPort, TelegramAdapter>();
-
-                // Keep InMemoryDispatcher for tests, but DO NOT map it to IPublicationPort in production
-                services.AddSingleton<InMemoryDispatcher>();
-            });
-
-        var host = builder.Build();
-
-        // Apply migrations automatically for development convenience (as specified in Phase 5)
-        var env = host.Services.GetRequiredService<IHostEnvironment>();
-        if (env.IsDevelopment())
+        if (!isMigrate)
         {
-            using var scope = host.Services.CreateScope();
+            // Workers (DO NOT start in --migrate mode)
+            builder.Services.AddScoped<ISynchronizationEngine, SynchronizationEngine>();
+            builder.Services.AddHostedService<SynchronizationWorker>();
+            builder.Services.AddHostedService<OutboxDispatcherWorker>();
+        }
+
+        // Runtime Persistence
+        builder.Services.AddScoped<IEditionRepository, EfEditionRepository>();
+        builder.Services.Configure<OutagesSkOptions>(builder.Configuration.GetSection("OutagesSk"));
+        builder.Services.AddHttpClient<IInputPackageProvider, RealOutagesSkInputPackageProvider>();
+
+        // Adapters
+        builder.Services.AddOptions<TelegramOptions>()
+            .Bind(builder.Configuration.GetSection("Telegram"))
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.BotToken) && opts.BotToken != "YOUR_BOT_TOKEN_HERE", "Invalid Telegram BotToken.")
+            .Validate(opts => !string.IsNullOrWhiteSpace(opts.TargetChatId) && opts.TargetChatId != "YOUR_CHAT_ID_HERE", "Invalid Telegram TargetChatId.")
+            .ValidateOnStart();
+
+        builder.Services.AddHttpClient<IPublicationPort, TelegramAdapter>();
+
+        // Keep InMemoryDispatcher for tests, but DO NOT map it to IPublicationPort in production
+        builder.Services.AddSingleton<InMemoryDispatcher>();
+
+        // Health Checks
+        builder.Services.AddHealthChecks()
+            .AddDbContextCheck<SvitloSkDbContext>(tags: new[] { "ready" });
+
+        var app = builder.Build();
+
+        if (isMigrate)
+        {
+            var logger = app.Services.GetRequiredService<ILogger<Program>>();
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<SvitloSkDbContext>();
+                db.Database.Migrate();
+                logger.LogInformation("Migration successful.");
+                return 0; // exit success
+            }
+            catch (Exception ex)
+            {
+                logger.LogCritical(ex, "Migration failed.");
+                return 1; // exit failure
+            }
+        }
+
+        // Apply migrations automatically ONLY for development convenience (DO NOT apply automatically in Production)
+        if (app.Environment.IsDevelopment())
+        {
+            using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<SvitloSkDbContext>();
             db.Database.Migrate();
         }
 
+        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        {
+            Predicate = _ => false // Liveness just indicates HTTP pipeline is alive
+        });
+
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready")
+        });
+
         Console.WriteLine("READY FOR BUSINESS IMPLEMENTATION");
 
-        host.Run();
+        app.Run();
+        return 0;
     }
 }

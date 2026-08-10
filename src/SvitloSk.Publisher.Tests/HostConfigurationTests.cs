@@ -14,9 +14,10 @@ public class HostConfigurationTests
 {
     private IHostBuilder CreateHostBuilder(Dictionary<string, string?> inMemorySettings)
     {
-        return Host.CreateDefaultBuilder()
+        return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
             .ConfigureAppConfiguration((context, config) =>
             {
+                config.Sources.Clear();
                 config.AddInMemoryCollection(inMemorySettings);
             })
             .ConfigureServices((context, services) =>

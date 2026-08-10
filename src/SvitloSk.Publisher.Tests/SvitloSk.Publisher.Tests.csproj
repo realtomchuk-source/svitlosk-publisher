@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Http" />
@@ -30,6 +31,7 @@
     <ProjectReference Include="..\SvitloSk.Publisher.Domain\SvitloSk.Publisher.Domain.csproj" />
     <ProjectReference Include="..\SvitloSk.Publisher.Runtime\SvitloSk.Publisher.Runtime.csproj" />
     <ProjectReference Include="..\SvitloSk.Publisher.Adapters.Telegram\SvitloSk.Publisher.Adapters.Telegram.csproj" />
+    <ProjectReference Include="..\SvitloSk.Publisher.Host\SvitloSk.Publisher.Host.csproj" />
   </ItemGroup>
 
 </Project>
