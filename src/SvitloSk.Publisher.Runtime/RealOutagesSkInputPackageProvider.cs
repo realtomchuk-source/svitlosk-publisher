@@ -50,11 +50,16 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
         
         [JsonPropertyName("mode")]
         public string? Mode { get; set; }
+        
+        [JsonPropertyName("queues")]
+        public Dictionary<string, string>? Queues { get; set; }
     }
 
     public async Task<InputPackage> GetLatestAsync(CancellationToken cancellationToken)
     {
         var events = new List<Event>();
+        var territoryPayloads = new Dictionary<string, string>();
+        JsonSourceMetadata? metadata = null;
         
         try
         {
@@ -66,7 +71,7 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
             var jsonUrl = $"{_options.Json.BaseUrl}/{targetDate:yyyy-MM-dd}.json";
             _logger.LogInformation("Fetching JSON from {Url}", jsonUrl);
             var jsonContent = await _httpClient.GetStringAsync(jsonUrl, cancellationToken);
-            var metadata = JsonSerializer.Deserialize<JsonSourceMetadata>(jsonContent);
+            metadata = JsonSerializer.Deserialize<JsonSourceMetadata>(jsonContent);
             
             if (metadata?.Date != targetDate.ToString("yyyy-MM-dd"))
             {
@@ -79,7 +84,7 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
             var textContent = await _httpClient.GetStringAsync(textUrl, cancellationToken);
             
             // 4. Parse Text into Events
-            events = ParseTextToEvents(textContent, targetDate);
+            events = ParseTextToEvents(textContent, targetDate, territoryPayloads);
         }
         catch (Exception ex)
         {
@@ -92,11 +97,16 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
             DateTimeOffset.UtcNow,
             "DualSourceProvider",
             "Starokostiantyniv Urban Territorial Community",
-            events
+            events,
+            InputPackageType.Text,
+            null,
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            territoryPayloads,
+            metadata?.Queues
         );
     }
     
-    private List<Event> ParseTextToEvents(string text, DateTime targetDate)
+    private List<Event> ParseTextToEvents(string text, DateTime targetDate, Dictionary<string, string> territoryPayloads)
     {
         var events = new List<Event>();
         var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -104,6 +114,7 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
         string currentSettlement = string.Empty;
         var currentIntervals = new List<Interval>();
         var currentStreets = new List<string>();
+        var currentBlock = new System.Text.StringBuilder();
         
         foreach (var line in lines)
         {
@@ -113,23 +124,48 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
                 if (!string.IsNullOrEmpty(currentSettlement))
                 {
                     events.Add(new Event(currentSettlement, currentStreets.ToList(), currentIntervals.ToList()));
+                    territoryPayloads[currentSettlement] = currentBlock.ToString().TrimEnd();
                     currentStreets.Clear();
                     currentIntervals.Clear();
+                    currentBlock.Clear();
                 }
                 
                 // e.g. [Місто Старокостянтинів]
                 currentSettlement = line.Trim('[', ']');
             }
-            else if (line.Contains("| з "))
+            
+            if (!string.IsNullOrEmpty(currentSettlement))
             {
-                // e.g. м. Старокостянтинів | з 09:00 до 17:00
-                var parts = line.Split('|');
-                if (parts.Length == 2)
+                currentBlock.AppendLine(line);
+            }
+
+            if (line.Contains("| з "))
+            {
+                var match = Regex.Match(line, @"з (?:(?<s_day>\d+)\s+(?<s_mon>[а-яїєі]+)\s+)?(?<s_h>\d{1,2}):(?<s_m>\d{2})\s+до\s+(?:(?<e_day>\d+)\s+(?<e_mon>[а-яїєі]+)\s+)?(?<e_h>\d{1,2}):(?<e_m>\d{2})");
+                if (match.Success)
                 {
-                    // For now we just add a dummy interval to satisfy the hash generator since the exact parsing of textual intervals is highly complex and error-prone.
-                    // The hash generator will see this and trigger updates.
-                    var todayStart = new DateTimeOffset(targetDate, KyivTz.GetUtcOffset(targetDate));
-                    currentIntervals.Add(new Interval(todayStart.AddHours(9), todayStart.AddHours(17)));
+                    int sh = int.Parse(match.Groups["s_h"].Value);
+                    int sm = int.Parse(match.Groups["s_m"].Value);
+                    int eh = int.Parse(match.Groups["e_h"].Value);
+                    int em = int.Parse(match.Groups["e_m"].Value);
+                    
+                    var startDt = new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, sh, sm, 0);
+                    if (match.Groups["s_day"].Success) 
+                    {
+                        startDt = new DateTime(targetDate.Year, GetMonthIndex(match.Groups["s_mon"].Value), int.Parse(match.Groups["s_day"].Value), sh, sm, 0);
+                    }
+                    
+                    var endDt = new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, eh, em, 0);
+                    if (match.Groups["e_day"].Success) 
+                    {
+                        endDt = new DateTime(targetDate.Year, GetMonthIndex(match.Groups["e_mon"].Value), int.Parse(match.Groups["e_day"].Value), eh, em, 0);
+                    }
+                    else if (endDt < startDt) 
+                    {
+                        endDt = endDt.AddDays(1); // cross midnight
+                    }
+                    
+                    currentIntervals.Add(new Interval(new DateTimeOffset(startDt, KyivTz.GetUtcOffset(startDt)), new DateTimeOffset(endDt, KyivTz.GetUtcOffset(endDt))));
                 }
             }
             else if (line.StartsWith("- "))
@@ -141,6 +177,7 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
         if (!string.IsNullOrEmpty(currentSettlement))
         {
             events.Add(new Event(currentSettlement, currentStreets, currentIntervals));
+            territoryPayloads[currentSettlement] = currentBlock.ToString().TrimEnd();
         }
         
         // Ensure we always have at least one event if the schedule is empty to satisfy the package structure
@@ -148,8 +185,29 @@ public class RealOutagesSkInputPackageProvider : IInputPackageProvider
         {
              var todayStart = new DateTimeOffset(targetDate, KyivTz.GetUtcOffset(targetDate));
              events.Add(new Event("Система", new List<string> { text.Trim() }, new List<Interval> { new Interval(todayStart, todayStart.AddHours(1)) }));
+             territoryPayloads["Система"] = text.Trim();
         }
         
         return events;
+    }
+
+    private int GetMonthIndex(string month)
+    {
+        return month.ToLower() switch
+        {
+            "січня" => 1,
+            "лютого" => 2,
+            "березня" => 3,
+            "квітня" => 4,
+            "травня" => 5,
+            "червня" => 6,
+            "липня" => 7,
+            "серпня" => 8,
+            "вересня" => 9,
+            "жовтня" => 10,
+            "листопада" => 11,
+            "грудня" => 12,
+            _ => throw new ArgumentException($"Unknown month: {month}")
+        };
     }
 }

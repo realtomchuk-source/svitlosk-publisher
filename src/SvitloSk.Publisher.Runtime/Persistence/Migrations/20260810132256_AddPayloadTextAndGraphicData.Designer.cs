@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SvitloSk.Publisher.Runtime.Persistence;
@@ -11,9 +12,11 @@ using SvitloSk.Publisher.Runtime.Persistence;
 namespace SvitloSk.Publisher.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(SvitloSkDbContext))]
-    partial class SvitloSkDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810132256_AddPayloadTextAndGraphicData")]
+    partial class AddPayloadTextAndGraphicData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

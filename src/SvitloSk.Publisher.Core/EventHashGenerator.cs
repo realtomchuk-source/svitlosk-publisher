@@ -9,7 +9,7 @@ namespace SvitloSk.Publisher.Core;
 
 public static class EventHashGenerator
 {
-    public static string GenerateHash(IEnumerable<Event> events, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    public static string GenerateHash(IEnumerable<Event> events, DateTimeOffset windowStart, DateTimeOffset windowEnd, string? payloadText = null, IReadOnlyDictionary<string, string>? queueSchedules = null)
     {
         var eventStrings = new List<string>();
 
@@ -50,6 +50,21 @@ public static class EventHashGenerator
         foreach (var evStr in eventStrings)
         {
             finalSb.Append(evStr).Append("||");
+        }
+        
+        if (payloadText != null)
+        {
+            finalSb.Append("Payload:").Append(payloadText).Append("||");
+        }
+        
+        if (queueSchedules != null && queueSchedules.Any())
+        {
+            finalSb.Append("Queues:");
+            foreach (var q in queueSchedules.OrderBy(q => q.Key))
+            {
+                finalSb.Append(q.Key).Append('=').Append(q.Value).Append(';');
+            }
+            finalSb.Append("||");
         }
         
         using var sha256 = SHA256.Create();

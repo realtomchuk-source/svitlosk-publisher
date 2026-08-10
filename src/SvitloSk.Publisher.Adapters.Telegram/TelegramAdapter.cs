@@ -88,7 +88,7 @@ public class TelegramAdapter : IPublicationPort
                 throw new InvalidOperationException("Cannot publish empty message.");
             }
 
-            var escapedPayload = EscapeMarkdownV2(artifact.Payload);
+            var escapedPayload = artifact.IsPreformatted ? artifact.Payload : EscapeMarkdownV2(artifact.Payload);
 
             if (artifact.Type == TransportArtifactType.TEXT_ONLY)
             {
@@ -124,7 +124,7 @@ public class TelegramAdapter : IPublicationPort
                     payload = new { 
                         chat_id = _options.TargetChatId, 
                         photo = mediaVal, 
-                        caption = EscapeMarkdownV2(captionVal), 
+                        caption = artifact.IsPreformatted ? captionVal : EscapeMarkdownV2(captionVal), 
                         parse_mode = "MarkdownV2" 
                     };
                 }
@@ -155,7 +155,7 @@ public class TelegramAdapter : IPublicationPort
                  messageId = parts[1];
             }
 
-            var escapedPayload = EscapeMarkdownV2(artifact.Payload ?? string.Empty);
+            var escapedPayload = artifact.IsPreformatted ? (artifact.Payload ?? string.Empty) : EscapeMarkdownV2(artifact.Payload ?? string.Empty);
 
             if (artifact.Type == TransportArtifactType.TEXT_ONLY)
             {
@@ -193,7 +193,7 @@ public class TelegramAdapter : IPublicationPort
                         media = new { 
                             type = "photo", 
                             media = mediaVal,
-                            caption = EscapeMarkdownV2(captionVal),
+                            caption = artifact.IsPreformatted ? captionVal : EscapeMarkdownV2(captionVal),
                             parse_mode = "MarkdownV2"
                         } 
                     };

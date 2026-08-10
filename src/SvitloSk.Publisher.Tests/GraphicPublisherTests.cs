@@ -32,9 +32,10 @@ public class GraphicPublisherTests
         edition.AddPackage(package);
         edition.Activate();
 
+        var graphicData = new Dictionary<string, string> { { "Q1", "Data" } };
         var artifacts = new List<PublicationArtifact>
         {
-            new PublicationArtifact(pubId, "Kyiv", PublicationClassification.Persistent, "Kyiv Content")
+            new PublicationArtifact(pubId, "Kyiv", PublicationClassification.Persistent, "Kyiv Content", graphicData)
         };
 
         // Act
@@ -46,7 +47,7 @@ public class GraphicPublisherTests
         Assert.Equal(pubId, graphic.PublicationId);
         Assert.Equal("Kyiv", graphic.Territory);
         Assert.Equal(PublicationClassification.Persistent, graphic.Classification);
-        Assert.Equal("GRAPHIC_[Kyiv Content]", graphic.GraphicContent);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(graphicData), graphic.GraphicContent);
     }
 
     [Fact]
@@ -66,10 +67,13 @@ public class GraphicPublisherTests
         edition.AddPackage(package);
         edition.Activate();
 
+        var graphicDataKyiv = new Dictionary<string, string> { { "Q1", "K" } };
+        var graphicDataLviv = new Dictionary<string, string> { { "Q2", "L" } };
+        
         var artifacts = new List<PublicationArtifact>
         {
-            new PublicationArtifact(pubId2, "Lviv", PublicationClassification.Persistent, "Lviv Content"),
-            new PublicationArtifact(pubId1, "Kyiv", PublicationClassification.Persistent, "Kyiv Content")
+            new PublicationArtifact(pubId2, "Lviv", PublicationClassification.Persistent, "Lviv Content", graphicDataLviv),
+            new PublicationArtifact(pubId1, "Kyiv", PublicationClassification.Persistent, "Kyiv Content", graphicDataKyiv)
         };
 
         // Act
@@ -78,9 +82,9 @@ public class GraphicPublisherTests
         // Assert
         Assert.Equal(2, result.Count);
         Assert.Equal(pubId1, result[0].PublicationId);
-        Assert.Equal("GRAPHIC_[Kyiv Content]", result[0].GraphicContent);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(graphicDataKyiv), result[0].GraphicContent);
         Assert.Equal(pubId2, result[1].PublicationId);
-        Assert.Equal("GRAPHIC_[Lviv Content]", result[1].GraphicContent);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(graphicDataLviv), result[1].GraphicContent);
     }
 
     [Fact]

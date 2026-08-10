@@ -88,8 +88,26 @@ public class SituationModel : ISituationModel
                     .FirstOrDefault(p => p.TerritoryId == territoryId && p.Type == PublicationType.Tomorrow);
 
                 // Today logic
-                var todayHash = EventHashGenerator.GenerateHash(groupEvents, todayWindowStart, tomorrowWindowStart);
-                var hasToday = todayHash != EventHashGenerator.GenerateHash(Enumerable.Empty<Event>(), todayWindowStart, tomorrowWindowStart);
+                string? payloadText = null;
+                if (inputPackage.TerritoryPayloads != null && inputPackage.TerritoryPayloads.TryGetValue(territoryId, out var payload))
+                {
+                    payloadText = payload;
+                }
+                
+                var todayHash = EventHashGenerator.GenerateHash(groupEvents, todayWindowStart, tomorrowWindowStart, payloadText, inputPackage.QueueSchedules);
+                var emptyTodayHash = EventHashGenerator.GenerateHash(Enumerable.Empty<Event>(), todayWindowStart, tomorrowWindowStart);
+                var hasToday = todayHash != emptyTodayHash;
+                // If it only differs by payload or queues, but there are no physical events, then hasToday would be true if we passed them.
+                // But we only want hasToday to represent whether there are actual active intervals.
+                // Wait, if groupEvents has no overlapping intervals, todayHash won't have the finalSb.Append(payloadText). 
+                // Ah! In EventHashGenerator, the payload and queues are appended at the END, regardless of whether there are events.
+                // Let's check EventHashGenerator... yes, it appends payloadText unconditionally at the end!
+                // This means if there are NO overlapping intervals, todayHash will STILL be different from emptyTodayHash if we pass payload/queues!
+                // To fix this, let's only consider hasToday true if groupEvents has actual overlapping intervals.
+                // Let's modify the empty check.
+                
+                // Let's just use the boolean:
+                hasToday = groupEvents.SelectMany(ev => ev.Intervals).Any(i => i.StartTime != i.EndTime && i.StartTime < tomorrowWindowStart && i.EndTime > todayWindowStart);
 
                 if (existingTodayPub == null)
                 {
@@ -117,8 +135,8 @@ public class SituationModel : ISituationModel
                 // Tomorrow logic
                 if (isTomorrowEligible)
                 {
-                    var tomorrowHash = EventHashGenerator.GenerateHash(groupEvents, tomorrowWindowStart, dayAfterWindowStart);
-                    var hasTomorrow = tomorrowHash != EventHashGenerator.GenerateHash(Enumerable.Empty<Event>(), tomorrowWindowStart, dayAfterWindowStart);
+                    var tomorrowHash = EventHashGenerator.GenerateHash(groupEvents, tomorrowWindowStart, dayAfterWindowStart, payloadText, inputPackage.QueueSchedules);
+                    var hasTomorrow = groupEvents.SelectMany(ev => ev.Intervals).Any(i => i.StartTime != i.EndTime && i.StartTime < dayAfterWindowStart && i.EndTime > tomorrowWindowStart);
 
                     if (existingTomorrowPub == null)
                     {

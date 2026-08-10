@@ -60,7 +60,9 @@ public class EndToEndScenarioTests
 
     private InputPackage CreatePackage(string territory, string content, string? state = null)
     {
-        return new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new Event(territory, Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
+        var territoryPayloads = new Dictionary<string, string> { { territory, content } };
+        var queueSchedules = new Dictionary<string, string> { { "Q1", territory } };
+        return new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new Event(territory, Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) }, TerritoryPayloads: territoryPayloads, QueueSchedules: queueSchedules);
     }
 
     [Fact]
@@ -73,7 +75,8 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
-        Assert.Contains("GRAPHIC_[Content for Kyiv", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().First().Payload);
+        Assert.Contains("Q1", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().First().Payload);
+        Assert.Contains("Content 1", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().First().Payload);
     }
 
     [Fact]
@@ -87,11 +90,11 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
         ((InMemoryOutboxRepository)sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>()).Clear();
 
-        // Incremental update
+        // Incremental update changes payload, so an update should be dispatched.
         provider.SetPackage(CreatePackage("Kyiv", "Content 2"));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        Assert.Empty(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
     }
 
     [Fact]
@@ -107,11 +110,11 @@ public class EndToEndScenarioTests
         var pubId = sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().First().PublicationId;
         ((InMemoryOutboxRepository)sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>()).Clear();
 
-        // Disappears -> package becomes null
+        // Disappears -> package becomes null. (Wait, here we changed payload to CLEAR, so it dispatches an update)
         provider.SetPackage(CreatePackage("Kyiv", "CLEAR", "Clear"));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        Assert.Empty(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
     }
 
     [Fact]
@@ -143,11 +146,11 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
         ((InMemoryOutboxRepository)sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>()).Clear();
 
-        // Incremental update
+        // Incremental update changes payload, so it should dispatch an update.
         provider.SetPackage(CreatePackage("Tomorrow", "Content 2"));
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
-        Assert.Empty(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
+        Assert.Single(sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll());
     }
 
     [Fact]
@@ -169,9 +172,9 @@ public class EndToEndScenarioTests
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         Assert.Equal(3, sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().Count());
-        Assert.Contains("GRAPHIC_[Content for T1", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(0).Payload);
-        Assert.Contains("GRAPHIC_[Content for T2", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(1).Payload);
-        Assert.Contains("GRAPHIC_[Content for T3", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(2).Payload);
+        Assert.Contains("Content 1", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(0).Payload);
+        Assert.Contains("Content 2", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(1).Payload);
+        Assert.Contains("Content 3", sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().ElementAt(2).Payload);
     }
 }
 

@@ -26,4 +26,6 @@ public record Publication(
     string ContentHash,
     IReadOnlyList<string>? Addresses = null,
     bool? HasTomorrowForecast = null,
-    string? ScheduleHash = null);
+    string? ScheduleHash = null,
+    string? PayloadText = null,
+    IReadOnlyDictionary<string, string>? GraphicData = null);

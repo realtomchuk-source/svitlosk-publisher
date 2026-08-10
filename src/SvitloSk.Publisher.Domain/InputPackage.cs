@@ -25,5 +25,7 @@ public record InputPackage(
     IReadOnlyCollection<Event> Events,
     InputPackageType Type = InputPackageType.Text,
     string? PackageState = null,
-    DateOnly? TargetDate = null
+    DateOnly? TargetDate = null,
+    IReadOnlyDictionary<string, string>? TerritoryPayloads = null,
+    IReadOnlyDictionary<string, string>? QueueSchedules = null
 );

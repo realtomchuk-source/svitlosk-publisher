@@ -29,11 +29,17 @@ public class GraphicPublisher : IGraphicPublisher
         
         foreach (var artifact in editionArtifact.OrderedPublications)
         {
+            var graphicPayload = "NO_GRAPHIC";
+            if (artifact.GraphicData != null && artifact.GraphicData.Count > 0)
+            {
+                graphicPayload = System.Text.Json.JsonSerializer.Serialize(artifact.GraphicData);
+            }
+
             result.Add(new GraphicPublication(
                 artifact.PublicationId,
                 artifact.Territory,
                 artifact.Classification,
-                $"GRAPHIC_[{artifact.Content}]"
+                graphicPayload
             ));
         }
 

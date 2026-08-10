@@ -20,7 +20,7 @@ public class PublicationPipeline : IPublicationPipeline
             throw new NotSupportedException("PublicationRequest payload is empty for CREATE.");
         }
         
-        var artifact = new TransportArtifact(request.Id, request.ArtifactType, request.Operation, request.Payload, request.ExternalIdentity);
+        var artifact = new TransportArtifact(request.Id, request.ArtifactType, request.Operation, request.Payload, request.ExternalIdentity, true);
         return _port.PublishAsync(artifact, cancellationToken);
     }
 }

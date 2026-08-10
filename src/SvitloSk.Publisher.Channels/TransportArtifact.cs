@@ -19,7 +19,8 @@ public record TransportArtifact(
     TransportArtifactType Type,
     TransportOperation Operation,
     string? Payload = null,
-    string? ExternalIdentity = null
+    string? ExternalIdentity = null,
+    bool IsPreformatted = false
 );
 
 public record SingleMediaPayload(

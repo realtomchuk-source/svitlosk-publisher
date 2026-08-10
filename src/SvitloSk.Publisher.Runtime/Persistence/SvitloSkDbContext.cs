@@ -68,6 +68,15 @@ public class SvitloSkDbContext : DbContext
                  v => v == null ? null : JsonSerializer.Deserialize<IReadOnlyList<string>>(v, (JsonSerializerOptions?)null)
              )
              .HasColumnType("jsonb");
+             
+            b.Property(p => p.PayloadText);
+            
+            b.Property(p => p.GraphicData)
+             .HasConversion(
+                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                 v => v == null ? null : JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(v, (JsonSerializerOptions?)null)
+             )
+             .HasColumnType("jsonb");
         });
 
         // ExternalPublicationIdentity

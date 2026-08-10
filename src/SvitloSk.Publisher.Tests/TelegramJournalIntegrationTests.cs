@@ -107,11 +107,11 @@ public class TelegramJournalIntegrationTests
         // According to EditorialOrder, order is: Tomorrow, Starokostiantyniv, Other territories (alphabetical), Technical.
         
         // 1. Send Tomorrow
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Tomorrow", "Tomorrow Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "T" } }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
         
         // 2. Send Technical
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Technical", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) })); // Not Tomorrow
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("Technical", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Technical", "Tech Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "Tech" } })); // Not Tomorrow
         // Wait, how does SituationModel assign Type? It assigns PublicationType based on territory?
         // Actually, in TestInputPackageProvider, we pass territories. 
         // Let's look at how Tomorrow is assigned. In SynchronizationEngine it just uses the package payload? 
@@ -120,10 +120,10 @@ public class TelegramJournalIntegrationTests
         
         // We can just feed packages with different territories: Starokostiantyniv, Alpha, Beta.
         // Let's do Starokostiantyniv first.
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv", new[] { new Event("Starokostiantyniv", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Starokostiantyniv", new[] { new Event("Starokostiantyniv", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Starokostiantyniv", "Staro Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "Staro" } }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Beta", "Beta Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "Beta" } }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
         
         Assert.Equal(3, mockHandler.Contents.Count);
@@ -136,9 +136,9 @@ public class TelegramJournalIntegrationTests
         
         var textValue = root.TryGetProperty("photo", out var photo) ? root.GetProperty("caption").GetString() : root.GetProperty("text").GetString();
         
-        Assert.Contains("GRAPHIC_[Content for Beta", photo.GetString()); Assert.Contains("Content for Beta", textValue);
+        Assert.Contains("Beta", photo.GetString()); Assert.Contains("Beta Content", textValue);
 
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Alpha", "Alpha Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "Alpha" } }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
         // Assert
@@ -151,7 +151,7 @@ public class TelegramJournalIntegrationTests
         mockHandler.Requests.Clear();
 
         // This triggers an update for Beta.
-        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
+        packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Beta", new[] { new Event("Beta", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }, TerritoryPayloads: new Dictionary<string, string> { { "Beta", "Beta Content" } }, QueueSchedules: new Dictionary<string, string> { { "Q1", "Beta" } }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();
 
         Assert.Empty(mockHandler.Contents);

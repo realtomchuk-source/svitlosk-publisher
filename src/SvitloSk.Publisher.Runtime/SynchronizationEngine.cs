@@ -114,10 +114,16 @@ public class SynchronizationEngine : ISynchronizationEngine
                     bool isTomorrow = situation.Type == Situation.TomorrowForecastAppeared || 
                                       situation.Type == Situation.TomorrowForecastDisappeared;
                     
-                    string payloadText = string.Empty;
+                    string contentHash = string.Empty;
+                    string? rawMarkdown = null;
                     if (package?.Events != null && situation.TerritoryId != null)
                     {
                         var groupEvents = package.Events.Where(e => e.Settlement == situation.TerritoryId).ToList();
+                        
+                        if (package.TerritoryPayloads != null && package.TerritoryPayloads.TryGetValue(situation.TerritoryId, out var payload))
+                        {
+                            rawMarkdown = payload;
+                        }
                         
                         var kyivTz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
                         var currentKyiv = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, kyivTz);
@@ -128,11 +134,11 @@ public class SynchronizationEngine : ISynchronizationEngine
 
                         if (isTomorrow)
                         {
-                            payloadText = EventHashGenerator.GenerateHash(groupEvents, tomorrowWindowStart, dayAfterWindowStart);
+                            contentHash = EventHashGenerator.GenerateHash(groupEvents, tomorrowWindowStart, dayAfterWindowStart, rawMarkdown, package.QueueSchedules);
                         }
                         else
                         {
-                            payloadText = EventHashGenerator.GenerateHash(groupEvents, todayWindowStart, tomorrowWindowStart);
+                            contentHash = EventHashGenerator.GenerateHash(groupEvents, todayWindowStart, tomorrowWindowStart, rawMarkdown, package.QueueSchedules);
                         }
                     }
                     
@@ -147,7 +153,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                         }
                         else if ((situation.Type == Situation.TerritoryAppeared || situation.Type == Situation.TomorrowForecastAppeared) && situation.TerritoryId != null)
                         {
-                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, (PublicationClassification)classification, pubType, DateTimeOffset.UtcNow, payloadText);
+                            var pub = new Publication(Guid.NewGuid(), situation.TerritoryId, (PublicationClassification)classification, pubType, DateTimeOffset.UtcNow, contentHash, null, null, null, rawMarkdown, package?.QueueSchedules);
                             newPublications.Add(pub);
                             artifactsToBuild.Add(pub);
                         }
@@ -158,7 +164,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                         if (existing != null)
                         {
                             removedPublications.Add(existing);
-                            var updatedPub = existing with { ContentHash = payloadText };
+                            var updatedPub = existing with { ContentHash = contentHash, PayloadText = rawMarkdown, GraphicData = package?.QueueSchedules };
                             newPublications.Add(updatedPub);
                             artifactsToBuild.Add(updatedPub);
                         }
@@ -192,7 +198,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                 var artifacts = new List<PublicationArtifact>();
                 foreach (var pub in pkg.Publications)
                 {
-                    artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, $"Content for {pub.TerritoryId} {pub.ContentHash}"));
+                    artifacts.Add(new PublicationArtifact(pub.Id, pub.TerritoryId, pub.Classification, pub.PayloadText ?? string.Empty, pub.GraphicData));
                 }
                 
                 foreach (var p in publicationsToPhysicalDelete)
