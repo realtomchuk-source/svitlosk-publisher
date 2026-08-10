@@ -68,7 +68,7 @@ public class Program
 
         // Runtime Persistence
         builder.Services.AddScoped<IEditionRepository, EfEditionRepository>();
-        builder.Services.Configure<OutagesSkOptions>(builder.Configuration.GetSection("OutagesSk"));
+        builder.Services.Configure<InputSourcesOptions>(builder.Configuration.GetSection("InputSources"));
         builder.Services.AddHttpClient<IInputPackageProvider, RealOutagesSkInputPackageProvider>();
 
         // Adapters

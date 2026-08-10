@@ -1,8 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy Directory.Packages.props if it exists
+# Copy directory configuration files
 COPY Directory.Packages.props .
+COPY Directory.Build.props .
 
 # Copy projects and restore
 COPY src/SvitloSk.Publisher.Domain/SvitloSk.Publisher.Domain.csproj src/SvitloSk.Publisher.Domain/
