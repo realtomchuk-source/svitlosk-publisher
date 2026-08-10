@@ -70,8 +70,16 @@ class Program
                 services.AddHttpClient<IInputPackageProvider, RealOutagesSkInputPackageProvider>();
 
                 // Adapters
+                services.AddOptions<TelegramOptions>()
+                    .Bind(context.Configuration.GetSection("Telegram"))
+                    .Validate(opts => !string.IsNullOrWhiteSpace(opts.BotToken), "Telegram BotToken is required.")
+                    .Validate(opts => !string.IsNullOrWhiteSpace(opts.TargetChatId), "Telegram TargetChatId is required.")
+                    .ValidateOnStart();
+
+                services.AddHttpClient<IPublicationPort, TelegramAdapter>();
+
+                // Keep InMemoryDispatcher for tests, but DO NOT map it to IPublicationPort in production
                 services.AddSingleton<InMemoryDispatcher>();
-                services.AddSingleton<IPublicationPort>(sp => sp.GetRequiredService<InMemoryDispatcher>());
             });
 
         var host = builder.Build();
