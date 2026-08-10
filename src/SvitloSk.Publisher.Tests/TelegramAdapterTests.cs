@@ -78,4 +78,59 @@ public class TelegramAdapterTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.PublishAsync(artifact));
     }
+    [Fact]
+    public async Task PublishAsync_SingleMediaCreate_SendsPhotoWithCaption()
+    {
+        var artifact = new TransportArtifact("req1", TransportArtifactType.SINGLE_MEDIA, TransportOperation.CREATE, @"{""Media"":""https://test.media/img.jpg"",""Caption"":""Caption text""}", null);
+        var mockHandler = new MockHttpMessageHandler();
+        mockHandler.ResponseToReturn.Content = new StringContent(@"{""ok"":true,""result"":{""message_id"":12345,""chat"":{""id"":-100123456789}}}");
+        var options = Options.Create(new TelegramOptions { BotToken = "test_token", TargetChatId = "-100123456789" });
+        var adapter = new TelegramAdapter(new HttpClient(mockHandler), options, NullLogger<TelegramAdapter>.Instance);
+
+        await adapter.PublishAsync(artifact);
+
+        Assert.NotNull(mockHandler.LastRequest);
+        Assert.Equal("https://api.telegram.org/bottest_token/sendPhoto", mockHandler.LastRequest.RequestUri?.ToString());
+        
+        Assert.Contains(@"""photo"":""https://test.media/img.jpg""", mockHandler.LastContent);
+        Assert.Contains(@"""caption"":""Caption text""", mockHandler.LastContent);
+        Assert.Contains(@"""parse_mode"":""MarkdownV2""", mockHandler.LastContent);
+    }
+
+    [Fact]
+    public async Task PublishAsync_SingleMediaUpdate_SendsEditMessageMediaWithCaption()
+    {
+        var artifact = new TransportArtifact("req2", TransportArtifactType.SINGLE_MEDIA, TransportOperation.UPDATE, @"{""Media"":""https://test.media/img2.jpg"",""Caption"":""Updated caption""}", "-100123456789:1234");
+        var mockHandler = new MockHttpMessageHandler();
+        mockHandler.ResponseToReturn.Content = new StringContent(@"{""ok"":true,""result"":{""message_id"":12345,""chat"":{""id"":-100123456789}}}");
+        var options = Options.Create(new TelegramOptions { BotToken = "test_token", TargetChatId = "-100123456789" });
+        var adapter = new TelegramAdapter(new HttpClient(mockHandler), options, NullLogger<TelegramAdapter>.Instance);
+
+        await adapter.PublishAsync(artifact);
+
+        Assert.NotNull(mockHandler.LastRequest);
+        Assert.Equal("https://api.telegram.org/bottest_token/editMessageMedia", mockHandler.LastRequest.RequestUri?.ToString());
+        
+        Assert.Contains(@"""type"":""photo""", mockHandler.LastContent);
+        Assert.Contains(@"""media"":""https://test.media/img2.jpg""", mockHandler.LastContent);
+        Assert.Contains(@"""caption"":""Updated caption""", mockHandler.LastContent);
+        Assert.Contains(@"""parse_mode"":""MarkdownV2""", mockHandler.LastContent);
+    }
+
+    [Fact]
+    public async Task PublishAsync_SingleMediaCreate_FallbackToRawMediaWhenNotJson()
+    {
+        var artifact = new TransportArtifact("req3", TransportArtifactType.SINGLE_MEDIA, TransportOperation.CREATE, "https://test.media/raw_img.jpg", null);
+        var mockHandler = new MockHttpMessageHandler();
+        mockHandler.ResponseToReturn.Content = new StringContent(@"{""ok"":true,""result"":{""message_id"":12345,""chat"":{""id"":-100123456789}}}");
+        var options = Options.Create(new TelegramOptions { BotToken = "test_token", TargetChatId = "-100123456789" });
+        var adapter = new TelegramAdapter(new HttpClient(mockHandler), options, NullLogger<TelegramAdapter>.Instance);
+
+        await adapter.PublishAsync(artifact);
+
+        Assert.NotNull(mockHandler.LastRequest);
+        Assert.Equal("https://api.telegram.org/bottest_token/sendPhoto", mockHandler.LastRequest.RequestUri?.ToString());
+        Assert.Contains(@"""photo"":""https://test.media/raw_img.jpg""", mockHandler.LastContent);
+        Assert.DoesNotContain(@"""caption""", mockHandler.LastContent);
+    }
 }

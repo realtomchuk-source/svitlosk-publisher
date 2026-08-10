@@ -17,6 +17,8 @@ namespace SvitloSk.Publisher.Tests;
 
 public class EditorialDecisionScenariosTests
 {
+    private readonly FakeTimeProvider _timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
     private (IServiceProvider, InMemoryEditionRepository, InMemoryDispatcher, TestInputPackageProvider) SetupContainer(InputPackage initialPackage)
     {
         var services = new ServiceCollection();
@@ -66,7 +68,7 @@ public class EditorialDecisionScenariosTests
     [Fact]
     public async Task Scenario1_NewOutageAppears_CreatesPublication()
     {
-        var package = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        var package = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
         var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package);
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
 
@@ -86,13 +88,13 @@ public class EditorialDecisionScenariosTests
     public async Task Scenario2_OutageDurationChanges_UpdatesPublication()
     {
         // 1. Initial State
-        var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        var package1 = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
         var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Change Payload
-        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
 
         // Act
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -110,13 +112,13 @@ public class EditorialDecisionScenariosTests
     public async Task Scenario3_OutageDisappears_RemovesPublication()
     {
         // 1. Initial State
-        var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        var package1 = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
         var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Disappear (Clear State)
-        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", Array.Empty<Event>());
+        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", Array.Empty<Event>());
 
         // Act
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -134,7 +136,7 @@ public class EditorialDecisionScenariosTests
     public async Task Scenario4_OnlyMetadataChanges_NoAction()
     {
         // 1. Initial State
-        var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        var package1 = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "T1", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
         var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -142,7 +144,7 @@ public class EditorialDecisionScenariosTests
         var dispatchCountBefore = sp.GetRequiredService<SvitloSk.Publisher.Runtime.Persistence.IOutboxRepository>().GetAll().Count();
 
         // 2. Only Metadata Changes (Timestamp changed, but Payload same)
-        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(5), "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow().AddMinutes(5), "src", "Starokostiantyniv Urban Territorial Community", new[] { new Event("T1", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
 
         // Act
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
@@ -159,13 +161,13 @@ public class EditorialDecisionScenariosTests
     public async Task Scenario5_TomorrowScheduleChanges_UpdatesTomorrowOnly()
     {
         // 1. Initial State
-        var package1 = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        var package1 = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
         var (sp, repo, dispatcher, pkgProvider) = SetupContainer(package1);
         var engine = sp.GetRequiredService<ISynchronizationEngine>();
         await engine.MaintainPublisherStateAsync(CancellationToken.None);
 
         // 2. Change Tomorrow
-        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        pkgProvider.CurrentPackage = new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "src", "Tomorrow", new[] { new Event("Tomorrow", Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
 
         // Act
         await engine.MaintainPublisherStateAsync(CancellationToken.None);

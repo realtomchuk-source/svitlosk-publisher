@@ -21,3 +21,9 @@ public record TransportArtifact(
     string? Payload = null,
     string? ExternalIdentity = null
 );
+
+public record SingleMediaPayload(
+    string Media,
+    string Caption
+);
+

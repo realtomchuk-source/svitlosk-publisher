@@ -227,6 +227,10 @@ public class SynchronizationEngine : ISynchronizationEngine
                         var existingId = _identityResolver.ResolveExternalIdentity(gp.PublicationId.ToString());
                         var opType = existingId != null ? TransportOperation.UPDATE : TransportOperation.CREATE;
                         
+                        var correspondingTextArtifact = builtArtifacts.FirstOrDefault(a => a.PublicationId == gp.PublicationId);
+                        var singleMediaPayload = new SingleMediaPayload(gp.GraphicContent, correspondingTextArtifact?.Content ?? string.Empty);
+                        var payloadJson = System.Text.Json.JsonSerializer.Serialize(singleMediaPayload);
+
                         var outboxMsg = new SvitloSk.Publisher.Runtime.Persistence.OutboxMessage
                         {
                             OperationId = Guid.NewGuid(),
@@ -234,7 +238,7 @@ public class SynchronizationEngine : ISynchronizationEngine
                             OperationType = opType,
                             ArtifactType = TransportArtifactType.SINGLE_MEDIA,
                             ExternalIdentity = existingId,
-                            Payload = gp.GraphicContent,
+                            Payload = payloadJson,
                             Status = SvitloSk.Publisher.Runtime.Persistence.OutboxOperationStatus.Pending,
                             CreatedAt = DateTimeOffset.UtcNow
                         };

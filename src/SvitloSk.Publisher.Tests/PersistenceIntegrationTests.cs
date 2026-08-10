@@ -10,6 +10,8 @@ namespace SvitloSk.Publisher.Tests;
 
 public class PersistenceIntegrationTests : IDisposable
 {
+    private readonly DateTimeOffset _now = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+    
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<SvitloSkDbContext> _options;
 
@@ -43,7 +45,7 @@ public class PersistenceIntegrationTests : IDisposable
             "territory1",
             PublicationClassification.Persistent,
             PublicationType.Text,
-            DateTimeOffset.UtcNow,
+            _now,
             "hash123",
             new[] { "Address 1", "Address 2" },
             true,

@@ -98,9 +98,40 @@ public class TelegramAdapter : IPublicationPort
             else if (artifact.Type == TransportArtifactType.SINGLE_MEDIA)
             {
                 endpoint = "sendPhoto";
-                // Payload contains the photo URL or file id. Caption can be empty or we just send it.
-                // Assuming artifact.Payload is a valid URL or file_id for sendPhoto
-                payload = new { chat_id = _options.TargetChatId, photo = escapedPayload }; 
+                string mediaVal = artifact.Payload;
+                string captionVal = string.Empty;
+
+                try
+                {
+                    if (artifact.Payload != null && artifact.Payload.TrimStart().StartsWith("{"))
+                    {
+                        var mediaObj = JsonSerializer.Deserialize<SingleMediaPayload>(artifact.Payload, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (mediaObj != null)
+                        {
+                            mediaVal = mediaObj.Media ?? string.Empty;
+                            captionVal = mediaObj.Caption ?? string.Empty;
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Fallback to raw media for backward compatibility
+                    mediaVal = artifact.Payload ?? string.Empty;
+                }
+
+                if (!string.IsNullOrEmpty(captionVal))
+                {
+                    payload = new { 
+                        chat_id = _options.TargetChatId, 
+                        photo = mediaVal, 
+                        caption = EscapeMarkdownV2(captionVal), 
+                        parse_mode = "MarkdownV2" 
+                    };
+                }
+                else
+                {
+                    payload = new { chat_id = _options.TargetChatId, photo = mediaVal }; 
+                }
             }
             else
             {
@@ -134,11 +165,47 @@ public class TelegramAdapter : IPublicationPort
             else if (artifact.Type == TransportArtifactType.SINGLE_MEDIA)
             {
                 endpoint = "editMessageMedia";
-                payload = new { 
-                    chat_id = chatId, 
-                    message_id = int.Parse(messageId), 
-                    media = new { type = "photo", media = escapedPayload } 
-                };
+                string mediaVal = artifact.Payload ?? string.Empty;
+                string captionVal = string.Empty;
+
+                try
+                {
+                    if (artifact.Payload != null && artifact.Payload.TrimStart().StartsWith("{"))
+                    {
+                        var mediaObj = JsonSerializer.Deserialize<SingleMediaPayload>(artifact.Payload, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (mediaObj != null)
+                        {
+                            mediaVal = mediaObj.Media ?? string.Empty;
+                            captionVal = mediaObj.Caption ?? string.Empty;
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    mediaVal = artifact.Payload ?? string.Empty;
+                }
+
+                if (!string.IsNullOrEmpty(captionVal))
+                {
+                    payload = new { 
+                        chat_id = chatId, 
+                        message_id = int.Parse(messageId), 
+                        media = new { 
+                            type = "photo", 
+                            media = mediaVal,
+                            caption = EscapeMarkdownV2(captionVal),
+                            parse_mode = "MarkdownV2"
+                        } 
+                    };
+                }
+                else
+                {
+                    payload = new { 
+                        chat_id = chatId, 
+                        message_id = int.Parse(messageId), 
+                        media = new { type = "photo", media = mediaVal } 
+                    };
+                }
             }
             else
             {

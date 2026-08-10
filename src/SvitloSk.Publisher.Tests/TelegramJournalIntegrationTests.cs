@@ -134,9 +134,9 @@ public class TelegramJournalIntegrationTests
         
         Assert.Equal("-100123456789", root.GetProperty("chat_id").GetString());
         
-        var textValue = root.TryGetProperty("photo", out var photo) ? photo.GetString() : root.GetProperty("text").GetString();
+        var textValue = root.TryGetProperty("photo", out var photo) ? root.GetProperty("caption").GetString() : root.GetProperty("text").GetString();
         
-        Assert.Contains("GRAPHIC\\_\\[Content for Beta", textValue);
+        Assert.Contains("GRAPHIC_[Content for Beta", photo.GetString()); Assert.Contains("Content for Beta", textValue);
 
         packageProvider.SetPackage(new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "src", "Alpha", new[] { new Event("Alpha", Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) }));
         await engine.MaintainPublisherStateAsync(CancellationToken.None); await DispatchOutbox();

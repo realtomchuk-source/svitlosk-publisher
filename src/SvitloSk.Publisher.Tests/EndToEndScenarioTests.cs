@@ -25,6 +25,8 @@ public class TestInputPackageProvider : IInputPackageProvider
 
 public class EndToEndScenarioTests
 {
+    private readonly FakeTimeProvider _timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+
     private (IServiceProvider, InMemoryEditionRepository, InMemoryDispatcher, TestInputPackageProvider) SetupContainer()
     {
         var services = new ServiceCollection();
@@ -58,7 +60,7 @@ public class EndToEndScenarioTests
 
     private InputPackage CreatePackage(string territory, string content, string? state = null)
     {
-        return new InputPackage(Guid.NewGuid(), DateTimeOffset.UtcNow, "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new Event(territory, Array.Empty<string>(), new[] { new Interval(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2)) }) });
+        return new InputPackage(Guid.NewGuid(), _timeProvider.GetUtcNow(), "TestSource", "Starokostiantyniv Urban Territorial Community", new[] { new Event(territory, Array.Empty<string>(), new[] { new Interval(_timeProvider.GetUtcNow(), _timeProvider.GetUtcNow().AddHours(2)) }) });
     }
 
     [Fact]
