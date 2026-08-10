@@ -27,3 +27,12 @@ public record SingleMediaPayload(
     string Caption
 );
 
+
+public class RetryableTransportException : System.Exception
+{
+    public System.TimeSpan? RetryAfter { get; }
+    public RetryableTransportException(string message, System.TimeSpan? retryAfter = null) : base(message)
+    {
+        RetryAfter = retryAfter;
+    }
+}

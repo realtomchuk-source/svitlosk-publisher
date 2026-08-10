@@ -83,6 +83,20 @@ public class InMemoryOutboxRepository : IOutboxRepository
         return _messages.FirstOrDefault(m => m.OperationId == id);
     }
 
+    public IReadOnlyCollection<OutboxMessage> ClaimMessages(int batchSize, string workerId, TimeSpan leaseDuration)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var leasedUntil = now.Add(leaseDuration);
+        var pending = GetPendingMessages(batchSize);
+        foreach (var msg in pending)
+        {
+            msg.Status = OutboxOperationStatus.Processing;
+            msg.ClaimedBy = workerId;
+            msg.LeasedUntil = leasedUntil;
+        }
+        return pending;
+    }
+
     public IReadOnlyCollection<OutboxMessage> GetPendingMessages(int batchSize)
     {
         var now = DateTimeOffset.UtcNow;

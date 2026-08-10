@@ -15,6 +15,7 @@ public class OutboxDispatcherWorker : BackgroundService
 {
     private readonly ILogger<OutboxDispatcherWorker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly string _workerId;
 
     public OutboxDispatcherWorker(
         ILogger<OutboxDispatcherWorker> logger,
@@ -22,6 +23,7 @@ public class OutboxDispatcherWorker : BackgroundService
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _workerId = Guid.NewGuid().ToString("N");
     }
 
     private static readonly SemaphoreSlim _dispatchSemaphore = new(1, 1);
@@ -29,7 +31,7 @@ public class OutboxDispatcherWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("OutboxDispatcherWorker started.");
+        _logger.LogInformation("OutboxDispatcherWorker {WorkerId} started.", _workerId);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -49,88 +51,102 @@ public class OutboxDispatcherWorker : BackgroundService
             }
             catch (OperationCanceledException)
             {
-                // Normal shutdown
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing outbox messages.");
             }
 
-            // Polling interval
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
 
-        _logger.LogInformation("OutboxDispatcherWorker stopping.");
+        _logger.LogInformation("OutboxDispatcherWorker {WorkerId} stopping.", _workerId);
     }
 
     private async Task ProcessOutboxMessagesAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var outboxRepo = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
-        var pipeline = scope.ServiceProvider.GetRequiredService<IPublicationPipeline>();
-        var identityResolver = scope.ServiceProvider.GetRequiredService<IExternalPublicationIdentityResolver>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        System.Collections.Generic.IReadOnlyCollection<OutboxMessage> claimedMessages;
 
-        var pendingMessages = outboxRepo.GetPendingMessages(10);
-        if (!pendingMessages.Any())
-            return;
-
-        // Process sequentially to guarantee order
-        foreach (var message in pendingMessages)
+        using (var claimScope = _scopeFactory.CreateScope())
         {
-            try
-            {
-                var request = new PublicationRequest(
-                    message.PublicationId,
-                    message.Payload,
-                    message.OperationType,
-                    message.ExternalIdentity,
-                    message.ArtifactType
-                );
-
-                var accepted = await pipeline.DispatchAsync(request, cancellationToken);
-
-                message.Status = OutboxOperationStatus.Completed;
-                message.ProcessedAt = DateTimeOffset.UtcNow;
-
-                if (message.OperationType == TransportOperation.CREATE)
-                {
-                    identityResolver.RecordExternalIdentity(message.PublicationId, accepted.MessageId);
-                }
-                else if (message.OperationType == TransportOperation.DELETE)
-                {
-                    // Assuming identityResolver has a Remove method, or we implement it
-                    identityResolver.RemoveExternalIdentity(message.PublicationId);
-                }
-                // UPDATE -> leave identity unchanged
-
-                await unitOfWork.CommitAsync(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to dispatch OutboxMessage {OperationId}", message.OperationId);
+            var outboxRepo = claimScope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+            var claimUnitOfWork = claimScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            
+            claimedMessages = outboxRepo.ClaimMessages(10, _workerId, TimeSpan.FromMinutes(2));
+            if (!claimedMessages.Any())
+                return;
                 
-                message.AttemptCount++;
-                message.LastError = ex.Message;
-                
-                if (ex is InvalidOperationException && ex.Message.Contains("Telegram API returned ok=false"))
-                {
-                     // Permanent logical failure
-                     message.Status = OutboxOperationStatus.Failed;
-                }
-                else if (message.AttemptCount >= MaxAttempts)
-                {
-                     // Max retries reached
-                     message.Status = OutboxOperationStatus.Failed;
-                     _logger.LogError("Message {OperationId} reached MaxAttempts ({MaxAttempts}) and is marked as Failed.", message.OperationId, MaxAttempts);
-                }
-                else
-                {
-                     // Exponential backoff
-                     message.NextRetryAt = DateTimeOffset.UtcNow.AddSeconds(Math.Pow(2, message.AttemptCount));
-                }
+            await claimUnitOfWork.CommitAsync(cancellationToken);
+        }
 
-                await unitOfWork.CommitAsync(cancellationToken);
+        using (var dispatchScope = _scopeFactory.CreateScope())
+        {
+            var pipeline = dispatchScope.ServiceProvider.GetRequiredService<IPublicationPipeline>();
+            var identityResolver = dispatchScope.ServiceProvider.GetRequiredService<IExternalPublicationIdentityResolver>();
+            var outboxRepo = dispatchScope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+            var unitOfWork = dispatchScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            foreach (var claimed in claimedMessages)
+            {
+                // Reload message in current scope
+                var message = outboxRepo.GetById(claimed.OperationId);
+                if (message == null || message.ClaimedBy != _workerId) continue;
+
+                try
+                {
+                    var request = new PublicationRequest(
+                        message.PublicationId,
+                        message.Payload,
+                        message.OperationType,
+                        message.ExternalIdentity,
+                        message.ArtifactType
+                    );
+
+                    var accepted = await pipeline.DispatchAsync(request, cancellationToken);
+
+                    message.Status = OutboxOperationStatus.Completed;
+                    message.ProcessedAt = DateTimeOffset.UtcNow;
+
+                    if (message.OperationType == TransportOperation.CREATE)
+                    {
+                        identityResolver.RecordExternalIdentity(message.PublicationId, accepted.MessageId);
+                    }
+                    else if (message.OperationType == TransportOperation.DELETE)
+                    {
+                        identityResolver.RemoveExternalIdentity(message.PublicationId);
+                    }
+
+                    await unitOfWork.CommitAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to dispatch OutboxMessage {OperationId}", message.OperationId);
+                    
+                    message.AttemptCount++;
+                    message.LastError = ex.Message;
+                    
+                    if (ex is InvalidOperationException && ex.Message.Contains("Telegram API returned ok=false"))
+                    {
+                         message.Status = OutboxOperationStatus.Failed;
+                    }
+                    else if (message.AttemptCount >= MaxAttempts)
+                    {
+                         message.Status = OutboxOperationStatus.Failed;
+                         _logger.LogError("Message {OperationId} reached MaxAttempts ({MaxAttempts}) and is marked as Failed.", message.OperationId, MaxAttempts);
+                    }
+                    else
+                    {
+                         TimeSpan backoff = TimeSpan.FromSeconds(Math.Pow(2, message.AttemptCount));
+                         if (ex is RetryableTransportException rtex && rtex.RetryAfter.HasValue)
+                         {
+                             backoff = rtex.RetryAfter.Value;
+                         }
+                         message.NextRetryAt = DateTimeOffset.UtcNow.Add(backoff);
+                         message.Status = OutboxOperationStatus.Pending;
+                    }
+
+                    await unitOfWork.CommitAsync(cancellationToken);
+                }
             }
         }
     }

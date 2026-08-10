@@ -5,6 +5,7 @@ namespace SvitloSk.Publisher.Runtime.Persistence;
 public enum OutboxOperationStatus
 {
     Pending,
+    Processing,
     Completed,
     Failed
 }
@@ -30,4 +31,6 @@ public class OutboxMessage
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }
     public string? LastError { get; set; }
+    public DateTimeOffset? LeasedUntil { get; set; }
+    public string? ClaimedBy { get; set; }
 }

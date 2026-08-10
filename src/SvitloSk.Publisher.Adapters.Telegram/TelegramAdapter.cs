@@ -229,12 +229,15 @@ public class TelegramAdapter : IPublicationPort
         {
             _logger.LogError("Telegram API HTTP Error: {StatusCode} {Response}", response.StatusCode, responseString);
             
-            // Handle HTTP errors mapping
             if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500)
             {
-                 throw new HttpRequestException($"Telegram API returned retryable error {(int)response.StatusCode}: {responseString}");
+                 TimeSpan? retryAfter = null;
+                 if (response.Headers.RetryAfter?.Delta != null)
+                 {
+                     retryAfter = response.Headers.RetryAfter.Delta;
+                 }
+                 throw new RetryableTransportException($"Telegram API returned retryable error {(int)response.StatusCode}: {responseString}", retryAfter);
             }
-            // Will throw non-retryable inside the JSON parser if ok=false is in responseString
         }
 
         try
@@ -256,6 +259,16 @@ public class TelegramAdapter : IPublicationPort
                 if (artifact.Operation == TransportOperation.UPDATE && description != null && description.Contains("message is not modified"))
                 {
                      return new AcceptedPublication(artifact.ExternalIdentity ?? string.Empty, _options.TargetChatId);
+                }
+
+                // If error is a Telegram 429 within the payload (sometimes they wrap it)
+                if (description != null && description.Contains("Retry after"))
+                {
+                    if (root.TryGetProperty("parameters", out var parameters) && parameters.TryGetProperty("retry_after", out var retryAfterProp))
+                    {
+                        throw new RetryableTransportException($"Telegram API returned rate limit: {description}", TimeSpan.FromSeconds(retryAfterProp.GetInt32()));
+                    }
+                    throw new RetryableTransportException($"Telegram API returned rate limit: {description}");
                 }
 
                 throw new InvalidOperationException($"Telegram API returned ok=false: {description}");

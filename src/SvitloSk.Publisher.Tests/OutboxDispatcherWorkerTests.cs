@@ -58,7 +58,7 @@ public class OutboxDispatcherWorkerTests
     public async Task CreateText_Success_UpdatesStatusAndPersistsIdentity()
     {
         var msg = new OutboxMessage { OperationId = Guid.NewGuid(), PublicationId = Guid.NewGuid().ToString(), OperationType = TransportOperation.CREATE, ArtifactType = TransportArtifactType.TEXT_ONLY, Payload = "test" };
-        _outboxRepoMock.Setup(x => x.GetPendingMessages(It.IsAny<int>())).Returns(new List<OutboxMessage> { msg });
+        _outboxRepoMock.Setup(x => x.ClaimMessages(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns((int b, string w, TimeSpan t) => { msg.ClaimedBy = w; return new List<OutboxMessage> { msg }; }); _outboxRepoMock.Setup(x => x.GetById(msg.OperationId)).Returns(msg);
         
         _pipelineMock.Setup(x => x.DispatchAsync(It.IsAny<PublicationRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcceptedPublication("chat1:msg1", "chat1"));
@@ -67,14 +67,14 @@ public class OutboxDispatcherWorkerTests
 
         Assert.Equal(OutboxOperationStatus.Completed, msg.Status);
         _identityResolverMock.Verify(x => x.RecordExternalIdentity(msg.PublicationId, "chat1:msg1"), Times.Once);
-        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task UpdateText_Success_UpdatesStatusAndLeavesIdentity()
     {
         var msg = new OutboxMessage { OperationId = Guid.NewGuid(), PublicationId = Guid.NewGuid().ToString(), OperationType = TransportOperation.UPDATE, ArtifactType = TransportArtifactType.TEXT_ONLY, Payload = "test", ExternalIdentity = "chat1:msg1" };
-        _outboxRepoMock.Setup(x => x.GetPendingMessages(It.IsAny<int>())).Returns(new List<OutboxMessage> { msg });
+        _outboxRepoMock.Setup(x => x.ClaimMessages(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns((int b, string w, TimeSpan t) => { msg.ClaimedBy = w; return new List<OutboxMessage> { msg }; }); _outboxRepoMock.Setup(x => x.GetById(msg.OperationId)).Returns(msg);
         
         _pipelineMock.Setup(x => x.DispatchAsync(It.IsAny<PublicationRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcceptedPublication("chat1:msg1", "chat1"));
@@ -83,14 +83,14 @@ public class OutboxDispatcherWorkerTests
 
         Assert.Equal(OutboxOperationStatus.Completed, msg.Status);
         _identityResolverMock.Verify(x => x.RecordExternalIdentity(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
-        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task Delete_Success_UpdatesStatusAndRemovesIdentity()
     {
         var msg = new OutboxMessage { OperationId = Guid.NewGuid(), PublicationId = Guid.NewGuid().ToString(), OperationType = TransportOperation.DELETE, ExternalIdentity = "chat1:msg1" };
-        _outboxRepoMock.Setup(x => x.GetPendingMessages(It.IsAny<int>())).Returns(new List<OutboxMessage> { msg });
+        _outboxRepoMock.Setup(x => x.ClaimMessages(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns((int b, string w, TimeSpan t) => { msg.ClaimedBy = w; return new List<OutboxMessage> { msg }; }); _outboxRepoMock.Setup(x => x.GetById(msg.OperationId)).Returns(msg);
         
         _pipelineMock.Setup(x => x.DispatchAsync(It.IsAny<PublicationRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AcceptedPublication("chat1:msg1", "chat1"));
@@ -99,14 +99,14 @@ public class OutboxDispatcherWorkerTests
 
         Assert.Equal(OutboxOperationStatus.Completed, msg.Status);
         _identityResolverMock.Verify(x => x.RemoveExternalIdentity(msg.PublicationId), Times.Once);
-        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task RetryableError_IncrementsAttemptAndSetsNextRetry()
     {
         var msg = new OutboxMessage { OperationId = Guid.NewGuid(), PublicationId = Guid.NewGuid().ToString(), OperationType = TransportOperation.CREATE, ArtifactType = TransportArtifactType.TEXT_ONLY, Payload = "test" };
-        _outboxRepoMock.Setup(x => x.GetPendingMessages(It.IsAny<int>())).Returns(new List<OutboxMessage> { msg });
+        _outboxRepoMock.Setup(x => x.ClaimMessages(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns((int b, string w, TimeSpan t) => { msg.ClaimedBy = w; return new List<OutboxMessage> { msg }; }); _outboxRepoMock.Setup(x => x.GetById(msg.OperationId)).Returns(msg);
         
         _pipelineMock.Setup(x => x.DispatchAsync(It.IsAny<PublicationRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new System.Net.Http.HttpRequestException("Telegram API returned retryable error 429"));
@@ -116,14 +116,14 @@ public class OutboxDispatcherWorkerTests
         Assert.Equal(OutboxOperationStatus.Pending, msg.Status);
         Assert.Equal(1, msg.AttemptCount);
         Assert.NotNull(msg.NextRetryAt);
-        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task NonRetryableError_SetsStatusToFailed()
     {
         var msg = new OutboxMessage { OperationId = Guid.NewGuid(), PublicationId = Guid.NewGuid().ToString(), OperationType = TransportOperation.CREATE, ArtifactType = TransportArtifactType.TEXT_ONLY, Payload = "test" };
-        _outboxRepoMock.Setup(x => x.GetPendingMessages(It.IsAny<int>())).Returns(new List<OutboxMessage> { msg });
+        _outboxRepoMock.Setup(x => x.ClaimMessages(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns((int b, string w, TimeSpan t) => { msg.ClaimedBy = w; return new List<OutboxMessage> { msg }; }); _outboxRepoMock.Setup(x => x.GetById(msg.OperationId)).Returns(msg);
         
         _pipelineMock.Setup(x => x.DispatchAsync(It.IsAny<PublicationRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Telegram API returned ok=false: invalid message"));
@@ -132,6 +132,6 @@ public class OutboxDispatcherWorkerTests
 
         Assert.Equal(OutboxOperationStatus.Failed, msg.Status);
         Assert.Equal(1, msg.AttemptCount);
-        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(x => x.CommitAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 }
