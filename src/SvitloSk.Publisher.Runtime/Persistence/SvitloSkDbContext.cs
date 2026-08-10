@@ -15,6 +15,15 @@ public class SvitloSkDbContext : DbContext
     public DbSet<ExternalPublicationIdentity> ExternalIdentities { get; set; } = null!;
     public DbSet<OutboxMessage> OutboxMessages { get; set; } = null!;
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseNpgsql("Host=localhost;Database=svitlosk;Username=postgres;Password=postgres")
+                          .EnableSensitiveDataLogging();
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -23,6 +32,7 @@ public class SvitloSkDbContext : DbContext
         modelBuilder.Entity<Edition>(b =>
         {
             b.HasKey(e => e.Id);
+            b.Property(e => e.Id).ValueGeneratedNever();
             b.Property(e => e.TargetDate).IsRequired();
             b.Property(e => e.State).IsRequired();
             
@@ -39,11 +49,13 @@ public class SvitloSkDbContext : DbContext
         modelBuilder.Entity<PublicationPackage>(b =>
         {
             b.HasKey(p => p.Id);
+            b.Property(p => p.Id).ValueGeneratedNever();
             b.Property(p => p.Name).IsRequired();
             
             b.HasMany(p => p.Publications)
              .WithOne()
              .HasForeignKey("PublicationPackageId")
+             .IsRequired()
              .OnDelete(DeleteBehavior.Cascade);
              
             b.Metadata.FindNavigation(nameof(PublicationPackage.Publications))!
@@ -54,6 +66,7 @@ public class SvitloSkDbContext : DbContext
         modelBuilder.Entity<Publication>(b =>
         {
             b.HasKey(p => p.Id);
+            b.Property(p => p.Id).ValueGeneratedNever();
             b.Property(p => p.TerritoryId).IsRequired();
             b.Property(p => p.Classification).IsRequired();
             b.Property(p => p.Type).IsRequired();
