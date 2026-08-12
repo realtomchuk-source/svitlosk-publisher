@@ -1,0 +1,19 @@
+## User-specific files
+.agents/
+*.md
+
+## Build outputs
+bin/
+obj/
+
+## IDE and OS files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+Thumbs.db
+ehthumbs.db
+Desktop.ini
