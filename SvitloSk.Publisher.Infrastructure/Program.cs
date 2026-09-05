@@ -492,8 +492,50 @@ public static class Program
                 packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrowEmpty, null, false));
             }
 
-            // Automatic Structured Graphic Schedule Ingestion
-            GraphicInputPackage graphicPackage = parser.ParseGraphicSchedule(todayFeedContent, editionDate, "Старокостянтинівська МТГ");
+            // Ingestion of 12-subqueue graphic schedule from SvitloSk parser repository or local fixture
+            GraphicInputPackage? graphicPackage = null;
+            string? graphicJsonContent = null;
+
+            if (!isDryRun)
+            {
+                try
+                {
+                    string onlineGraphicUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
+                    Console.WriteLine($"[INFO] Fetching graphic schedule JSON from {onlineGraphicUrl}...");
+                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicUrl, cts.Token).ConfigureAwait(false);
+                    Console.WriteLine("[INFO] Successfully fetched graphic schedule JSON online.");
+                }
+                catch (Exception gEx)
+                {
+                    Console.WriteLine($"[WARN] Could not fetch online graphic JSON for {editionDate} ({gEx.Message}). Checking fallback fixture.");
+                    string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
+                    if (File.Exists(sampleFixture))
+                    {
+                        graphicJsonContent = File.ReadAllText(sampleFixture);
+                    }
+                }
+            }
+            else
+            {
+                string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
+                if (File.Exists(sampleFixture))
+                {
+                    graphicJsonContent = File.ReadAllText(sampleFixture);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(graphicJsonContent))
+            {
+                try
+                {
+                    graphicPackage = parser.ParseLegacyGraphicJson(graphicJsonContent, "Старокостянтинівська МТГ");
+                    Console.WriteLine("[INFO] Successfully parsed 12-subqueue graphic package.");
+                }
+                catch (Exception parseEx)
+                {
+                    Console.WriteLine($"[WARN] Failed to parse graphic schedule JSON: {parseEx.Message}");
+                }
+            }
 
             var input = new EditorialInput(
                 EditionDate: editionDate,

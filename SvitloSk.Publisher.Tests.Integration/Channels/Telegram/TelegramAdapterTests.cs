@@ -708,6 +708,58 @@ public class TelegramGraphicPublisherDispatcherTests
         Assert.True(resDelete.IsSuccess);
         Assert.Equal(3, httpCalls);
     }
+
+    [Fact]
+    public void TC_Export_Real_Graphic_Schedule_Preview_Image()
+    {
+        string sampleJson = @"{
+  ""date"": ""2026-08-04"",
+  ""updated_at"": ""2026-08-04T15:09:28.180570+03:00"",
+  ""mode"": ""schedule"",
+  ""queues"": {
+    ""1.1"": ""111111111111111111111111"",
+    ""1.2"": ""111100011111111111111111"",
+    ""2.1"": ""111110000111111111111111"",
+    ""2.2"": ""111111111111110000000111"",
+    ""3.1"": ""111110011111111111111111"",
+    ""3.2"": ""000111111111111111111111"",
+    ""4.1"": ""111111111111111111100000"",
+    ""4.2"": ""111100000000001111111111"",
+    ""5.1"": ""001111110000111111111111"",
+    ""5.2"": ""111110000111111111100000"",
+    ""6.1"": ""110000111111111111111111"",
+    ""6.2"": ""111111111100000000000000""
+  },
+  ""meta"": {
+    ""generated_at"": ""04.08.2026 15:09"",
+    ""state"": ""active_schedule"",
+    ""target_date"": ""04.08""
+  }
+}";
+
+        var parser = new SvitloSk.Publisher.Core.Engine.OutageFeedParser();
+        var pkg = parser.ParseLegacyGraphicJson(sampleJson, "Старокостянтинівська МТГ");
+
+        var assembly = new SvitloSk.Publisher.Core.Engine.GraphicAssembly();
+        byte[] svgBytes = assembly.AssembleSvg(pkg);
+
+        var rasterizer = new SvgSkiaRasterizer();
+        byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
+
+        string localOut = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "local", "output");
+        System.IO.Directory.CreateDirectory(localOut);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(localOut, "schedule_preview.svg"), svgBytes);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(localOut, "schedule_preview.png"), pngBytes);
+
+        string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\8459d6eb-d4ef-436e-a6fb-5801df454ea5";
+        if (System.IO.Directory.Exists(artifactDir))
+        {
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.svg"), svgBytes);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.png"), pngBytes);
+        }
+
+        Assert.True(pngBytes.Length > 0);
+    }
 }
 
 

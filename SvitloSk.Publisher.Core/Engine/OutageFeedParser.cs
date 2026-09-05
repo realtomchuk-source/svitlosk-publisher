@@ -290,15 +290,16 @@ public class OutageFeedParser : IOutageFeedParser
                 string mask = prop.Value.GetString() ?? string.Empty;
                 if (mask.Length == 24)
                 {
-                    // Convert 24-character bitmask (0 = outage / Restricted, 1 = powered)
+                    // Convert 24-character bitmask (0 = outage / Restricted, 1 = powered, 2 = possible / Possible)
                     int hour = 0;
                     while (hour < 24)
                     {
                         char state = mask[hour];
-                        if (state == '0')
+                        if (state == '0' || state == '2')
                         {
                             int startHour = hour;
-                            while (hour < 24 && mask[hour] == '0')
+                            char currentStatusChar = state;
+                            while (hour < 24 && mask[hour] == currentStatusChar)
                             {
                                 hour++;
                             }
@@ -306,8 +307,9 @@ public class OutageFeedParser : IOutageFeedParser
 
                             string startStr = $"{startHour:D2}:00";
                             string endStr = endHour == 24 ? "24:00" : $"{endHour:D2}:00";
+                            string status = currentStatusChar == '2' ? "Possible" : "Restricted";
 
-                            subqueueMap[canonicalSqId].Add(new GraphicInterval(startStr, endStr, "Restricted"));
+                            subqueueMap[canonicalSqId].Add(new GraphicInterval(startStr, endStr, status));
                         }
                         else
                         {

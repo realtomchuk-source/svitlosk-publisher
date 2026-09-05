@@ -395,15 +395,15 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(payload.ChatNameOrId), "chat_id");
         
         byte[] svgBytes = payload.SvgBytes ?? Array.Empty<byte>();
-        // Rasterize SVG to PNG bytes
-        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1000, 650);
+        // Rasterize SVG to PNG bytes (1200 x 780 canvas)
+        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
 
         var pngContent = new ByteArrayContent(pngBytes);
         pngContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
         content.Add(pngContent, "photo", "graphic_schedule.png");
         content.Add(new StringContent("HTML"), "parse_mode");
 
-        string caption = $"⚡ <b>Графік знеструмлень ({payload.TerritoryId})</b>\n#графік #{payload.TerritoryId.Replace(" ", "_")}";
+        string caption = $"<b>ГРАФІК ЗНЕСТРУМЛЕНЬ</b>\n{payload.TerritoryId} (12 підчерг)\n#графік #старокостянтинів #svitlosk";
         content.Add(new StringContent(caption), "caption");
 
         return await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
@@ -418,7 +418,7 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(payload.ChatNameOrId), "chat_id");
         content.Add(new StringContent(payload.TelegramMessageId!.Value.ToString()), "message_id");
 
-        string caption = $"⚡ <b>Графік знеструмлень ({payload.TerritoryId})</b>\n#графік #{payload.TerritoryId.Replace(" ", "_")}";
+        string caption = $"<b>ГРАФІК ЗНЕСТРУМЛЕНЬ</b>\n{payload.TerritoryId} (12 підчерг)\n#графік #старокостянтинів #svitlosk";
 
         var mediaObj = new
         {
@@ -431,8 +431,8 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(mediaJson), "media");
 
         byte[] svgBytes = payload.SvgBytes ?? Array.Empty<byte>();
-        // Rasterize SVG to PNG bytes
-        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1000, 650);
+        // Rasterize SVG to PNG bytes (1200 x 780 canvas)
+        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
 
         var pngContent = new ByteArrayContent(pngBytes);
         pngContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");

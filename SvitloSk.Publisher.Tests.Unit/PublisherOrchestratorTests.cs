@@ -740,10 +740,10 @@ public class GraphicAssemblyTests
         byte[] svgBytes = assembly.AssembleSvg(package);
         string svg = System.Text.Encoding.UTF8.GetString(svgBytes);
 
-        Assert.Contains("Черга 1", svg);
-        Assert.Contains("Черга 6", svg);
-        Assert.Contains("Черга 1.1", svg);
-        Assert.Contains("Черга 6.2", svg);
+        Assert.Contains("id=\"subqueue_1.1\"", svg);
+        Assert.Contains("id=\"subqueue_1.2\"", svg);
+        Assert.Contains("id=\"subqueue_6.1\"", svg);
+        Assert.Contains("id=\"subqueue_6.2\"", svg);
     }
 
     [Fact]
@@ -765,8 +765,8 @@ public class GraphicAssemblyTests
         byte[] svgBytes = assembly.AssembleSvg(package);
         string svg = System.Text.Encoding.UTF8.GetString(svgBytes);
 
-        // 06:00 is 25% (0.25 * 820 = 205 + 140 = 345), duration 6h is 25% (205)
-        Assert.Contains("width=\"205.0\"", svg);
+        // 06:00 is 25% (0.25 * 1040 = 260.0), duration 6h is 25% (260.0)
+        Assert.Contains("width=\"260.0\"", svg);
         Assert.Contains("06:00–12:00 (Restricted)", svg);
     }
 
@@ -1645,6 +1645,62 @@ public class GraphicOrchestrationTests : IDisposable
         Assert.Contains("Аварійні знеструмлення: 1 округ (Березненський)", header);
         Assert.DoesNotContain("⚡", header);
         Assert.DoesNotContain("🚨", header);
+    }
+
+    [Fact]
+    public void TC_GraphicAssembly_Renders12Subqueues_WithBulbLogoAndPwaQrBlock()
+    {
+        string sampleJson = @"{
+  ""date"": ""2026-08-04"",
+  ""updated_at"": ""2026-08-04T15:09:28.180570+03:00"",
+  ""mode"": ""schedule"",
+  ""queues"": {
+    ""1.1"": ""111111111111111111111111"",
+    ""1.2"": ""111100011111111111111111"",
+    ""2.1"": ""111110000111111111111111"",
+    ""2.2"": ""111111111111110000000111"",
+    ""3.1"": ""111110011111111111111111"",
+    ""3.2"": ""000111111111111111111111"",
+    ""4.1"": ""111111111111111111100000"",
+    ""4.2"": ""111100000000001111111111"",
+    ""5.1"": ""001111110000111111111111"",
+    ""5.2"": ""111110000111111111100000"",
+    ""6.1"": ""110000111111111111111111"",
+    ""6.2"": ""111111111100000000000000""
+  },
+  ""meta"": {
+    ""generated_at"": ""04.08.2026 15:09"",
+    ""state"": ""active_schedule"",
+    ""target_date"": ""04.08""
+  }
+}";
+
+        var parser = new OutageFeedParser();
+        var pkg = parser.ParseLegacyGraphicJson(sampleJson, "Старокостянтинівська МТГ");
+
+        var assembly = new GraphicAssembly();
+        byte[] svgBytes = assembly.AssembleSvg(pkg);
+
+        Assert.NotNull(svgBytes);
+        Assert.True(svgBytes.Length > 0);
+
+        string svgText = System.Text.Encoding.UTF8.GetString(svgBytes);
+
+        // Verify SVG elements
+        Assert.Contains("viewBox=\"0 0 1200 780\"", svgText);
+        Assert.Contains("SVITLOSK | ГРАФІК ЗНЕСТРУМЛЕНЬ", svgText);
+        Assert.Contains("Паблішер SvitloSk", svgText);
+        Assert.Contains("Створено: 2026-08-04T15:09:28.180570+03:00", svgText);
+        Assert.Contains("id=\"subqueue_1.1\"", svgText);
+        Assert.Contains("id=\"subqueue_1.2\"", svgText);
+        Assert.Contains("id=\"subqueue_6.2\"", svgText);
+        Assert.Contains("id=\"pwa_qr_code\"", svgText);
+        Assert.Contains("Додаток SvitloSk PWA", svgText);
+        Assert.Contains("Відскануйте QR-код для", svgText);
+
+        // Verify Zero Emojis inside SVG
+        Assert.DoesNotContain("⚡", svgText);
+        Assert.DoesNotContain("🚨", svgText);
     }
 }
 
