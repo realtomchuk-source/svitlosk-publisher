@@ -30,5 +30,6 @@ local/secrets/*
 deploy/*.env
 deploy/secrets.ps1
 local/logs/
+local/output/
 *.log
 *.tmp

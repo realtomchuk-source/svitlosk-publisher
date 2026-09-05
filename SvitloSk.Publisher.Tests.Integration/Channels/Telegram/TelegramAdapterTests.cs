@@ -744,21 +744,46 @@ public class TelegramGraphicPublisherDispatcherTests
         byte[] svgBytes = assembly.AssembleSvg(pkg);
 
         var rasterizer = new SvgSkiaRasterizer();
-        byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
+        byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
 
-        string localOut = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "local", "output");
+        // Find solution/project root
+        string current = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(current) && !System.IO.File.Exists(System.IO.Path.Combine(current, "SvitloSk.Publisher.sln")))
+        {
+            current = System.IO.Directory.GetParent(current)?.FullName;
+        }
+        string rootDir = current ?? System.IO.Directory.GetCurrentDirectory();
+        string localOut = System.IO.Path.Combine(rootDir, "local", "output");
         System.IO.Directory.CreateDirectory(localOut);
-        System.IO.File.WriteAllBytes(System.IO.Path.Combine(localOut, "schedule_preview.svg"), svgBytes);
-        System.IO.File.WriteAllBytes(System.IO.Path.Combine(localOut, "schedule_preview.png"), pngBytes);
+
+        SafeWriteBytes(System.IO.Path.Combine(localOut, "schedule_preview.svg"), svgBytes);
+        SafeWriteBytes(System.IO.Path.Combine(localOut, "schedule_preview.png"), pngBytes);
 
         string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\8459d6eb-d4ef-436e-a6fb-5801df454ea5";
         if (System.IO.Directory.Exists(artifactDir))
         {
-            System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.svg"), svgBytes);
-            System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.png"), pngBytes);
+            SafeWriteBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.svg"), svgBytes);
+            SafeWriteBytes(System.IO.Path.Combine(artifactDir, "schedule_preview.png"), pngBytes);
         }
 
         Assert.True(pngBytes.Length > 0);
+    }
+
+    private static void SafeWriteBytes(string path, byte[] bytes)
+    {
+        try
+        {
+            using var fs = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
+            fs.Write(bytes, 0, bytes.Length);
+        }
+        catch
+        {
+            // fallback if locked by visual viewer
+            string altPath = path + ".tmp";
+            using var fs = new System.IO.FileStream(altPath, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
+            fs.Write(bytes, 0, bytes.Length);
+            try { System.IO.File.Move(altPath, path, true); } catch { }
+        }
     }
 }
 

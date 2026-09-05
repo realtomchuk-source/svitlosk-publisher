@@ -395,8 +395,8 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(payload.ChatNameOrId), "chat_id");
         
         byte[] svgBytes = payload.SvgBytes ?? Array.Empty<byte>();
-        // Rasterize SVG to PNG bytes (1200 x 780 canvas)
-        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
+        // Rasterize SVG to PNG bytes (1080 x 1080 square canvas)
+        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
 
         var pngContent = new ByteArrayContent(pngBytes);
         pngContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
@@ -431,8 +431,8 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(mediaJson), "media");
 
         byte[] svgBytes = payload.SvgBytes ?? Array.Empty<byte>();
-        // Rasterize SVG to PNG bytes (1200 x 780 canvas)
-        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1200, 780);
+        // Rasterize SVG to PNG bytes (1080 x 1080 square canvas)
+        byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
 
         var pngContent = new ByteArrayContent(pngBytes);
         pngContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
