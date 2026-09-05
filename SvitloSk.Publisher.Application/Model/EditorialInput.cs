@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SvitloSk.Publisher.Core.Engine;
 
 namespace SvitloSk.Publisher.Application.Model;
 
@@ -13,5 +14,7 @@ public record InputTerritoryPackage(
 public record EditorialInput(
     string EditionDate,
     IReadOnlyList<InputTerritoryPackage> Packages,
-    bool TomorrowForecastAvailable = false
+    bool TomorrowForecastAvailable = false,
+    GraphicInputPackage? GraphicPackage = null
 );
+

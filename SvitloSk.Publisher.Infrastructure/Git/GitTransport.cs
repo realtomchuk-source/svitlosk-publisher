@@ -24,6 +24,14 @@ public class GitTransport : IGitTransport
         string? workingDir = Path.GetDirectoryName(Path.GetFullPath(filePath));
         string relativePath = Path.GetFileName(filePath);
 
+        // Check if file is ignored by git
+        var checkIgnoreResult = await RunGitCommandAsync(workingDir, cancellationToken, "check-ignore", relativePath).ConfigureAwait(false);
+        if (checkIgnoreResult.ExitCode == 0)
+        {
+            Console.WriteLine($"[INFO] Git: '{relativePath}' is ignored. Bypassing Git commit/push cycle.");
+            return;
+        }
+
         // 1. Stage file
         await RunGitCommandAsync(workingDir, cancellationToken, "add", "--", relativePath).ConfigureAwait(false);
 
@@ -131,9 +139,14 @@ public class GitTransport : IGitTransport
         {
             bool isNoChangeCommit = arguments.Length > 0 && arguments[0] == "commit" && 
                                     (stdout.Contains("nothing to commit") || stderr.Contains("nothing to commit"));
+            
+            bool isIgnoredFileAdd = arguments.Length > 0 && arguments[0] == "add" &&
+                                    (stdout.Contains("ignored by") || stderr.Contains("ignored by"));
+
+            bool isCheckIgnore = arguments.Length > 0 && arguments[0] == "check-ignore";
 
             // Git push fails without a remote configured. We map this to a controlled operation exception rather than letting it exit silently.
-            if (!isNoChangeCommit)
+            if (!isNoChangeCommit && !isIgnoredFileAdd && !isCheckIgnore)
             {
                 throw new InvalidOperationException($"Git command '{string.Join(" ", arguments)}' failed with exit code {exitCode}. Stderr: {stderr}");
             }
@@ -144,3 +157,19 @@ public class GitTransport : IGitTransport
 
     private record GitCommandResult(int ExitCode, string StdOut, string StdErr);
 }
+
+public class DryRunGitTransport : IGitTransport
+{
+    public Task CommitAndPushAsync(string filePath, string commitMessage, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[DryRun-Git] CommitAndPush for '{filePath}': {commitMessage}");
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> RestoreFromHistoryAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[DryRun-Git] RestoreFromHistory for '{filePath}'");
+        return Task.FromResult<string?>(null);
+    }
+}
+

@@ -25,7 +25,7 @@ public class ContentHashCalculator
         {
             lines[i] = lines[i].TrimEnd();
         }
-        normalized = string.Join("\n", lines);
+        normalized = string.Join("\n", lines).Trim();
 
         // 4. Convert text to UTF-8 Bytes
         byte[] textBytes = Encoding.UTF8.GetBytes(normalized);
@@ -49,4 +49,38 @@ public class ContentHashCalculator
         // 7. Output lowercase hexadecimal string
         return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
+
+    public string ComputeGraphicHash(SvitloSk.Publisher.Core.Engine.GraphicInputPackage graphicPackage)
+    {
+        if (graphicPackage == null)
+            throw new ArgumentNullException(nameof(graphicPackage));
+
+        // Canonical semantic representation:
+        // Excludes: package_id, generation_timestamp, source_identifier, file paths, etc.
+        // Includes: TerritorialScope, TargetDate, Queues (QueueId, SubqueueId, Intervals [StartTime, EndTime, Status])
+        var sb = new StringBuilder();
+        sb.Append($"SCOPE:{graphicPackage.TerritorialScope.Trim()};DATE:{graphicPackage.Metadata.TargetDate.Trim()};");
+
+        foreach (var q in graphicPackage.Queues.OrderBy(q => q.QueueId, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.Append($"Q:{q.QueueId.Trim()};");
+            foreach (var sq in q.Subqueues.OrderBy(sq => sq.SubqueueId, StringComparer.OrdinalIgnoreCase))
+            {
+                sb.Append($"SQ:{sq.SubqueueId.Trim()}[");
+                if (sq.Intervals != null)
+                {
+                    foreach (var interval in sq.Intervals.OrderBy(i => i.StartTime, StringComparer.OrdinalIgnoreCase))
+                    {
+                        sb.Append($"{interval.StartTime.Trim()}-{interval.EndTime.Trim()}:{interval.Status.Trim()};");
+                    }
+                }
+                sb.Append("];");
+            }
+        }
+
+        byte[] canonicalBytes = Encoding.UTF8.GetBytes(sb.ToString());
+        byte[] hashBytes = SHA256.HashData(canonicalBytes);
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+    }
 }
+

@@ -7,7 +7,8 @@ public record EditorialDecision(
     PublicationClassification Classification,
     Guid? PublicationId = null,
     string? TerritoryIdentifier = null,
-    string? TargetHash = null
+    string? TargetHash = null,
+    int? TelegramMessageId = null
 )
 {
     public DecisionResult DecisionResult { get; init; } = DecisionResult;
@@ -15,4 +16,5 @@ public record EditorialDecision(
     public Guid? PublicationId { get; init; } = PublicationId;
     public string? TerritoryIdentifier { get; init; } = TerritoryIdentifier;
     public string? TargetHash { get; init; } = TargetHash;
+    public int? TelegramMessageId { get; init; } = TelegramMessageId;
 }

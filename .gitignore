@@ -17,3 +17,18 @@ obj/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+## Sandbox operational data
+local/registry/*.json
+local/fixtures/
+*.json
+!local/config/*.json
+local/secrets/*
+!local/secrets/README.md
+
+## Deploy secrets and script outputs
+deploy/*.env
+deploy/secrets.ps1
+local/logs/
+*.log
+*.tmp

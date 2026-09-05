@@ -8,7 +8,8 @@ public record RegistryPublicationRecord(
     string TerritoryId,
     int? TelegramMessageId,
     string ContentHash,
-    string TransmissionState
+    string TransmissionState,
+    string PublicationType = "Text"
 );
 
 public record RegistryModel(
@@ -17,3 +18,4 @@ public record RegistryModel(
     string Status,
     IReadOnlyList<RegistryPublicationRecord> Publications
 );
+

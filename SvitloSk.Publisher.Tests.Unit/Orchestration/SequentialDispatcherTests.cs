@@ -89,7 +89,7 @@ public class SequentialDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new SequentialDispatcher(adapter, delay);
 
-        var decisions = new[] { new EditorialDecision(DecisionResult.Update, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "hash1") };
+        var decisions = new[] { new EditorialDecision(DecisionResult.Update, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "hash1", 9999) };
         var result = await dispatcher.DispatchAsync("-100123", decisions);
 
         Assert.True(result.IsSuccess);
@@ -104,7 +104,7 @@ public class SequentialDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new SequentialDispatcher(adapter, delay);
 
-        var decisions = new[] { new EditorialDecision(DecisionResult.Delete, PublicationClassification.Ephemeral, Guid.NewGuid(), "staro") };
+        var decisions = new[] { new EditorialDecision(DecisionResult.Delete, PublicationClassification.Ephemeral, Guid.NewGuid(), "staro", null, 9999) };
         var result = await dispatcher.DispatchAsync("-100123", decisions);
 
         Assert.True(result.IsSuccess);
@@ -141,8 +141,8 @@ public class SequentialDispatcherTests
         var decisions = new[]
         {
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "h1"),
-            new EditorialDecision(DecisionResult.Update, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "h2"),
-            new EditorialDecision(DecisionResult.Delete, PublicationClassification.Ephemeral, Guid.NewGuid(), "staro")
+            new EditorialDecision(DecisionResult.Update, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "h2", 9999),
+            new EditorialDecision(DecisionResult.Delete, PublicationClassification.Ephemeral, Guid.NewGuid(), "staro", null, 9999)
         };
 
         var result = await dispatcher.DispatchAsync("-100123", decisions);

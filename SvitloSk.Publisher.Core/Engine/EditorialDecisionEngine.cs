@@ -21,7 +21,9 @@ public class EditorialDecisionEngine
     // D-02: Publication Validity
     public EditorialDecision EvaluatePublicationValidity(string territoryId, string incomingHash, Publication? existingPublication)
     {
-        if (existingPublication == null)
+        if (existingPublication == null || 
+            existingPublication.State == PublicationState.Removed ||
+            !existingPublication.TerritoryIdentifier.Equals(territoryId, StringComparison.OrdinalIgnoreCase))
         {
             return new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Persistent, TerritoryIdentifier: territoryId, TargetHash: incomingHash);
         }
@@ -100,13 +102,15 @@ public class EditorialDecisionEngine
     // D-07: Graphic Publication
     public EditorialDecision EvaluateGraphicGeneration(string incomingScheduleHash, Publication? existingGraphicPublication)
     {
-        if (existingGraphicPublication == null || existingGraphicPublication.ScheduleHash != incomingScheduleHash)
+        string? existingHash = existingGraphicPublication?.ContentHash ?? existingGraphicPublication?.ScheduleHash;
+        if (existingGraphicPublication == null || existingHash != incomingScheduleHash)
         {
             return new EditorialDecision(DecisionResult.Generate, PublicationClassification.Persistent, TargetHash: incomingScheduleHash);
         }
 
         return new EditorialDecision(DecisionResult.NoAction, PublicationClassification.Persistent);
     }
+
 
     // D-08: Comment Moderation
     public EditorialDecision EvaluateCommentModeration(bool isViolatingPolicy, Guid publicationId)

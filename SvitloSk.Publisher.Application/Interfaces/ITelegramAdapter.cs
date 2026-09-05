@@ -17,3 +17,18 @@ public interface ITelegramAdapter
     Task<TelegramDispatchResult> UpdateAsync(string chatNameOrId, int messageId, string text, byte[]? graphicBytes = null, CancellationToken cancellationToken = default);
     Task<TelegramDispatchResult> DeleteAsync(string chatNameOrId, int messageId, CancellationToken cancellationToken = default);
 }
+
+public record GraphicOperationPayload(
+    string ChatNameOrId,
+    string OperationType, // "CREATE", "UPDATE", "DELETE"
+    string TerritoryId,
+    string ContentHash,
+    byte[]? SvgBytes,
+    int? TelegramMessageId
+);
+
+public interface IGraphicPublisherDispatcher
+{
+    Task<TelegramDispatchResult> DispatchGraphicAsync(GraphicOperationPayload payload, CancellationToken cancellationToken = default);
+}
+

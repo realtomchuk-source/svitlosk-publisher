@@ -95,7 +95,7 @@ public class SequentialDispatcher
                 decision.DecisionResult.ToString(),
                 adapterResult.IsSuccess,
                 adapterResult.MessageId,
-                adapterResult.ErrorDescription
+                adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription
             ));
 
             if (adapterResult.IsSuccess)
@@ -139,25 +139,22 @@ public class SequentialDispatcher
             switch (decision.DecisionResult)
             {
                 case DecisionResult.Create:
-                    // Create maps to SendAsync. Graphic bytes are simulated/provided via compilation, 
-                    // which is resolved by application orchestrator. For dispatcher ports we assume text payload.
-                    // (TargetHash or layout is passed to adapter by orchestrator, for E-01 we send text target hash as mockup or decision text).
+                    // Create maps to SendAsync. 
                     result = await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", null, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case DecisionResult.Update:
                     if (decision.PublicationId == null)
                         throw new InvalidOperationException("Cannot update publication without Guid/ID identifier.");
-                    // For update, the message ID must be resolved by orchestrator from registry.
-                    // For Dispatcher unit boundaries, we simulate message ID passing. We assume mock ID 9999 or mapping from decision context.
-                    // We extract numerical value if possible or use a fallback. 
-                    int msgId = 9999; 
-                    result = await _telegramAdapter.UpdateAsync(chatNameOrId, msgId, decision.TargetHash ?? "Update content", null, cancellationToken).ConfigureAwait(false);
+                    if (decision.TelegramMessageId == null)
+                        throw new InvalidOperationException("Cannot update publication without its Telegram message ID.");
+                    result = await _telegramAdapter.UpdateAsync(chatNameOrId, decision.TelegramMessageId.Value, decision.TargetHash ?? "Update content", null, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case DecisionResult.Delete:
-                    int delMsgId = 9999;
-                    result = await _telegramAdapter.DeleteAsync(chatNameOrId, delMsgId, cancellationToken).ConfigureAwait(false);
+                    if (decision.TelegramMessageId == null)
+                        throw new InvalidOperationException("Cannot delete publication without its Telegram message ID.");
+                    result = await _telegramAdapter.DeleteAsync(chatNameOrId, decision.TelegramMessageId.Value, cancellationToken).ConfigureAwait(false);
                     break;
 
                 default:
