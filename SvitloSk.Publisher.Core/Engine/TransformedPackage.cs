@@ -114,40 +114,6 @@ public class GraphicAssembly : IGraphicAssembly
         int canvasWidth = 1080;
         int canvasHeight = 1080;
 
-        int timelineLeft = 100;
-        int timelineWidth = 940;
-        int timelineTop = 135;
-        int timelineHeaderHeight = 35;
-        
-        int gridTop = timelineTop + timelineHeaderHeight;
-        int trackHeight = 36;
-        int intraQueueGap = 8;  // Gap between 1.1 and 1.2
-        int interQueueGap = 24; // Gap between 1.2 and 2.1 (3x larger)
-
-        // Flatten all 12 subqueues
-        var allSubqueues = new List<SubqueueSchedule>();
-        foreach (var q in inputPackage.Queues)
-        {
-            allSubqueues.AddRange(q.Subqueues);
-        }
-
-        // Calculate Y positions for all 12 subqueues
-        var subqueueYPositions = new int[allSubqueues.Count];
-        int currentY = gridTop;
-        for (int i = 0; i < allSubqueues.Count; i++)
-        {
-            subqueueYPositions[i] = currentY;
-            if (i % 2 == 0)
-            {
-                currentY += trackHeight + intraQueueGap;
-            }
-            else
-            {
-                currentY += trackHeight + interQueueGap;
-            }
-        }
-        int gridBottom = (subqueueYPositions.Length > 0 ? subqueueYPositions[^1] : gridTop) + trackHeight;
-
         // Parse target date and day of week
         string formattedDate = inputPackage.Metadata.TargetDate;
         string dayOfWeekStr = "НЕДІЛЯ";
@@ -169,70 +135,148 @@ public class GraphicAssembly : IGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{BackgroundColor}\"/>");
 
-        // 1. Header Region: Left Logo & SvitloSk Text | Right Day/Date & Scope Subtitle
+        // 1. Header Region: Left Logo & Large SvitloSk Text | Right Single-line Header with Orange Day
         sb.AppendLine("  <!-- HeaderRegion -->");
         sb.AppendLine("  <g id=\"headerRegion\">");
         
         // App Master Icon (Dark Rounded Card with Orange Bulb & Plug)
-        sb.AppendLine("    <g transform=\"translate(40, 30)\">");
+        sb.AppendLine("    <g transform=\"translate(40, 26)\">");
         sb.AppendLine($"      <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"{OutageColor}\"/>");
         // Orange Bulb & Base
         sb.AppendLine($"      <g transform=\"translate(10, 9) scale(0.086)\">");
         sb.AppendLine($"        <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"{PoweredColor}\"/>");
         sb.AppendLine($"        <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{PoweredColor}\"/>");
         sb.AppendLine("      </g>");
-        // Two-color text logo to the right of the icon, vertically centered
-        sb.AppendLine($"      <text x=\"80\" y=\"46\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"bold\"><tspan fill=\"{PoweredColor}\">Svitlo</tspan><tspan fill=\"{OutageColor}\">Sk</tspan></text>");
+        // Two-color text logo to the right of the icon, exactly matching button height (52px bold/black)
+        sb.AppendLine($"      <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{PoweredColor}\">Svitlo</tspan><tspan fill=\"{OutageColor}\">Sk</tspan></text>");
         sb.AppendLine("    </g>");
 
-        // Right Top Header: Day of Week & Date on line 1, Scope on line 2
-        sb.AppendLine($"    <text x=\"1040\" y=\"60\" font-family=\"Arial, sans-serif\" font-size=\"26\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PrimaryTextColor}\">{dayOfWeekStr}, {EscapeXml(formattedDate)}</text>");
-        sb.AppendLine($"    <text x=\"1040\" y=\"86\" font-family=\"Arial, sans-serif\" font-size=\"16\" font-weight=\"500\" text-anchor=\"end\" fill=\"{MutedTextColor}\">Графік знеструмлень • Старокостянтинівська громада</text>");
+        // Right Top Header: Single line uppercase header with orange day of week
+        // 28px bold text metrics:
+        // "ГРАФІК ЗНЕСТРУМЛЕНЬ" width ~342px -> start at 386
+        // Space 12px
+        // "ВІВТОРОК" width ~144px -> start at 740
+        // Space 12px
+        // "04.08.2026" width ~144px -> start at 896, ends exactly at 1040
+        double titleStartX = 386;
+        double dayStartX = 740;
+        double dateStartX = 896;
+
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{titleStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PrimaryTextColor}\">ГРАФІК ЗНЕСТРУМЛЕНЬ</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dayStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PoweredColor}\">{dayOfWeekStr}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dateStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine($"    <text x=\"1040\" y=\"88\" font-family=\"Arial, sans-serif\" font-size=\"16\" font-weight=\"500\" text-anchor=\"end\" fill=\"{MutedTextColor}\">Старокостянтинівська територіальна громада</text>");
         sb.AppendLine("  </g>");
 
-        // 2. Timeline Axis Region (00:00 - 24:00)
-        sb.AppendLine("  <!-- TimelineRegion -->");
-        sb.AppendLine("  <g id=\"timelineRegion\">");
-        for (int h = 0; h <= 24; h += 2)
+        // 2. 6 Queue Blocks (Borderless layout with horizontal line dividers)
+        // Track geometry: Left = 90, Right = 1040 -> Width = 950 px (39.583 px/hour)
+        int blockTop = 100;
+        int blockHeight = 148;
+
+        int badgeX = 58;
+        int trackLeft = 90;
+        int trackWidth = 950;
+        int trackH = 32;
+
+        sb.AppendLine("  <!-- QueueBlocksRegion -->");
+        sb.AppendLine("  <g id=\"queueBlocksRegion\">");
+
+        for (int qIdx = 0; qIdx < inputPackage.Queues.Count; qIdx++)
         {
-            double x = timelineLeft + (h / 24.0) * timelineWidth;
-            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <line x1=\"{x:F1}\" y1=\"{timelineTop + 18}\" x2=\"{x:F1}\" y2=\"{gridBottom + 6}\" stroke=\"{GridLineColor}\" stroke-width=\"1.5\" stroke-dasharray=\"3,3\"/>"));
-            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{x:F1}\" y=\"{timelineTop + 14}\" font-family=\"Arial, sans-serif\" font-size=\"13\" font-weight=\"600\" text-anchor=\"middle\" fill=\"{MutedTextColor}\">{h:D2}:00</text>"));
-        }
-        sb.AppendLine("  </g>");
+            var queue = inputPackage.Queues[qIdx];
+            int blockY = blockTop + qIdx * blockHeight;
 
-        // 3. 12 Subqueues (Paired rows with distinct inter-queue spacing)
-        sb.AppendLine("  <!-- SubqueueRegions -->");
-        for (int sqIdx = 0; sqIdx < allSubqueues.Count; sqIdx++)
-        {
-            var subqueue = allSubqueues[sqIdx];
-            int sqY = subqueueYPositions[sqIdx];
+            var sq1 = queue.Subqueues.Count > 0 ? queue.Subqueues[0] : null;
+            var sq2 = queue.Subqueues.Count > 1 ? queue.Subqueues[1] : null;
 
-            // Extract short label e.g. "Черга 1.1" -> "1.1"
-            string shortLabel = subqueue.SubqueueId.Replace("Черга ", "").Trim();
+            string shortLabel1 = sq1?.SubqueueId.Replace("Черга ", "").Trim() ?? $"{qIdx + 1}.1";
+            string shortLabel2 = sq2?.SubqueueId.Replace("Черга ", "").Trim() ?? $"{qIdx + 1}.2";
 
-            sb.AppendLine($"  <g id=\"subqueue_{EscapeXml(shortLabel)}\">");
-            sb.AppendLine($"    <text x=\"50\" y=\"{sqY + 24}\" font-family=\"Arial, sans-serif\" font-size=\"17\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"{PrimaryTextColor}\">{EscapeXml(shortLabel)}</text>");
-            
-            // Background track for subqueue (Powered Orange fill as base)
-            sb.AppendLine($"    <rect x=\"{timelineLeft}\" y=\"{sqY}\" width=\"{timelineWidth}\" height=\"{trackHeight}\" fill=\"{PoweredColor}\" rx=\"6\" stroke=\"{TrackBorderColor}\" stroke-width=\"1\"/>");
+            // Y Coordinates inside 148px block:
+            // sq1 track: blockY + 25 (height 32) -> bottom blockY + 57
+            // Timeline: blockY + 62 .. blockY + 86 (center axis at blockY + 74, height 24)
+            // sq2 track: blockY + 91 (height 32) -> bottom blockY + 123
+            // Top marker: blockY + 20
+            // Bottom marker: blockY + 138
+            int sq1TrackY = blockY + 25;
+            int timelineY = blockY + 74;
+            int sq2TrackY = blockY + 91;
 
-            // Outage Intervals (Dark Slate Gray for Outages / Light Gray for Possible)
-            foreach (var interval in subqueue.Intervals)
+            sb.AppendLine($"    <g id=\"queue_block_{qIdx + 1}\">");
+
+            // Left Queue Badges: 1.1 and 1.2
+            sb.AppendLine($"      <text x=\"{badgeX}\" y=\"{sq1TrackY + 24}\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"{PrimaryTextColor}\">{EscapeXml(shortLabel1)}</text>");
+            sb.AppendLine($"      <text x=\"{badgeX}\" y=\"{sq2TrackY + 24}\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"{PrimaryTextColor}\">{EscapeXml(shortLabel2)}</text>");
+
+            // Central Timeline Pill Track Background (Clean bright surface for maximum contrast)
+            int timelineHeight = 24;
+            int timelineTop = timelineY - timelineHeight / 2; // timelineY - 12 -> blockY + 62 .. blockY + 86
+            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <rect x=\"{trackLeft}\" y=\"{timelineTop}\" width=\"{trackWidth}\" height=\"{timelineHeight}\" rx=\"5\" fill=\"#FFFFFF\" stroke=\"#E2E8F0\" stroke-width=\"1\"/>"));
+
+            // 48-Slot Dual-Sided Precision Ruler (Every 30 mins):
+            // - Even hours (00, 02..24): 13px bold label centered + 4.5px edge ticks (top & bottom)
+            // - Odd hours (01, 03..23): 7.5px edge ticks (top & bottom)
+            // - Half hours (00:30, 01:30..23:30): 4px edge ticks (top & bottom)
+            for (int slot = 0; slot <= 48; slot++)
             {
-                var (start, end) = interval.ParseTimes();
-                double startFrac = start.TotalHours / 24.0;
-                double endFrac = end.TotalHours / 24.0;
-                double x = timelineLeft + startFrac * timelineWidth;
-                double w = (endFrac - startFrac) * timelineWidth;
+                double hours = slot * 0.5;
+                double x = trackLeft + (hours / 24.0) * trackWidth;
 
-                string fill = interval.Status.Equals("Possible", StringComparison.OrdinalIgnoreCase) ? PossibleColor : OutageColor;
-                string statusTitle = EscapeXml($"{interval.StartTime}–{interval.EndTime} ({interval.Status})");
-
-                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <rect x=\"{x:F1}\" y=\"{sqY}\" width=\"{w:F1}\" height=\"{trackHeight}\" fill=\"{fill}\" rx=\"5\"><title>{statusTitle}</title></rect>"));
+                if (slot % 2 == 0)
+                {
+                    // Hourly mark (slot = 0, 2, 4 ... 48 -> hours 0, 1, 2 ... 24)
+                    int h = slot / 2;
+                    if (h % 2 == 0)
+                    {
+                        // Even hour: 13px bold label (00, 02..24) centered
+                        string anchor = h == 0 ? "start" : (h == 24 ? "end" : "middle");
+                        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <text x=\"{x:F1}\" y=\"{timelineY + 4.5}\" font-family=\"Arial, sans-serif\" font-size=\"13\" font-weight=\"bold\" text-anchor=\"{anchor}\" fill=\"#334155\">{h:D2}</text>"));
+                        
+                        // Micro edge tick marks on top & bottom edge for even hours as well (except edges 00 & 24)
+                        if (h > 0 && h < 24)
+                        {
+                            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop}\" x2=\"{x:F1}\" y2=\"{timelineTop + 3.5}\" stroke=\"#94A3B8\" stroke-width=\"1.2\"/>"));
+                            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop + timelineHeight - 3.5}\" x2=\"{x:F1}\" y2=\"{timelineTop + timelineHeight}\" stroke=\"#94A3B8\" stroke-width=\"1.2\"/>"));
+                        }
+                    }
+                    else
+                    {
+                        // Odd hour: Major edge ticks (7.5px from top edge and bottom edge)
+                        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop}\" x2=\"{x:F1}\" y2=\"{timelineTop + 7.5}\" stroke=\"#64748B\" stroke-width=\"1.5\"/>"));
+                        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop + timelineHeight - 7.5}\" x2=\"{x:F1}\" y2=\"{timelineTop + timelineHeight}\" stroke=\"#64748B\" stroke-width=\"1.5\"/>"));
+                    }
+                }
+                else
+                {
+                    // Half-hour mark (slot = 1, 3, 5 ... 47 -> 00:30, 01:30 ...)
+                    // Dual-sided micro ticks (4px from top edge and bottom edge)
+                    sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop}\" x2=\"{x:F1}\" y2=\"{timelineTop + 4}\" stroke=\"#94A3B8\" stroke-width=\"1\" opacity=\"0.85\"/>"));
+                    sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"{x:F1}\" y1=\"{timelineTop + timelineHeight - 4}\" x2=\"{x:F1}\" y2=\"{timelineTop + timelineHeight}\" stroke=\"#94A3B8\" stroke-width=\"1\" opacity=\"0.85\"/>"));
+                }
             }
-            sb.AppendLine("  </g>");
+
+            // Render Subqueue 1 (Top track + Top boundary time markers)
+            if (sq1 != null)
+            {
+                RenderSubqueueTrack(sb, sq1, shortLabel1, trackLeft, sq1TrackY, trackWidth, trackH, isTopTrack: true, markerY: blockY + 20);
+            }
+
+            // Render Subqueue 2 (Bottom track + Bottom boundary time markers)
+            if (sq2 != null)
+            {
+                RenderSubqueueTrack(sb, sq2, shortLabel2, trackLeft, sq2TrackY, trackWidth, trackH, isTopTrack: false, markerY: blockY + 138);
+            }
+
+            // Horizontal Divider between queues (except after last queue)
+            if (qIdx < inputPackage.Queues.Count - 1)
+            {
+                int dividerY = blockY + blockHeight;
+                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"      <line x1=\"40\" y1=\"{dividerY}\" x2=\"1040\" y2=\"{dividerY}\" stroke=\"#E5E7EB\" stroke-width=\"1.5\"/>"));
+            }
+
+            sb.AppendLine("    </g>");
         }
+        sb.AppendLine("  </g>");
 
         // 4. Footer Region: Left System String + Right QR Code Block
         int footerY = canvasHeight - 110;
@@ -286,6 +330,83 @@ public class GraphicAssembly : IGraphicAssembly
         sb.AppendLine("</svg>");
 
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    private static void RenderSubqueueTrack(
+        System.Text.StringBuilder sb,
+        SubqueueSchedule subqueue,
+        string shortLabel,
+        int trackLeft,
+        int trackY,
+        int trackWidth,
+        int trackHeight,
+        bool isTopTrack,
+        int markerY)
+    {
+        sb.AppendLine($"      <g id=\"subqueue_{EscapeXml(shortLabel)}\">");
+
+        // Background track (Powered Orange base)
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <rect x=\"{trackLeft}\" y=\"{trackY}\" width=\"{trackWidth}\" height=\"{trackHeight}\" fill=\"{PoweredColor}\" rx=\"6\" stroke=\"{TrackBorderColor}\" stroke-width=\"1\"/>"));
+
+        // Transition points collection for markers
+        var transitionHours = new HashSet<string>();
+
+        // Render Outage Intervals (Dark Slate Gray for Outages / Light Gray for Possible)
+        if (subqueue.Intervals != null)
+        {
+            foreach (var interval in subqueue.Intervals)
+            {
+                var (start, end) = interval.ParseTimes();
+                double startFrac = start.TotalHours / 24.0;
+                double endFrac = end.TotalHours / 24.0;
+                double x = trackLeft + startFrac * trackWidth;
+                double w = (endFrac - startFrac) * trackWidth;
+
+                string fill = interval.Status.Equals("Possible", StringComparison.OrdinalIgnoreCase) ? PossibleColor : OutageColor;
+                string statusTitle = EscapeXml($"{interval.StartTime}–{interval.EndTime} ({interval.Status})");
+
+                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <rect x=\"{x:F1}\" y=\"{trackY}\" width=\"{w:F1}\" height=\"{trackHeight}\" fill=\"{fill}\" rx=\"5\"><title>{statusTitle}</title></rect>"));
+
+                // Record transition timestamps (excluding day boundaries 00:00 and 24:00 per design Option B)
+                if (!string.IsNullOrEmpty(interval.StartTime) && interval.StartTime != "00:00" && interval.StartTime != "0:00")
+                {
+                    transitionHours.Add(interval.StartTime);
+                }
+                if (!string.IsNullOrEmpty(interval.EndTime) && interval.EndTime != "24:00" && interval.EndTime != "00:00" && interval.EndTime != "0:00")
+                {
+                    transitionHours.Add(interval.EndTime);
+                }
+            }
+        }
+
+        // 1-Hour segment vertical dividing micro-lines inside track (24 square blocks)
+        for (int h = 1; h < 24; h++)
+        {
+            double divX = trackLeft + (h / 24.0) * trackWidth;
+            sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <line x1=\"{divX:F1}\" y1=\"{trackY}\" x2=\"{divX:F1}\" y2=\"{trackY + trackHeight}\" stroke=\"#FFFFFF\" stroke-width=\"1.5\" opacity=\"0.5\"/>"));
+        }
+
+        // Render Dynamic Transition Time Markers (with micro-pin and timestamp)
+        foreach (var timeStr in transitionHours)
+        {
+            if (TimeSpan.TryParse(timeStr, out var ts))
+            {
+                double frac = ts.TotalHours / 24.0;
+                double markX = trackLeft + frac * trackWidth;
+                string anchor = ts.TotalHours <= 1.0 ? "start" : (ts.TotalHours >= 23.0 ? "end" : "middle");
+
+                // Micro indicator tick from track to marker
+                int tickY1 = isTopTrack ? trackY : trackY + trackHeight;
+                int tickY2 = isTopTrack ? trackY - 3 : trackY + trackHeight + 3;
+                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <line x1=\"{markX:F1}\" y1=\"{tickY1}\" x2=\"{markX:F1}\" y2=\"{tickY2}\" stroke=\"{OutageColor}\" stroke-width=\"1.5\"/>"));
+                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <circle cx=\"{markX:F1}\" cy=\"{tickY2}\" r=\"1.5\" fill=\"{OutageColor}\"/>"));
+
+                // Transition text (e.g. "08:00") - 13px bold for crystal-clear readability
+                sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"        <text x=\"{markX:F1}\" y=\"{markerY}\" font-family=\"Arial, sans-serif\" font-size=\"13\" font-weight=\"bold\" text-anchor=\"{anchor}\" fill=\"{PrimaryTextColor}\">{EscapeXml(timeStr)}</text>"));
+            }
+        }
+
+        sb.AppendLine("      </g>");
     }
 
     private static void ValidatePackage(GraphicInputPackage package)

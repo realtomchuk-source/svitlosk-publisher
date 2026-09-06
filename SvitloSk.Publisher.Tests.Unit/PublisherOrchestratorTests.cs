@@ -765,8 +765,8 @@ public class GraphicAssemblyTests
         byte[] svgBytes = assembly.AssembleSvg(package);
         string svg = System.Text.Encoding.UTF8.GetString(svgBytes);
 
-        // 06:00 is 25% (0.25 * 940 = 235.0), duration 6h is 25% (235.0)
-        Assert.Contains("width=\"235.0\"", svg);
+        // 06:00 is 25% (0.25 * 950 = 237.5), duration 6h is 25% (237.5)
+        Assert.Contains("width=\"237.5\"", svg);
         Assert.Contains("06:00–12:00 (Restricted)", svg);
     }
 
@@ -1688,7 +1688,7 @@ public class GraphicOrchestrationTests : IDisposable
 
         // Verify SVG elements
         Assert.Contains("viewBox=\"0 0 1080 1080\"", svgText);
-        Assert.Contains("Графік знеструмлень", svgText);
+        Assert.Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", svgText);
         Assert.Contains("Svitlo", svgText);
         Assert.Contains("Sk", svgText);
         Assert.Contains("SvitloSk Autonomous Publishing System", svgText);

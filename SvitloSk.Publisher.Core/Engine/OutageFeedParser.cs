@@ -257,13 +257,50 @@ public class OutageFeedParser : IOutageFeedParser
         using var doc = System.Text.Json.JsonDocument.Parse(legacyJson);
         var root = doc.RootElement;
 
-        string targetDate = root.TryGetProperty("date", out var dateElem) 
-            ? dateElem.GetString() ?? DateTime.UtcNow.ToString("yyyy-MM-dd") 
-            : DateTime.UtcNow.ToString("yyyy-MM-dd");
+        string targetDate = "";
+        string genTimestamp = "";
 
-        string genTimestamp = root.TryGetProperty("updated_at", out var upElem)
-            ? upElem.GetString() ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-            : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        if (root.TryGetProperty("meta", out var metaElem) && metaElem.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (metaElem.TryGetProperty("target_date", out var td)) targetDate = td.GetString() ?? "";
+            if (metaElem.TryGetProperty("generated_at", out var ga)) genTimestamp = ga.GetString() ?? "";
+        }
+
+        if (string.IsNullOrWhiteSpace(targetDate))
+        {
+            targetDate = root.TryGetProperty("date", out var dateElem) 
+                ? dateElem.GetString() ?? DateTime.UtcNow.ToString("yyyy-MM-dd") 
+                : DateTime.UtcNow.ToString("yyyy-MM-dd");
+        }
+
+        if (string.IsNullOrWhiteSpace(genTimestamp))
+        {
+            genTimestamp = root.TryGetProperty("updated_at", out var upElem)
+                ? upElem.GetString() ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        }
+
+        // Handle DD.MM or DD.MM.YYYY format by converting to standard ISO yyyy-MM-dd
+        if (targetDate.Length == 5 && targetDate.Contains('.'))
+        {
+            int year = DateTime.UtcNow.Year;
+            if (DateTime.TryParse(genTimestamp, out var parsedGenYear))
+            {
+                year = parsedGenYear.Year;
+            }
+            if (DateTime.TryParseExact($"{targetDate}.{year}", "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt))
+            {
+                targetDate = dt.ToString("yyyy-MM-dd");
+            }
+            else
+            {
+                targetDate = $"{year}-{targetDate.Substring(3, 2)}-{targetDate.Substring(0, 2)}";
+            }
+        }
+        else if (DateTime.TryParse(targetDate, out var dtParsed))
+        {
+            targetDate = dtParsed.ToString("yyyy-MM-dd");
+        }
 
         // Parse queues object
         var subqueueMap = new Dictionary<string, List<GraphicInterval>>(StringComparer.OrdinalIgnoreCase);
