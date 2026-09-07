@@ -334,44 +334,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // D-05 (Removal) for publications that were in the registry but are missing in the new input packages
-        if (registry != null)
-        {
-            var deleteDecisions = new List<EditorialDecision>();
-            foreach (var pubRecord in registry.Publications)
-            {
-                // Skip special status, tomorrow packages, journal_header, and Graphic publications which are managed separately
-                if (pubRecord.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) || 
-                    pubRecord.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) || 
-                    pubRecord.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
-                    pubRecord.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // If a territory was published before but is completely absent from the new transformedPackages, delete it
-                bool isAbsent = !transformedPackages.Any(p => p.TerritoryId.Equals(pubRecord.TerritoryId, StringComparison.OrdinalIgnoreCase));
-                if (isAbsent && pubRecord.TransmissionState != "DELETED" && pubRecord.TelegramMessageId.HasValue)
-                {
-                    deleteDecisions.Add(new EditorialDecision(
-                        DecisionResult.Delete,
-                        PublicationClassification.Persistent,
-                        pubRecord.PublisherArtifactId,
-                        pubRecord.TerritoryId,
-                        null,
-                        pubRecord.TelegramMessageId
-                    ));
-                }
-            }
-
-            // Safety Guard: Fail-Closed if trying to mass delete 5 or more active publications
-            if (deleteDecisions.Count >= 5)
-            {
-                throw new InvalidOperationException($"[SAFETY BLOCK] Mass-delete prevention triggered: attempt to delete {deleteDecisions.Count} persistent publications. Orchestration aborted.");
-            }
-
-            decisions.AddRange(deleteDecisions);
-        }
+        // Intra-day History Preservation (Option B - Continuous stream):
+        // Persistent territory publications that were previously published must NOT be deleted even if absent from current feed.
+        // They remain untouched (retained in registry and Telegram channel).
 
         // D-06: Tomorrow Visibility
         var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(input.TomorrowForecastAvailable);

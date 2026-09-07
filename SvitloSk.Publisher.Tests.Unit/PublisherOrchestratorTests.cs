@@ -138,9 +138,12 @@ public class PublisherOrchestratorTests : IDisposable
             }
         );
 
-        // Running orchestration must throw safety guard exception
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input));
-        Assert.Contains("Mass-delete prevention triggered", ex.Message);
+        // In Option B (History Preservation), absent persistent territories are retained, not deleted.
+        // Therefore, feed with 0 active publications does not delete previous historical publications.
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input);
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(store.CurrentModel);
+        Assert.Equal(5, store.CurrentModel.Publications.Count(p => p.TransmissionState == "SENT" || p.TransmissionState == "UPDATED"));
     }
 
     [Fact]
@@ -660,8 +663,10 @@ public class PublisherOrchestratorTests : IDisposable
         var result5 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input5);
         Assert.True(result5.IsSuccess);
 
+        // In Option B, historical publications remain retained (SENT/UPDATED) even if absent from current raw feed
         var postEmerg = store.CurrentModel?.Publications.FirstOrDefault(p => p.TerritoryId == "bereznenskyi");
-        Assert.True(postEmerg == null || postEmerg.TransmissionState == "DELETED");
+        Assert.NotNull(postEmerg);
+        Assert.True(postEmerg.TransmissionState == "SENT" || postEmerg.TransmissionState == "UPDATED");
 
         // --- STAGE 6: EMERGENCY UPDATE & ISOLATION ---
         string rawFeed5 = 
@@ -687,9 +692,11 @@ public class PublisherOrchestratorTests : IDisposable
         var result6 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input6);
         Assert.True(result6.IsSuccess);
 
-        // --- STAGE 7: PLAN DELETE ---
+        // --- STAGE 7: PLAN PERSISTENCE (Option B) ---
+        // Under Option B, when empty feed comes in, historical publications remain in registry (SENT/UPDATED)
         var postPlan = store.CurrentModel?.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv");
-        Assert.True(postPlan == null || postPlan.TransmissionState == "DELETED");
+        Assert.NotNull(postPlan);
+        Assert.True(postPlan.TransmissionState == "SENT" || postPlan.TransmissionState == "UPDATED");
     }
 }
 
@@ -1639,12 +1646,13 @@ public class GraphicOrchestrationTests : IDisposable
         var stats = TerritoryAggregator.CalculateSummaryStats(records);
         var header = transformer.RenderJournalHeader("2026-09-05", stats);
 
-        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — 05.09.2026", header);
+        Assert.Contains("<blockquote><b>Субота 05.09.2026</b></blockquote>", header);
         Assert.Contains("Старокостянтинівська територіальна громада", header);
-        Assert.Contains("Планові знеструмлення: 1 округ (м. Старокостянтинів)", header);
-        Assert.Contains("Аварійні знеструмлення: 1 округ (Березненський)", header);
+        Assert.Contains("Планові знеструмлення: м. Старокостянтинів", header);
+        Assert.Contains("Аварійні знеструмлення: с. Березне", header);
         Assert.DoesNotContain("⚡", header);
         Assert.DoesNotContain("🚨", header);
+        Assert.DoesNotContain("Стан на", header);
     }
 
     [Fact]

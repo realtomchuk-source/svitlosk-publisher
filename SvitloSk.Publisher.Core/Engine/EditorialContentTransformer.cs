@@ -41,29 +41,55 @@ public class EditorialContentTransformer
         return "округів";
     }
 
+    public static string GetUkrainianDayOfWeek(DayOfWeek dayOfWeek)
+    {
+        return dayOfWeek switch
+        {
+            DayOfWeek.Monday => "Понеділок",
+            DayOfWeek.Tuesday => "Вівторок",
+            DayOfWeek.Wednesday => "Середа",
+            DayOfWeek.Thursday => "Четвер",
+            DayOfWeek.Friday => "П'ятниця",
+            DayOfWeek.Saturday => "Субота",
+            DayOfWeek.Sunday => "Неділя",
+            _ => "Сьогодні"
+        };
+    }
+
     public string RenderJournalHeader(string editionDate, JournalSummaryStats stats)
     {
         string formattedDate = FormatDate(editionDate);
+        
+        // Extract day of week from date if possible
+        string dayOfWeekStr = "Сьогодні";
+        if (DateTime.TryParse(editionDate, out var dt))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(dt.DayOfWeek);
+        }
+        else if (DateTime.TryParseExact(formattedDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExact))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(dtExact.DayOfWeek);
+        }
+
         var sb = new StringBuilder();
-        sb.AppendLine($"<b>ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — {formattedDate}</b>");
+        sb.AppendLine($"<blockquote><b>{dayOfWeekStr} {formattedDate}</b></blockquote>");
         sb.AppendLine("Старокостянтинівська територіальна громада");
         sb.AppendLine();
-        sb.AppendLine($"Стан на {DateTime.UtcNow.AddHours(3):HH:mm}:");
 
-        if (stats.PlannedTerritoryNames.Count > 0)
+        if (stats.PlannedSettlements.Count > 0)
         {
-            string pList = string.Join(", ", stats.PlannedTerritoryNames.Select(NormalizeShortName));
-            sb.AppendLine($"- Планові знеструмлення: {stats.PlannedTerritoryNames.Count} {GetDistrictPlural(stats.PlannedTerritoryNames.Count)} ({pList})");
+            string pList = string.Join(", ", stats.PlannedSettlements);
+            sb.AppendLine($"- Планові знеструмлення: {pList}");
         }
         else
         {
             sb.AppendLine("- Планові знеструмлення: відсутні");
         }
 
-        if (stats.EmergencyTerritoryNames.Count > 0)
+        if (stats.EmergencySettlements.Count > 0)
         {
-            string eList = string.Join(", ", stats.EmergencyTerritoryNames.Select(NormalizeShortName));
-            sb.AppendLine($"- Аварійні знеструмлення: {stats.EmergencyTerritoryNames.Count} {GetDistrictPlural(stats.EmergencyTerritoryNames.Count)} ({eList})");
+            string eList = string.Join(", ", stats.EmergencySettlements);
+            sb.AppendLine($"- Аварійні знеструмлення: {eList}");
         }
         else
         {
@@ -75,7 +101,7 @@ public class EditorialContentTransformer
 
     public string RenderSystemStatus()
     {
-        return $"<b>СИСТЕМНА ІНФОРМАЦІЯ</b>\nОстаннє оновлення даних: {DateTime.UtcNow.AddHours(3):HH:mm} (UTC+3)\nСтан моніторингу: активний";
+        return $"Останнє оновлення журналу: {DateTime.UtcNow.AddHours(3):HH:mm}\nСтан моніторингу: активний";
     }
 
     public string RenderAggregatedTerritoryPost(AggregatedTerritoryData data, bool isTomorrow = false, string? tomorrowDate = null)

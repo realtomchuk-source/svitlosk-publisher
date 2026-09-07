@@ -15,8 +15,8 @@ public record AggregatedTerritoryData(
 
 public record JournalSummaryStats(
     int TotalTerritories,
-    IReadOnlyList<string> PlannedTerritoryNames,
-    IReadOnlyList<string> EmergencyTerritoryNames
+    IReadOnlyList<string> PlannedSettlements,
+    IReadOnlyList<string> EmergencySettlements
 );
 
 public class TerritoryAggregator
@@ -83,14 +83,73 @@ public class TerritoryAggregator
     public static JournalSummaryStats CalculateSummaryStats(IReadOnlyList<OutageRecord> records)
     {
         var aggregated = AggregateByTerritory(records);
-        var plannedNames = aggregated.Where(a => a.PlannedRecords.Count > 0).Select(a => a.CanonicalName).Distinct().ToList();
-        var emergencyNames = aggregated.Where(a => a.EmergencyRecords.Count > 0).Select(a => a.CanonicalName).Distinct().ToList();
+        var plannedRecords = aggregated.SelectMany(a => a.PlannedRecords).ToList();
+        var emergencyRecords = aggregated.SelectMany(a => a.EmergencyRecords).ToList();
+
+        var plannedSettlements = ExtractSettlements(plannedRecords);
+        var emergencySettlements = ExtractSettlements(emergencyRecords);
 
         return new JournalSummaryStats(
             TotalTerritories: aggregated.Count,
-            PlannedTerritoryNames: plannedNames,
-            EmergencyTerritoryNames: emergencyNames
+            PlannedSettlements: plannedSettlements,
+            EmergencySettlements: emergencySettlements
         );
+    }
+
+    public static List<string> ExtractSettlements(IReadOnlyList<OutageRecord> records)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var record in records)
+        {
+            if (string.IsNullOrWhiteSpace(record.Details)) continue;
+
+            // 1. Scan for explicit settlement mentions in Details e.g. "с. Мацевичі", "с. Великі Мацевичі", "м. Старокостянтинів"
+            var matches = Regex.Matches(record.Details, @"\b(с\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+(?:\s+[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)?|м\.\s*Старокостянтинів|селище\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)\b");
+            bool foundExplicit = false;
+            foreach (Match m in matches)
+            {
+                string raw = m.Value.Trim();
+                // Clean up trailing punctuation if any
+                raw = Regex.Replace(raw, @"\s+", " ").Trim();
+                if (!string.IsNullOrWhiteSpace(raw) && !raw.Equals("с.", StringComparison.OrdinalIgnoreCase))
+                {
+                    set.Add(raw);
+                    foundExplicit = true;
+                }
+            }
+
+            // 2. If no explicit "с. ..." found in details, infer from territory definition / CenterSettlement
+            if (!foundExplicit && !string.IsNullOrWhiteSpace(record.TerritoryName))
+            {
+                try
+                {
+                    string territoryId = TerritoryRegistry.MapRawTerritoryName(record.TerritoryName);
+                    var canonical = TerritoryRegistry.Territories.FirstOrDefault(t => t.TerritoryId.Equals(territoryId, StringComparison.OrdinalIgnoreCase));
+                    if (canonical != null)
+                    {
+                        if (canonical.Type == TerritoryType.CITY)
+                        {
+                            set.Add("м. Старокостянтинів");
+                        }
+                        else if (!string.IsNullOrWhiteSpace(canonical.CenterSettlement))
+                        {
+                            set.Add($"с. {canonical.CenterSettlement}");
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fallback to record territory name if mapping fails
+                    set.Add(record.TerritoryName);
+                }
+            }
+        }
+
+        // Sort: "м. Старокостянтинів" first, then alphabetically
+        return set.OrderBy(s => s.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                  .ThenBy(s => s, StringComparer.CurrentCultureIgnoreCase)
+                  .ToList();
     }
 
     public static string CompactHouseNumbers(string text)
