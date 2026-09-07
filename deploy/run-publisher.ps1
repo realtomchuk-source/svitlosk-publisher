@@ -10,6 +10,9 @@ if ([string]::IsNullOrEmpty($env:TELEGRAM_BOT_TOKEN)) {
 if ([string]::IsNullOrEmpty($env:TELEGRAM_CHAT_ID)) {
     $env:TELEGRAM_CHAT_ID = [Environment]::GetEnvironmentVariable("TELEGRAM_CHAT_ID", "User")
 }
+if ([string]::IsNullOrEmpty($env:TELEGRAM_DISCUSSION_GROUP_ID)) {
+    $env:TELEGRAM_DISCUSSION_GROUP_ID = [Environment]::GetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID", "User")
+}
 if ([string]::IsNullOrEmpty($env:REGISTRY_PATH)) {
     $env:REGISTRY_PATH = [Environment]::GetEnvironmentVariable("REGISTRY_PATH", "User")
 }

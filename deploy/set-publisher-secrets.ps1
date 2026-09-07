@@ -19,13 +19,20 @@ if ([string]::IsNullOrWhiteSpace($plainToken)) {
 }
 
 # 2. Telegram Chat/Channel ID Setup
-Write-Host "Enter Telegram Chat/Channel ID (e.g. -1001234567890): " -NoNewline
+Write-Host "Enter Telegram Chat/Channel ID (e.g. -1004394558011): " -NoNewline
 $chatId = Read-Host
 if ([string]::IsNullOrWhiteSpace($chatId)) {
     Write-Error "Telegram Chat ID cannot be empty. Aborted."
 }
 
-# 3. Registry Path Setup
+# 3. Telegram Discussion Group ID Setup
+Write-Host "Enter Telegram Discussion Group ID [Default: -1004365969004]: " -NoNewline
+$discussionGroupId = Read-Host
+if ([string]::IsNullOrWhiteSpace($discussionGroupId)) {
+    $discussionGroupId = "-1004365969004"
+}
+
+# 4. Registry Path Setup
 Write-Host "Enter Registry Path [Default: local/registry/production_registry.json]: " -NoNewline
 $registryPath = Read-Host
 if ([string]::IsNullOrWhiteSpace($registryPath)) {
@@ -35,6 +42,7 @@ if ([string]::IsNullOrWhiteSpace($registryPath)) {
 # Set environment variables in User target context (persists across processes/reboots)
 [Environment]::SetEnvironmentVariable("TELEGRAM_BOT_TOKEN", $plainToken, "User")
 [Environment]::SetEnvironmentVariable("TELEGRAM_CHAT_ID", $chatId, "User")
+[Environment]::SetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID", $discussionGroupId, "User")
 [Environment]::SetEnvironmentVariable("REGISTRY_PATH", $registryPath, "User")
 
 Write-Host ""
@@ -42,7 +50,8 @@ Write-Host "[SUCCESS] Windows Environment variables have been securely configure
 Write-Host "[INFO] Note: You will need to reopen your PowerShell/Command window for the changes to take effect." -ForegroundColor Yellow
 Write-Host "--------------------------------------------------"
 Write-Host "Verification status:"
-Write-Host "  TELEGRAM_BOT_TOKEN: [SET]"
-Write-Host "  TELEGRAM_CHAT_ID:   $chatId"
-Write-Host "  REGISTRY_PATH:      $registryPath"
+Write-Host "  TELEGRAM_BOT_TOKEN:             [SET]"
+Write-Host "  TELEGRAM_CHAT_ID:               $chatId"
+Write-Host "  TELEGRAM_DISCUSSION_GROUP_ID:  $discussionGroupId"
+Write-Host "  REGISTRY_PATH:                  $registryPath"
 Write-Host "=================================================="
