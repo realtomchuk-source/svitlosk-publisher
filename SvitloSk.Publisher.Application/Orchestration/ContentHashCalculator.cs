@@ -59,7 +59,7 @@ public class ContentHashCalculator
         // Excludes: package_id, generation_timestamp, source_identifier, file paths, etc.
         // Includes: TerritorialScope, TargetDate, Queues (QueueId, SubqueueId, Intervals [StartTime, EndTime, Status])
         var sb = new StringBuilder();
-        sb.Append($"SCOPE:{graphicPackage.TerritorialScope.Trim()};DATE:{graphicPackage.Metadata.TargetDate.Trim()};");
+        sb.Append($"V:2;SCOPE:{graphicPackage.TerritorialScope.Trim()};DATE:{graphicPackage.Metadata.TargetDate.Trim()};");
 
         foreach (var q in graphicPackage.Queues.OrderBy(q => q.QueueId, StringComparer.OrdinalIgnoreCase))
         {
