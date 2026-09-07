@@ -216,7 +216,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
                 // Check if it's the raw today.txt feed content containing our outages structure.
                 // We run it through the parser to identify districts and queues.
-                if (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ"))
+                if (!rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) && 
+                    (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
                 {
                     var parsedRecords = _parser.Parse(rawPkg.Content);
                     var canonicalPackages = _transformer.TransformFeed(parsedRecords, $"СЬОГОДНІ — {input.EditionDate}");

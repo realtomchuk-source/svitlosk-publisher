@@ -132,7 +132,7 @@ public class EditorialContentTransformer
             sb.AppendLine($"<blockquote>{emergHeader}");
             foreach (var rec in data.EmergencyRecords)
             {
-                string body = RenderRecordDetails(rec.Details, emergTime);
+                string body = RenderRecordDetails(rec.Details, emergTime, data.CanonicalName);
                 if (!string.IsNullOrWhiteSpace(body))
                 {
                     sb.AppendLine(body);
@@ -154,7 +154,7 @@ public class EditorialContentTransformer
             sb.AppendLine();
             foreach (var rec in data.PlannedRecords)
             {
-                string body = RenderRecordDetails(rec.Details, planTime);
+                string body = RenderRecordDetails(rec.Details, planTime, data.CanonicalName);
                 if (!string.IsNullOrWhiteSpace(body))
                 {
                     sb.AppendLine(body);
@@ -227,7 +227,7 @@ public class EditorialContentTransformer
         return RenderAggregatedTerritoryPost(aggData);
     }
 
-    public string RenderRecordDetails(string details, string? commonTimeInterval = null)
+    public string RenderRecordDetails(string details, string? commonTimeInterval = null, string? canonicalTerritoryName = null)
     {
         if (string.IsNullOrWhiteSpace(details)) return string.Empty;
 
@@ -248,22 +248,31 @@ public class EditorialContentTransformer
             // Remove leading bullet characters or double dashes if present
             line = Regex.Replace(line, @"^[•\-\*\s]+", "").Trim();
 
-            // Check if line is a settlement header e.g. "с. Великі Мацевичі | з 10:45 до 16:45"
-            var settlementMatch = Regex.Match(line, @"^(с\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s*\|\s*(.*)$", RegexOptions.IgnoreCase);
+            // Check if line is a settlement header e.g. "с. Великі Мацевичі | з 10:45 до 16:45" or "м. Старокостянтинів | з 09:00 до 17:00"
+            var settlementMatch = Regex.Match(line, @"^((?:с\.|м\.|селище)\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s*\|\s*(.*)$", RegexOptions.IgnoreCase);
             if (settlementMatch.Success)
             {
                 string settlement = settlementMatch.Groups[1].Value.Trim();
                 string timePart = settlementMatch.Groups[2].Value.Trim();
                 string interval = FormatTimeIntervalToShortRange(timePart);
-                
-                // If interval is already shown in the block header, omit from village line for clean look
-                if (!string.IsNullOrEmpty(interval) && (string.IsNullOrEmpty(commonTimeInterval) || !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase)))
+
+                // If this is the city/territory itself (e.g. "м. Старокостянтинів" inside "Місто Старокостянтинів"),
+                // omit the redundant settlement header entirely (Variant 1).
+                bool isRedundantCityHeader = !string.IsNullOrEmpty(canonicalTerritoryName) &&
+                    (canonicalTerritoryName.Contains(settlement, StringComparison.OrdinalIgnoreCase) ||
+                     settlement.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase) && canonicalTerritoryName.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase));
+
+                if (!isRedundantCityHeader)
                 {
-                    sb.AppendLine($"<b>{settlement}</b> ({interval})");
-                }
-                else
-                {
-                    sb.AppendLine($"<b>{settlement}</b>");
+                    // If interval is already shown in the block header, omit from village line for clean look
+                    if (!string.IsNullOrEmpty(interval) && (string.IsNullOrEmpty(commonTimeInterval) || !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        sb.AppendLine($"<b>{settlement}</b> ({interval})");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"<b>{settlement}</b>");
+                    }
                 }
                 continue;
             }
