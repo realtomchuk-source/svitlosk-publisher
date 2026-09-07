@@ -274,6 +274,14 @@ public class EditorialContentTransformer
                         sb.AppendLine($"<b>{settlement}</b>");
                     }
                 }
+                else
+                {
+                    // For city header omission: if there is no common interval in block header, output time interval
+                    if (!string.IsNullOrEmpty(interval) && (string.IsNullOrEmpty(commonTimeInterval) || !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        sb.AppendLine($"Час: {interval}");
+                    }
+                }
                 continue;
             }
 
