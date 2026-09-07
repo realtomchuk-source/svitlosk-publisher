@@ -531,10 +531,12 @@ public static class Program
                 }
             }
 
+            bool hasActiveTomorrowPackages = packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase));
+
             var input = new EditorialInput(
                 EditionDate: editionDate,
                 Packages: packages,
-                TomorrowForecastAvailable: tomorrowAvailable,
+                TomorrowForecastAvailable: hasActiveTomorrowPackages,
                 GraphicPackage: graphicPackage
             );
 

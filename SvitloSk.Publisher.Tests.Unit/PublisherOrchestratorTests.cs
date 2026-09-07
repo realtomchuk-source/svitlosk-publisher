@@ -1648,8 +1648,10 @@ public class GraphicOrchestrationTests : IDisposable
 
         Assert.Contains("<blockquote><b>Субота 05.09.2026</b></blockquote>", header);
         Assert.Contains("Старокостянтинівська територіальна громада", header);
-        Assert.Contains("Планові знеструмлення: м. Старокостянтинів", header);
-        Assert.Contains("Аварійні знеструмлення: с. Березне", header);
+        Assert.Contains("<b>Планові знеструмлення:</b>", header);
+        Assert.Contains("м. Старокостянтинів", header);
+        Assert.Contains("<b>Аварійні знеструмлення:</b>", header);
+        Assert.Contains("с. Березне", header);
         Assert.DoesNotContain("⚡", header);
         Assert.DoesNotContain("🚨", header);
         Assert.DoesNotContain("Стан на", header);

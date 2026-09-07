@@ -79,21 +79,25 @@ public class EditorialContentTransformer
         if (stats.PlannedSettlements.Count > 0)
         {
             string pList = string.Join(", ", stats.PlannedSettlements);
-            sb.AppendLine($"- Планові знеструмлення: {pList}");
+            sb.AppendLine("<b>Планові знеструмлення:</b>");
+            sb.AppendLine(pList);
         }
         else
         {
-            sb.AppendLine("- Планові знеструмлення: відсутні");
+            sb.AppendLine("<b>Планові знеструмлення:</b> відсутні");
         }
+
+        sb.AppendLine();
 
         if (stats.EmergencySettlements.Count > 0)
         {
             string eList = string.Join(", ", stats.EmergencySettlements);
-            sb.AppendLine($"- Аварійні знеструмлення: {eList}");
+            sb.AppendLine("<b>Аварійні знеструмлення:</b>");
+            sb.AppendLine(eList);
         }
         else
         {
-            sb.AppendLine("- Аварійні знеструмлення: відсутні");
+            sb.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
         }
 
         return sb.ToString().TrimEnd();
