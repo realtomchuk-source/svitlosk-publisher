@@ -372,8 +372,8 @@ public class PublisherOrchestratorTests : IDisposable
         var record = new OutageRecord("Місто Старокостянтинів", "ПЛАНОВІ", "з 08:00 по 12:00\nвул. Миру 14, 16 1 черга", "1");
         string rendered = transformer.RenderTemplate(record, "СЬОГОДНІ — 2026-08-08");
 
-        Assert.Contains("<b>МІСТО СТАРОКОСТЯНТИНІВ</b>", rendered);
-        Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>", rendered);
+        Assert.Contains("<b>Місто Старокостянтинів</b>", rendered);
+        Assert.Contains("<b>Планові знеструмлення</b>", rendered);
         Assert.Contains("Час: 08:00–12:00", rendered);
         Assert.Contains("- вул. Миру, 14, 16", rendered);
         Assert.DoesNotContain("черга", rendered, StringComparison.OrdinalIgnoreCase);
@@ -408,9 +408,9 @@ public class PublisherOrchestratorTests : IDisposable
         string renderedPlano = transformer.RenderTemplate(planoRecord, "08.08.2026");
         string renderedAvariyni = transformer.RenderTemplate(avariyniRecord, "08.08.2026");
 
-        Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>", renderedPlano);
-        Assert.Contains("<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>", renderedAvariyni);
-        Assert.Contains("<b>МІСТО СТАРОКОСТЯНТИНІВ</b>", renderedAvariyni);
+        Assert.Contains("<b>Планові знеструмлення</b>", renderedPlano);
+        Assert.Contains("<blockquote><b>Аварійні знеструмлення</b>", renderedAvariyni);
+        Assert.Contains("<b>Місто Старокостянтинів</b>", renderedAvariyni);
         Assert.Contains("- вул. Ізяславська, 27, аварія на лінії", renderedAvariyni);
     }
 
@@ -421,7 +421,7 @@ public class PublisherOrchestratorTests : IDisposable
         var record = new OutageRecord("Місто & Громада <Старокостянтинів>", "ПЛАНОВІ", "з 08:00 по 12:00\nвул. Миру 1 > 2", "1");
         string rendered = transformer.RenderTemplate(record, "08.08.2026");
 
-        Assert.Contains("МІСТО &amp; ГРОМАДА &lt;СТАРОКОСТЯНТИНІВ&gt;", rendered);
+        Assert.Contains("<b>Місто &amp; Громада &lt;Старокостянтинів&gt;</b>", rendered);
         Assert.Contains("вул. Миру, 1 &gt; 2", rendered);
     }
 
@@ -586,14 +586,14 @@ public class PublisherOrchestratorTests : IDisposable
         
         Assert.Equal(4, adapter.SendCount);
         
-        var planText = adapter.SentTexts.Find(t => t.Contains("СТАРОКОСТЯНТИНІВ"));
-        var emergText = adapter.SentTexts.Find(t => t.Contains("БЕРЕЗНЕНСЬКИЙ"));
+        var planText = adapter.SentTexts.Find(t => t.Contains("<b>Місто Старокостянтинів</b>"));
+        var emergText = adapter.SentTexts.Find(t => t.Contains("Березненський"));
         
         Assert.NotNull(planText);
         Assert.NotNull(emergText);
 
-        Assert.Contains("<b>МІСТО СТАРОКОСТЯНТИНІВ</b>", planText);
-        Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>", planText);
+        Assert.Contains("<b>Місто Старокостянтинів</b>", planText);
+        Assert.Contains("<b>Планові знеструмлення</b>", planText);
         Assert.Contains("Час: 08:00–12:00", planText);
         Assert.Contains("- вул. Миру, 14, 16", planText);
         Assert.Contains("Час: 14:00–18:00", planText);
@@ -602,8 +602,8 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.Contains("- вул. Ізяславська, 5", planText);
         Assert.DoesNotContain("черга", planText, StringComparison.OrdinalIgnoreCase);
 
-        Assert.Contains("<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>", emergText);
-        Assert.Contains("<b>БЕРЕЗНЕНСЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ</b>", emergText);
+        Assert.Contains("<blockquote><b>Аварійні знеструмлення</b>", emergText);
+        Assert.Contains("<b>Березненський старостинський округ</b>", emergText);
         Assert.Contains("- с. Березне, повністю з 14:20", emergText);
         Assert.DoesNotContain("черга", emergText, StringComparison.OrdinalIgnoreCase);
 
@@ -1616,9 +1616,9 @@ public class GraphicOrchestrationTests : IDisposable
         var post = transformer.RenderAggregatedTerritoryPost(aggData);
 
         Assert.Contains("<blockquote>", post);
-        Assert.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", post);
-        Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", post);
-        Assert.Contains("МІСТО СТАРОКОСТЯНТИНІВ", post);
+        Assert.Contains("Аварійні знеструмлення", post);
+        Assert.Contains("Планові знеструмлення", post);
+        Assert.Contains("Місто Старокостянтинів", post);
         Assert.Contains("вул. Миру", post);
         Assert.Contains("вул. Центральна", post);
 

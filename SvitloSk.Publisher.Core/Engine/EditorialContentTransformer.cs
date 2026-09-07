@@ -114,17 +114,17 @@ public class EditorialContentTransformer
 
         if (isTomorrow && !string.IsNullOrWhiteSpace(tomorrowDate))
         {
-            sb.AppendLine($"<b>ПРОГНОЗ НА ЗАВТРА — {FormatDate(tomorrowDate)}</b>");
+            sb.AppendLine($"<b>Прогноз на завтра — {FormatDate(tomorrowDate)}</b>");
         }
 
-        string upperTitle = HttpUtility.HtmlEncode(data.CanonicalName.ToUpperInvariant());
-        sb.AppendLine($"<b>{upperTitle}</b>");
+        string territoryTitle = HttpUtility.HtmlEncode(data.CanonicalName);
+        sb.AppendLine($"<b>{territoryTitle}</b>");
         sb.AppendLine();
 
         // 1. Emergency Block (Rendered inside <blockquote>)
         if (data.EmergencyRecords != null && data.EmergencyRecords.Count > 0)
         {
-            sb.AppendLine("<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>");
+            sb.AppendLine("<blockquote><b>Аварійні знеструмлення</b>");
             foreach (var rec in data.EmergencyRecords)
             {
                 string body = RenderRecordDetails(rec.Details);
@@ -140,7 +140,7 @@ public class EditorialContentTransformer
         // 2. Planned Block
         if (data.PlannedRecords != null && data.PlannedRecords.Count > 0)
         {
-            sb.AppendLine("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>");
+            sb.AppendLine("<b>Планові знеструмлення</b>");
             foreach (var rec in data.PlannedRecords)
             {
                 string body = RenderRecordDetails(rec.Details);
@@ -211,7 +211,15 @@ public class EditorialContentTransformer
             {
                 string settlement = settlementMatch.Groups[1].Value.Trim();
                 string timePart = settlementMatch.Groups[2].Value.Trim();
-                sb.AppendLine($"<b>{settlement}</b> | {FormatTimeInterval(timePart)}");
+                string interval = FormatTimeIntervalToShortRange(timePart);
+                if (!string.IsNullOrEmpty(interval))
+                {
+                    sb.AppendLine($"<b>{settlement}</b> (Час: {interval})");
+                }
+                else
+                {
+                    sb.AppendLine($"<b>{settlement}</b>");
+                }
                 continue;
             }
 
@@ -244,6 +252,17 @@ public class EditorialContentTransformer
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private string FormatTimeIntervalToShortRange(string timePart)
+    {
+        if (string.IsNullOrWhiteSpace(timePart)) return string.Empty;
+        var match = Regex.Match(timePart, @"(\d{2}:\d{2})\s*(?:по|до|-|–)\s*(\d{2}:\d{2})", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            return $"{match.Groups[1].Value}–{match.Groups[2].Value}";
+        }
+        return timePart;
     }
 
     private string FormatTimeInterval(string timePart)
