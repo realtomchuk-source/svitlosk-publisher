@@ -114,7 +114,7 @@ public class EditorialContentTransformer
 
         if (isTomorrow && !string.IsNullOrWhiteSpace(tomorrowDate))
         {
-            sb.AppendLine($"<b>Прогноз на завтра — {FormatDate(tomorrowDate)}</b>");
+            sb.AppendLine($"<b>ПРОГНОЗ НА ЗАВТРА — {FormatDate(tomorrowDate)}</b>");
         }
 
         string territoryTitle = HttpUtility.HtmlEncode(data.CanonicalName);
@@ -124,10 +124,15 @@ public class EditorialContentTransformer
         // 1. Emergency Block (Rendered inside <blockquote>)
         if (data.EmergencyRecords != null && data.EmergencyRecords.Count > 0)
         {
-            sb.AppendLine("<blockquote><b>Аварійні знеструмлення</b>");
+            string emergTime = ExtractCommonTimeInterval(data.EmergencyRecords);
+            string emergHeader = !string.IsNullOrEmpty(emergTime) 
+                ? $"<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({emergTime})</b>" 
+                : "<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>";
+
+            sb.AppendLine($"<blockquote>{emergHeader}");
             foreach (var rec in data.EmergencyRecords)
             {
-                string body = RenderRecordDetails(rec.Details);
+                string body = RenderRecordDetails(rec.Details, emergTime);
                 if (!string.IsNullOrWhiteSpace(body))
                 {
                     sb.AppendLine(body);
@@ -140,10 +145,16 @@ public class EditorialContentTransformer
         // 2. Planned Block
         if (data.PlannedRecords != null && data.PlannedRecords.Count > 0)
         {
-            sb.AppendLine("<b>Планові знеструмлення</b>");
+            string planTime = ExtractCommonTimeInterval(data.PlannedRecords);
+            string planHeader = !string.IsNullOrEmpty(planTime) 
+                ? $"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({planTime})</b>" 
+                : "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>";
+
+            sb.AppendLine(planHeader);
+            sb.AppendLine();
             foreach (var rec in data.PlannedRecords)
             {
-                string body = RenderRecordDetails(rec.Details);
+                string body = RenderRecordDetails(rec.Details, planTime);
                 if (!string.IsNullOrWhiteSpace(body))
                 {
                     sb.AppendLine(body);
@@ -153,6 +164,38 @@ public class EditorialContentTransformer
 
         string output = sb.ToString().TrimEnd();
         return output.Replace("\r\n", "\n").Replace("\r", "\n");
+    }
+
+    private string ExtractCommonTimeInterval(IReadOnlyList<OutageRecord> records)
+    {
+        var intervals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rec in records)
+        {
+            if (string.IsNullOrWhiteSpace(rec.Details)) continue;
+            var lines = rec.Details.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var settlementMatch = Regex.Match(line, @"^(?:с\.|м\.|селище).*?\|\s*(.*)$", RegexOptions.IgnoreCase);
+                if (settlementMatch.Success)
+                {
+                    string shortRange = FormatTimeIntervalToShortRange(settlementMatch.Groups[1].Value.Trim());
+                    if (!string.IsNullOrEmpty(shortRange))
+                    {
+                        intervals.Add(shortRange);
+                    }
+                }
+                else
+                {
+                    var timeMatch = Regex.Match(line.Trim(), @"^(?:з\s*)?(\d{2}:\d{2})\s*(?:по|до|-|–)\s*(\d{2}:\d{2})", RegexOptions.IgnoreCase);
+                    if (timeMatch.Success)
+                    {
+                        intervals.Add($"{timeMatch.Groups[1].Value}–{timeMatch.Groups[2].Value}");
+                    }
+                }
+            }
+        }
+
+        return intervals.Count == 1 ? intervals.First() : string.Empty;
     }
 
     public string RenderTemplate(OutageRecord record)
@@ -184,7 +227,7 @@ public class EditorialContentTransformer
         return RenderAggregatedTerritoryPost(aggData);
     }
 
-    public string RenderRecordDetails(string details)
+    public string RenderRecordDetails(string details, string? commonTimeInterval = null)
     {
         if (string.IsNullOrWhiteSpace(details)) return string.Empty;
 
@@ -212,9 +255,11 @@ public class EditorialContentTransformer
                 string settlement = settlementMatch.Groups[1].Value.Trim();
                 string timePart = settlementMatch.Groups[2].Value.Trim();
                 string interval = FormatTimeIntervalToShortRange(timePart);
-                if (!string.IsNullOrEmpty(interval))
+                
+                // If interval is already shown in the block header, omit from village line for clean look
+                if (!string.IsNullOrEmpty(interval) && (string.IsNullOrEmpty(commonTimeInterval) || !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase)))
                 {
-                    sb.AppendLine($"<b>{settlement}</b> (Час: {interval})");
+                    sb.AppendLine($"<b>{settlement}</b> ({interval})");
                 }
                 else
                 {
