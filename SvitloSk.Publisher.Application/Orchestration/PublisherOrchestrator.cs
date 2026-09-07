@@ -308,14 +308,27 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var updateDecision = _decisionEngine.EvaluatePublicationUpdate(validity);
                 if (updateDecision.DecisionResult == DecisionResult.Update)
                 {
-                    // Retrieve TelegramMessageId from registry if matched
+                    // Retrieve TelegramMessageId from registry for the active publication
                     int? msgId = null;
                     if (registry != null)
                     {
-                        var record = registry.Publications.FirstOrDefault(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase));
+                        var record = registry.Publications.FirstOrDefault(p => 
+                            p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && 
+                            p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase) &&
+                            p.TransmissionState != "DELETED" &&
+                            p.TelegramMessageId.HasValue);
                         msgId = record?.TelegramMessageId;
                     }
-                    decisions.Add(updateDecision with { TelegramMessageId = msgId, TargetHash = pkg.Content });
+                    if (!msgId.HasValue)
+                    {
+                        // If no active message_id exists to update, fall back to CREATE
+                        var createFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Persistent, TerritoryIdentifier: pkg.TerritoryId, TargetHash: incomingHash), classification);
+                        decisions.Add(createFallback with { TargetHash = pkg.Content });
+                    }
+                    else
+                    {
+                        decisions.Add(updateDecision with { TelegramMessageId = msgId, TargetHash = pkg.Content });
+                    }
                 }
                 else
                 {
@@ -387,10 +400,21 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 int? techMsgId = null;
                 if (registry != null)
                 {
-                    var record = registry.Publications.FirstOrDefault(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase));
+                    var record = registry.Publications.FirstOrDefault(p => 
+                        p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
+                        p.TransmissionState != "DELETED" &&
+                        p.TelegramMessageId.HasValue);
                     techMsgId = record?.TelegramMessageId;
                 }
-                decisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
+                if (!techMsgId.HasValue)
+                {
+                    var techCreateFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: techHash), PublicationClassification.Ephemeral);
+                    decisions.Add(techCreateFallback with { TargetHash = techContent });
+                }
+                else
+                {
+                    decisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
+                }
             }
         }
 
