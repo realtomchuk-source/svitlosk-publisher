@@ -204,7 +204,7 @@ public class TelegramGraphicPublisherDispatcherTests
 
                 string contentStr = await req.Content.ReadAsStringAsync();
                 Assert.Contains("graphic_schedule.png", contentStr);
-                Assert.Contains("Старокостянтинів", contentStr);
+                Assert.Contains("#старокостянтинів", contentStr);
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -591,7 +591,8 @@ public class TelegramGraphicPublisherDispatcherTests
 
                 string contentStr = await req.Content.ReadAsStringAsync();
                 Assert.Contains("graphic_schedule.png", contentStr);
-                Assert.Contains("Старокостянтинівська МТГ", contentStr);
+                Assert.Contains("#старокостянтинів", contentStr);
+                Assert.Contains("Графік знеструмлень на", contentStr);
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {

@@ -25,7 +25,8 @@ public record GraphicOperationPayload(
     string TerritoryId,
     string ContentHash,
     byte[]? SvgBytes,
-    int? TelegramMessageId
+    int? TelegramMessageId,
+    string? ScheduleDate = null
 );
 
 public interface IGraphicPublisherDispatcher

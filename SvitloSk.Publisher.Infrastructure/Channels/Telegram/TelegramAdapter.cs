@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Orchestration;
+using SvitloSk.Publisher.Core.Engine;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 
@@ -423,7 +424,8 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(pngContent, "photo", "graphic_schedule.png");
         content.Add(new StringContent("HTML"), "parse_mode");
 
-        string caption = $"<b>ГРАФІК ЗНЕСТРУМЛЕНЬ</b>\n{payload.TerritoryId} (12 підчерг)\n#графік #старокостянтинів #svitlosk";
+        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+        string caption = $"Графік знеструмлень на {formattedDate}\n#графік #старокостянтинів #svitlosk";
         content.Add(new StringContent(caption), "caption");
 
         return await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
@@ -438,7 +440,8 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(payload.ChatNameOrId), "chat_id");
         content.Add(new StringContent(payload.TelegramMessageId!.Value.ToString()), "message_id");
 
-        string caption = $"<b>ГРАФІК ЗНЕСТРУМЛЕНЬ</b>\n{payload.TerritoryId} (12 підчерг)\n#графік #старокостянтинів #svitlosk";
+        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+        string caption = $"Графік знеструмлень на {formattedDate}\n#графік #старокостянтинів #svitlosk";
 
         var mediaObj = new
         {

@@ -507,7 +507,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                         graphicScope,
                         graphicHash,
                         svgBytes,
-                        existingMsgId
+                        existingMsgId,
+                        input.GraphicPackage.Metadata.TargetDate
                     );
 
                     var gResult = await _graphicDispatcher.DispatchGraphicAsync(payload, cancellationToken).ConfigureAwait(false);
