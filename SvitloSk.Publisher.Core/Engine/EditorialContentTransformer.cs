@@ -125,39 +125,82 @@ public class EditorialContentTransformer
         if (data.EmergencyRecords != null && data.EmergencyRecords.Count > 0)
         {
             string emergTime = ExtractCommonTimeInterval(data.EmergencyRecords);
-            string emergHeader = !string.IsNullOrEmpty(emergTime) 
-                ? $"<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({emergTime})</b>" 
-                : "<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>";
-
-            sb.AppendLine($"<blockquote>{emergHeader}");
-            foreach (var rec in data.EmergencyRecords)
+            if (!string.IsNullOrEmpty(emergTime))
             {
-                string body = RenderRecordDetails(rec.Details, emergTime, data.CanonicalName);
-                if (!string.IsNullOrWhiteSpace(body))
+                sb.AppendLine($"<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({emergTime})</b>");
+                foreach (var rec in data.EmergencyRecords)
                 {
-                    sb.AppendLine(body);
+                    string body = RenderRecordDetails(rec.Details, emergTime, data.CanonicalName);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        sb.AppendLine(body);
+                    }
+                }
+                sb.AppendLine("</blockquote>");
+                sb.AppendLine();
+            }
+            else
+            {
+                // Group by interval if intervals differ
+                foreach (var rec in data.EmergencyRecords)
+                {
+                    string recTime = ExtractCommonTimeInterval(new[] { rec });
+                    string recHeader = !string.IsNullOrEmpty(recTime)
+                        ? $"<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({recTime})</b>"
+                        : "<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>";
+
+                    sb.AppendLine($"<blockquote>{recHeader}");
+                    string body = RenderRecordDetails(rec.Details, recTime, data.CanonicalName);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        sb.AppendLine(body);
+                    }
+                    sb.AppendLine("</blockquote>");
+                    sb.AppendLine();
                 }
             }
-            sb.AppendLine("</blockquote>");
-            sb.AppendLine();
         }
 
         // 2. Planned Block
         if (data.PlannedRecords != null && data.PlannedRecords.Count > 0)
         {
             string planTime = ExtractCommonTimeInterval(data.PlannedRecords);
-            string planHeader = !string.IsNullOrEmpty(planTime) 
-                ? $"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({planTime})</b>" 
-                : "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>";
-
-            sb.AppendLine(planHeader);
-            sb.AppendLine();
-            foreach (var rec in data.PlannedRecords)
+            if (!string.IsNullOrEmpty(planTime))
             {
-                string body = RenderRecordDetails(rec.Details, planTime, data.CanonicalName);
-                if (!string.IsNullOrWhiteSpace(body))
+                sb.AppendLine($"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({planTime})</b>");
+                sb.AppendLine();
+                foreach (var rec in data.PlannedRecords)
                 {
-                    sb.AppendLine(body);
+                    string body = RenderRecordDetails(rec.Details, planTime, data.CanonicalName);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        sb.AppendLine(body);
+                    }
+                }
+            }
+            else
+            {
+                // Multiple distinct time groups: render repeated block headers per time group separated by empty line
+                for (int i = 0; i < data.PlannedRecords.Count; i++)
+                {
+                    var rec = data.PlannedRecords[i];
+                    string recTime = ExtractCommonTimeInterval(new[] { rec });
+                    string recHeader = !string.IsNullOrEmpty(recTime)
+                        ? $"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({recTime})</b>"
+                        : "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>";
+
+                    if (i > 0)
+                    {
+                        sb.AppendLine();
+                    }
+                    sb.AppendLine(recHeader);
+                    sb.AppendLine();
+
+                    string body = RenderRecordDetails(rec.Details, recTime, data.CanonicalName);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        sb.AppendLine(body);
+                    }
                 }
             }
         }
@@ -272,14 +315,6 @@ public class EditorialContentTransformer
                     else
                     {
                         sb.AppendLine($"<b>{settlement}</b>");
-                    }
-                }
-                else
-                {
-                    // For city header omission: if there is no common interval in block header, output time interval
-                    if (!string.IsNullOrEmpty(interval) && (string.IsNullOrEmpty(commonTimeInterval) || !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        sb.AppendLine($"Час: {interval}");
                     }
                 }
                 continue;
