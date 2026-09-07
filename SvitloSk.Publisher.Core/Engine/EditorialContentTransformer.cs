@@ -124,33 +124,32 @@ public class EditorialContentTransformer
         // 1. Emergency Block (Rendered inside <blockquote>)
         if (data.EmergencyRecords != null && data.EmergencyRecords.Count > 0)
         {
-            string emergTime = ExtractCommonTimeInterval(data.EmergencyRecords);
-            if (!string.IsNullOrEmpty(emergTime))
+            var emergBlocks = SplitIntoIntervalBlocks(data.EmergencyRecords);
+            string emergCommonTime = emergBlocks.Count == 1 ? emergBlocks[0].TimeInterval : string.Empty;
+
+            if (!string.IsNullOrEmpty(emergCommonTime))
             {
-                sb.AppendLine($"<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({emergTime})</b>");
-                foreach (var rec in data.EmergencyRecords)
+                sb.AppendLine($"<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({emergCommonTime})</b>");
+                string body = RenderSubBlockDetails(emergBlocks[0].Lines, emergCommonTime, data.CanonicalName);
+                if (!string.IsNullOrWhiteSpace(body))
                 {
-                    string body = RenderRecordDetails(rec.Details, emergTime, data.CanonicalName);
-                    if (!string.IsNullOrWhiteSpace(body))
-                    {
-                        sb.AppendLine(body);
-                    }
+                    sb.AppendLine(body);
                 }
                 sb.AppendLine("</blockquote>");
                 sb.AppendLine();
             }
             else
             {
-                // Group by interval if intervals differ
-                foreach (var rec in data.EmergencyRecords)
+                // Render repeated block headers per time interval group
+                for (int i = 0; i < emergBlocks.Count; i++)
                 {
-                    string recTime = ExtractCommonTimeInterval(new[] { rec });
-                    string recHeader = !string.IsNullOrEmpty(recTime)
-                        ? $"<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({recTime})</b>"
+                    var block = emergBlocks[i];
+                    string recHeader = !string.IsNullOrEmpty(block.TimeInterval)
+                        ? $"<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ ({block.TimeInterval})</b>"
                         : "<b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>";
 
                     sb.AppendLine($"<blockquote>{recHeader}");
-                    string body = RenderRecordDetails(rec.Details, recTime, data.CanonicalName);
+                    string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName);
                     if (!string.IsNullOrWhiteSpace(body))
                     {
                         sb.AppendLine(body);
@@ -164,29 +163,27 @@ public class EditorialContentTransformer
         // 2. Planned Block
         if (data.PlannedRecords != null && data.PlannedRecords.Count > 0)
         {
-            string planTime = ExtractCommonTimeInterval(data.PlannedRecords);
-            if (!string.IsNullOrEmpty(planTime))
+            var planBlocks = SplitIntoIntervalBlocks(data.PlannedRecords);
+            string planCommonTime = planBlocks.Count == 1 ? planBlocks[0].TimeInterval : string.Empty;
+
+            if (!string.IsNullOrEmpty(planCommonTime))
             {
-                sb.AppendLine($"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({planTime})</b>");
+                sb.AppendLine($"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({planCommonTime})</b>");
                 sb.AppendLine();
-                foreach (var rec in data.PlannedRecords)
+                string body = RenderSubBlockDetails(planBlocks[0].Lines, planCommonTime, data.CanonicalName);
+                if (!string.IsNullOrWhiteSpace(body))
                 {
-                    string body = RenderRecordDetails(rec.Details, planTime, data.CanonicalName);
-                    if (!string.IsNullOrWhiteSpace(body))
-                    {
-                        sb.AppendLine(body);
-                    }
+                    sb.AppendLine(body);
                 }
             }
             else
             {
                 // Multiple distinct time groups: render repeated block headers per time group separated by empty line
-                for (int i = 0; i < data.PlannedRecords.Count; i++)
+                for (int i = 0; i < planBlocks.Count; i++)
                 {
-                    var rec = data.PlannedRecords[i];
-                    string recTime = ExtractCommonTimeInterval(new[] { rec });
-                    string recHeader = !string.IsNullOrEmpty(recTime)
-                        ? $"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({recTime})</b>"
+                    var block = planBlocks[i];
+                    string recHeader = !string.IsNullOrEmpty(block.TimeInterval)
+                        ? $"<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ({block.TimeInterval})</b>"
                         : "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</b>";
 
                     if (i > 0)
@@ -196,7 +193,7 @@ public class EditorialContentTransformer
                     sb.AppendLine(recHeader);
                     sb.AppendLine();
 
-                    string body = RenderRecordDetails(rec.Details, recTime, data.CanonicalName);
+                    string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName);
                     if (!string.IsNullOrWhiteSpace(body))
                     {
                         sb.AppendLine(body);
@@ -209,35 +206,64 @@ public class EditorialContentTransformer
         return output.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
-    private string ExtractCommonTimeInterval(IReadOnlyList<OutageRecord> records)
+    private class IntervalSubBlock
     {
-        var intervals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public string TimeInterval { get; set; } = string.Empty;
+        public List<string> Lines { get; set; } = new List<string>();
+    }
+
+    private List<IntervalSubBlock> SplitIntoIntervalBlocks(IReadOnlyList<OutageRecord> records)
+    {
+        var result = new List<IntervalSubBlock>();
+        IntervalSubBlock? currentBlock = null;
+
         foreach (var rec in records)
         {
             if (string.IsNullOrWhiteSpace(rec.Details)) continue;
             var lines = rec.Details.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
             foreach (var line in lines)
             {
                 var settlementMatch = Regex.Match(line, @"^(?:с\.|м\.|селище).*?\|\s*(.*)$", RegexOptions.IgnoreCase);
                 if (settlementMatch.Success)
                 {
-                    string shortRange = FormatTimeIntervalToShortRange(settlementMatch.Groups[1].Value.Trim());
-                    if (!string.IsNullOrEmpty(shortRange))
-                    {
-                        intervals.Add(shortRange);
-                    }
+                    string interval = FormatTimeIntervalToShortRange(settlementMatch.Groups[1].Value.Trim());
+                    currentBlock = new IntervalSubBlock { TimeInterval = interval };
+                    currentBlock.Lines.Add(line);
+                    result.Add(currentBlock);
                 }
                 else
                 {
-                    var timeMatch = Regex.Match(line.Trim(), @"^(?:з\s*)?(\d{2}:\d{2})\s*(?:по|до|-|–)\s*(\d{2}:\d{2})", RegexOptions.IgnoreCase);
-                    if (timeMatch.Success)
+                    if (currentBlock == null)
                     {
-                        intervals.Add($"{timeMatch.Groups[1].Value}–{timeMatch.Groups[2].Value}");
+                        var timeMatch = Regex.Match(line.Trim(), @"^(?:з\s*)?(\d{2}:\d{2})\s*(?:по|до|-|–)\s*(\d{2}:\d{2})", RegexOptions.IgnoreCase);
+                        string interval = timeMatch.Success ? $"{timeMatch.Groups[1].Value}–{timeMatch.Groups[2].Value}" : string.Empty;
+                        currentBlock = new IntervalSubBlock { TimeInterval = interval };
+                        result.Add(currentBlock);
                     }
+                    currentBlock.Lines.Add(line);
                 }
             }
         }
 
+        if (result.Count == 0 && records.Count > 0)
+        {
+            result.Add(new IntervalSubBlock());
+        }
+
+        return result;
+    }
+
+    private string RenderSubBlockDetails(IEnumerable<string> lines, string? commonTimeInterval, string? canonicalTerritoryName)
+    {
+        string raw = string.Join("\n", lines);
+        return RenderRecordDetails(raw, commonTimeInterval, canonicalTerritoryName);
+    }
+
+    private string ExtractCommonTimeInterval(IReadOnlyList<OutageRecord> records)
+    {
+        var blocks = SplitIntoIntervalBlocks(records);
+        var intervals = blocks.Select(b => b.TimeInterval).Where(t => !string.IsNullOrEmpty(t)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return intervals.Count == 1 ? intervals.First() : string.Empty;
     }
 

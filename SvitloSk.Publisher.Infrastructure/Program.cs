@@ -493,16 +493,28 @@ public static class Program
 
             if (!isDryRun)
             {
+                // Priority 1: Check if tomorrow's graphic schedule JSON is published (e.g. evening publication)
+                string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
                 try
                 {
-                    string onlineGraphicUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
-                    Console.WriteLine($"[INFO] Fetching graphic schedule JSON from {onlineGraphicUrl}...");
-                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicUrl, cts.Token).ConfigureAwait(false);
-                    Console.WriteLine("[INFO] Successfully fetched graphic schedule JSON online.");
+                    Console.WriteLine($"[INFO] Fetching graphic schedule JSON for tomorrow from {onlineGraphicTomorrowUrl}...");
+                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cts.Token).ConfigureAwait(false);
+                    Console.WriteLine($"[INFO] Successfully fetched tomorrow's graphic schedule JSON ({tomorrowLabel}).");
                 }
-                catch (Exception gEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[INFO] Online graphic JSON for {editionDate} is not published ({gEx.Message}). Graphic schedule skipped.");
+                    // Priority 2: Fallback to today's graphic schedule JSON
+                    string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
+                    try
+                    {
+                        Console.WriteLine($"[INFO] Tomorrow's graphic not found. Checking today's graphic schedule from {onlineGraphicTodayUrl}...");
+                        graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cts.Token).ConfigureAwait(false);
+                        Console.WriteLine($"[INFO] Successfully fetched today's graphic schedule JSON ({editionDate}).");
+                    }
+                    catch (Exception gEx)
+                    {
+                        Console.WriteLine($"[INFO] Online graphic JSON for {tomorrowLabel} / {editionDate} is not published ({gEx.Message}). Graphic schedule skipped.");
+                    }
                 }
             }
             else
