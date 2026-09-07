@@ -502,12 +502,7 @@ public static class Program
                 }
                 catch (Exception gEx)
                 {
-                    Console.WriteLine($"[WARN] Could not fetch online graphic JSON for {editionDate} ({gEx.Message}). Checking fallback fixture.");
-                    string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
-                    if (File.Exists(sampleFixture))
-                    {
-                        graphicJsonContent = File.ReadAllText(sampleFixture);
-                    }
+                    Console.WriteLine($"[INFO] Online graphic JSON for {editionDate} is not published ({gEx.Message}). Graphic schedule skipped.");
                 }
             }
             else
