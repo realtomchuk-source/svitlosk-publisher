@@ -474,22 +474,16 @@ public static class Program
                             packages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
                         }
                     }
-                    else
+                }
+                else if (!tomorrowFeedContent.Contains("не заплановано") && !tomorrowFeedContent.Contains("не зафіксовано"))
+                {
+                    string details = transformer.RenderRecordDetails(tomorrowFeedContent.Trim());
+                    if (!string.IsNullOrWhiteSpace(details))
                     {
-                        string formattedTomorrowEmpty = $"<b>ПРОГНОЗ НА ЗАВТРА — {EditorialContentTransformer.FormatDate(tomorrowLabel)}</b>\nСтарокостянтинівська територіальна громада\n\nВідключень електроенергії не заплановано.";
-                        packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrowEmpty, null, false));
+                        string formattedTomorrow = $"<b>ПРОГНОЗ НА ЗАВТРА — {EditorialContentTransformer.FormatDate(tomorrowLabel)}</b>\nСтарокостянтинівська територіальна громада\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{details}";
+                        packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
                     }
                 }
-                else
-                {
-                    string formattedTomorrow = $"<b>ПРОГНОЗ НА ЗАВТРА — {EditorialContentTransformer.FormatDate(tomorrowLabel)}</b>\nСтарокостянтинівська територіальна громада\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{transformer.RenderRecordDetails(tomorrowFeedContent.Trim())}";
-                    packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
-                }
-            }
-            else if (tomorrowAvailable)
-            {
-                string formattedTomorrowEmpty = $"<b>ПРОГНОЗ НА ЗАВТРА — {EditorialContentTransformer.FormatDate(tomorrowLabel)}</b>\nСтарокостянтинівська територіальна громада\n\nВідключень електроенергії не заплановано.";
-                packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrowEmpty, null, false));
             }
 
             // Ingestion of 12-subqueue graphic schedule from SvitloSk parser repository or local fixture
