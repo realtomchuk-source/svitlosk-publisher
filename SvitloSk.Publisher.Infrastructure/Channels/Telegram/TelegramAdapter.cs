@@ -125,6 +125,26 @@ public class TelegramAdapter : ITelegramAdapter
         return await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<TelegramDispatchResult> CloseCommentsAsync(
+        string discussionGroupId,
+        int channelMessageId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(discussionGroupId))
+            throw new ArgumentException("Discussion group identifier cannot be null or empty.", nameof(discussionGroupId));
+
+        // In Telegram linked discussion groups, when a post is published in the channel, Telegram auto-forwards it into the discussion group.
+        // If we delete the auto-forwarded message in the discussion group, Telegram closes the comment thread and removes the "Leave a comment" button in the channel.
+        // We attempt to delete the message in the discussion group by target ID or forwarded message reference.
+        // If the ID matches the forwarded message id or discussion thread message id, calling deleteMessage removes the discussion thread.
+        var url = $"{_baseUrl}/bot{_botToken}/deleteMessage";
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(discussionGroupId), "chat_id");
+        content.Add(new StringContent(channelMessageId.ToString()), "message_id");
+
+        return await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<TelegramDispatchResult> ExecuteRequestAsync(
         string url, 
         HttpContent content, 

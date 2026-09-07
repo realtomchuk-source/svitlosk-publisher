@@ -49,6 +49,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         string registryPath,
         string chatNameOrId,
         EditorialInput input,
+        string? discussionGroupId = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(registryPath))
@@ -423,7 +424,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        var dispatchResult = await _dispatcher.DispatchAsync(chatNameOrId, decisions, cancellationToken).ConfigureAwait(false);
+        var dispatchResult = await _dispatcher.DispatchAsync(chatNameOrId, decisions, discussionGroupId, cancellationToken).ConfigureAwait(false);
 
         if (!dispatchResult.IsSuccess)
         {

@@ -50,6 +50,15 @@ public class SequentialDispatcherTests
             if (OnDelete != null) return OnDelete(chatNameOrId, messageId, cancellationToken);
             return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
         }
+
+        public Func<string, int, CancellationToken, Task<TelegramDispatchResult>>? OnCloseComments { get; set; }
+
+        public Task<TelegramDispatchResult> CloseCommentsAsync(string discussionGroupId, int channelMessageId, CancellationToken cancellationToken = default)
+        {
+            CallSequence.Add($"CloseComments:{discussionGroupId}:{channelMessageId}");
+            if (OnCloseComments != null) return OnCloseComments(discussionGroupId, channelMessageId, cancellationToken);
+            return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
+        }
     }
 
     [Fact]
@@ -275,6 +284,39 @@ public class SequentialDispatcherTests
 
         var decisions = new[] { new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "h1") };
         
-        await Assert.ThrowsAsync<OperationCanceledException>(() => dispatcher.DispatchAsync("-100123", decisions, cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => dispatcher.DispatchAsync("-100123", decisions, null, cts.Token));
+    }
+
+    [Fact]
+    public async Task E01_T12_CreateWithDiscussionGroup_ShouldCallCloseComments()
+    {
+        var adapter = new FakeTelegramAdapter();
+        var delay = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(adapter, delay);
+
+        var decisions = new[] { new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "hash1") };
+        var result = await dispatcher.DispatchAsync("-100123", decisions, discussionGroupId: "-1009876543210");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.TotalProcessed);
+        Assert.Equal(2, adapter.CallSequence.Count);
+        Assert.Equal("Send:-100123", adapter.CallSequence[0]);
+        Assert.Equal("CloseComments:-1009876543210:12345", adapter.CallSequence[1]);
+    }
+
+    [Fact]
+    public async Task E01_T13_CloseCommentsFailure_ShouldNotFailChannelDispatch()
+    {
+        var adapter = new FakeTelegramAdapter();
+        adapter.OnCloseComments = (grp, msgId, token) => throw new InvalidOperationException("Discussion group permission denied");
+        var delay = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(adapter, delay);
+
+        var decisions = new[] { new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "staro", "hash1") };
+        var result = await dispatcher.DispatchAsync("-100123", decisions, discussionGroupId: "-1009876543210");
+
+        // Fail-Safe: Channel dispatch still succeeds
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.TotalProcessed);
     }
 }

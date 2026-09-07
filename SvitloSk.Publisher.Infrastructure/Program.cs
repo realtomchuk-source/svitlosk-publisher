@@ -67,6 +67,7 @@ public static class Program
             // 1. Load Configuration from Environment Variables
             string? botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
             string? chatNameOrId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
+            string? discussionGroupId = Environment.GetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID");
             string? registryPath = Environment.GetEnvironmentVariable("REGISTRY_PATH");
 
             // Sandbox mode safety guards
@@ -541,10 +542,10 @@ public static class Program
             );
 
             // 4. Run Orchestration
-            Console.WriteLine($"[INFO] Executing orchestration for registry '{registryPath}' and channel '{chatNameOrId}'");
+            Console.WriteLine($"[INFO] Executing orchestration for registry '{registryPath}' and channel '{chatNameOrId}' (DiscussionGroup: {discussionGroupId ?? "NONE"})");
 
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            var result = await orchestrator.RunOrchestrationAsync(registryPath, chatNameOrId, input, cts.Token).ConfigureAwait(false);
+            var result = await orchestrator.RunOrchestrationAsync(registryPath, chatNameOrId, input, discussionGroupId, cts.Token).ConfigureAwait(false);
             watch.Stop();
 
             int createCount = 0;
@@ -625,6 +626,12 @@ public class FakeTelegramDryRunAdapter : ITelegramAdapter
     public Task<TelegramDispatchResult> DeleteAsync(string chatNameOrId, int messageId, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[DryRun-Telegram] Delete message {messageId} in {chatNameOrId}");
+        return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
+    }
+
+    public Task<TelegramDispatchResult> CloseCommentsAsync(string discussionGroupId, int channelMessageId, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[DryRun-Telegram] Close comments in discussion group {discussionGroupId} for message {channelMessageId}");
         return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
     }
 }

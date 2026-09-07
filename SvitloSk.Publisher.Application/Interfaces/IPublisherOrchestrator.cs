@@ -12,5 +12,6 @@ public interface IPublisherOrchestrator
         string registryPath,
         string chatNameOrId,
         EditorialInput input,
+        string? discussionGroupId = null,
         CancellationToken cancellationToken = default);
 }

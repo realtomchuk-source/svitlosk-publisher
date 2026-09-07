@@ -22,6 +22,7 @@ public class SequentialDispatcher
     public async Task<BatchDispatchResult> DispatchAsync(
         string chatNameOrId,
         IReadOnlyList<EditorialDecision> decisions,
+        string? discussionGroupId = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(chatNameOrId))
@@ -69,6 +70,21 @@ public class SequentialDispatcher
             try
             {
                 adapterResult = await ExecuteWithRetryPolicyAsync(chatNameOrId, decision, cancellationToken).ConfigureAwait(false);
+
+                // If this was a successful CREATE for a text post and a discussionGroupId is configured,
+                // close comments by deleting the auto-forwarded message in the discussion group.
+                if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(discussionGroupId))
+                {
+                    try
+                    {
+                        await _telegramAdapter.CloseCommentsAsync(discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception closeEx) when (closeEx is not OperationCanceledException)
+                    {
+                        // Fail-safe: Comment closing error in discussion group must not break channel publishing
+                        Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
+                    }
+                }
             }
             catch (OperationCanceledException)
             {

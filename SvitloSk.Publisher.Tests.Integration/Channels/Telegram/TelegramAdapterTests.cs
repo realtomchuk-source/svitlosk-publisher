@@ -128,6 +128,31 @@ public class TelegramAdapterTests
     }
 
     [Fact]
+    public async Task D03_T14_CloseCommentsAsync_ShouldCallDeleteMessageOnDiscussionGroup()
+    {
+        var handler = new FakeHttpMessageHandler
+        {
+            HandlerFunc = req =>
+            {
+                Assert.Equal(HttpMethod.Post, req.Method);
+                Assert.Equal("/botfake-token/deleteMessage", req.RequestUri?.PathAndQuery);
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"ok\":true,\"result\":true}", Encoding.UTF8, "application/json")
+                });
+            }
+        };
+
+        using var client = new HttpClient(handler);
+        var adapter = new TelegramAdapter(client, "fake-token");
+
+        var result = await adapter.CloseCommentsAsync("-1009876543210", 7788);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
     public void Constructor_MissingBotToken_ShouldThrowArgumentException()
     {
         using var client = new HttpClient();

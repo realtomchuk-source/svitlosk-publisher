@@ -98,6 +98,11 @@ public class PublisherOrchestratorTests : IDisposable
         {
             return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
         }
+
+        public Task<TelegramDispatchResult> CloseCommentsAsync(string discussionGroupId, int channelMessageId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
+        }
     }
 
 
@@ -1712,6 +1717,20 @@ public class GraphicOrchestrationTests : IDisposable
         // Verify Zero Emojis inside SVG
         Assert.DoesNotContain("⚡", svgText);
         Assert.DoesNotContain("🚨", svgText);
+    }
+
+    [Fact]
+    public void TC_EditorialDecisionEngine_AreCommentsAllowed_OnlyGraphicPermitted()
+    {
+        var engine = new EditorialDecisionEngine();
+
+        // Comments must be allowed ONLY for Graphic schedule image
+        Assert.True(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Graphic));
+
+        // Comments must NOT be allowed for text journal, technical status, or tomorrow text
+        Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Text));
+        Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Technical));
+        Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Tomorrow));
     }
 }
 

@@ -112,7 +112,14 @@ public class EditorialDecisionEngine
     }
 
 
-    // D-08: Comment Moderation
+    // D-08: Comment Moderation & Selective Control
+    public bool AreCommentsAllowed(PublicationType type)
+    {
+        // Comments are only allowed under Graphic publications (daily schedule images).
+        // Text journal posts, emergency notices, tomorrow placeholders, and technical updates have comments closed.
+        return type == PublicationType.Graphic;
+    }
+
     public EditorialDecision EvaluateCommentModeration(bool isViolatingPolicy, Guid publicationId)
     {
         if (isViolatingPolicy)
