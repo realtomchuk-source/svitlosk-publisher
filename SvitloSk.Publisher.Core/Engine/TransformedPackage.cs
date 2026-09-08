@@ -523,6 +523,15 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
             formattedDate = parsedExact.ToString("dd.MM.yyyy");
         }
+        else
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(editionDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
+            {
+                dayOfWeekStr = GetUkrainianDayOfWeek(regexDate);
+                formattedDate = regexDate.ToString("dd.MM.yyyy");
+            }
+        }
 
         string titleText = "ЖУРНАЛ";
         double dateWidth = MeasureArial28pxWidth(formattedDate);

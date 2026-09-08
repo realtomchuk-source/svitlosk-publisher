@@ -209,7 +209,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     rawPkg.Content != null && (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
                 {
                     var parsedRecords = _parser.Parse(rawPkg.Content);
-                    var canonicalPackages = _transformer.TransformFeed(parsedRecords, $"СЬОГОДНІ — {input.EditionDate}");
+                    var canonicalPackages = _transformer.TransformFeed(parsedRecords, input.EditionDate);
                     foreach (var cPkg in canonicalPackages)
                     {
                         transformedPackages.Add(new InputTerritoryPackage(cPkg.TerritoryId, cPkg.Content, cPkg.GraphicBytes, cPkg.IsPersistent));
