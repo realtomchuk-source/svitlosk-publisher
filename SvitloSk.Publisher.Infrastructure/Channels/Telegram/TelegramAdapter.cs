@@ -136,14 +136,29 @@ public class TelegramAdapter : ITelegramAdapter
 
         // In Telegram linked discussion groups, when a post is published in the channel, Telegram auto-forwards it into the discussion group.
         // If we delete the auto-forwarded message in the discussion group, Telegram closes the comment thread and removes the "Leave a comment" button in the channel.
-        // We attempt to delete the message in the discussion group by target ID or forwarded message reference.
-        // If the ID matches the forwarded message id or discussion thread message id, calling deleteMessage removes the discussion thread.
+        // We introduce a guaranteed 1000ms delay and up to 3 retries to allow Telegram servers time to complete the forward.
         var url = $"{_baseUrl}/bot{_botToken}/deleteMessage";
-        using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(discussionGroupId), "chat_id");
-        content.Add(new StringContent(channelMessageId.ToString()), "message_id");
 
-        return await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(discussionGroupId), "chat_id");
+            content.Add(new StringContent(channelMessageId.ToString()), "message_id");
+
+            var result = await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
+            if (result.IsSuccess)
+            {
+                return result;
+            }
+        }
+
+        // Final attempt fallback
+        using var finalContent = new MultipartFormDataContent();
+        finalContent.Add(new StringContent(discussionGroupId), "chat_id");
+        finalContent.Add(new StringContent(channelMessageId.ToString()), "message_id");
+        return await ExecuteRequestAsync(url, finalContent, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TelegramDispatchResult> ExecuteRequestAsync(

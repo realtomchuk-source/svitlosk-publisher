@@ -702,6 +702,96 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.NotNull(postPlan);
         Assert.True(postPlan.TransmissionState == "SENT" || postPlan.TransmissionState == "UPDATED");
     }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_DateRollover_PreservesHistoricalPosts_DeletesEphemeralPosts_CreatesNewDayPosts()
+    {
+        var store = new FakeRegistryStore();
+        var git = new FakeGitTransport();
+        var adapter = new FakeTelegramAdapter();
+        var delay = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(adapter, delay);
+        var calculator = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var parser = new OutageFeedParser();
+        var transformer = new EditorialContentTransformer();
+        var orchestrator = new PublisherOrchestrator(store, git, calculator, decisionEngine, dispatcher, parser, transformer);
+
+        // --- DAY 1 (2026-09-07) ---
+        string rawFeedDay1 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 07.09.2026 (понеділок)\n" +
+            "============================================\n" +
+            "--- ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ---\n" +
+            "[Місто Старокостянтинів]\n" +
+            "з 08:00 по 12:00 1 черга\n" +
+            "вул. Миру 14, 16\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay1 = new EditorialInput(
+            EditionDate: "2026-09-07",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", rawFeedDay1, null, true),
+                new InputTerritoryPackage("tomorrow_starokostiantyniv", "Прогноз на завтра для міста", null, false)
+            }
+        );
+
+        var resultDay1 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay1);
+        Assert.True(resultDay1.IsSuccess);
+        Assert.NotNull(store.CurrentModel);
+        Assert.Equal("2026-09-07", store.CurrentModel.EditionDate);
+
+        // Day 1 generated 4 publications: journal_header, starokostiantyniv, system_status, tomorrow_starokostiantyniv
+        var day1City = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv");
+        var day1Tomorrow = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_starokostiantyniv");
+        Assert.NotNull(day1City);
+        Assert.NotNull(day1Tomorrow);
+        var day1CityId = day1City.PublisherArtifactId;
+
+        // --- DAY 2 (2026-09-08): Date Rollover ---
+        string rawFeedDay2 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 08.09.2026 (вівторок)\n" +
+            "============================================\n" +
+            "--- ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ---\n" +
+            "[Місто Старокостянтинів]\n" +
+            "з 10:00 по 14:00 2 черга\n" +
+            "вул. Острозького 1\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay2 = new EditorialInput(
+            EditionDate: "2026-09-08",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", rawFeedDay2, null, true)
+            }
+        );
+
+        var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay2);
+        Assert.True(resultDay2.IsSuccess);
+        Assert.NotNull(store.CurrentModel);
+        Assert.Equal("2026-09-08", store.CurrentModel.EditionDate);
+
+        // Verify that Day 1's persistent city publication was preserved in registry
+        var preservedDay1City = store.CurrentModel.Publications.FirstOrDefault(p => p.PublisherArtifactId == day1CityId);
+        Assert.NotNull(preservedDay1City);
+        Assert.Equal("SENT", preservedDay1City.TransmissionState);
+
+        // Verify that Day 2 generated a BRAND NEW publication for city with a different ArtifactId
+        var day2City = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv" && p.PublisherArtifactId != day1CityId);
+        Assert.NotNull(day2City);
+        Assert.NotEqual(day1CityId, day2City.PublisherArtifactId);
+
+        // Verify that Day 1's ephemeral tomorrow post was marked DELETED
+        var day1TomorrowPostRollover = store.CurrentModel.Publications.FirstOrDefault(p => p.PublisherArtifactId == day1Tomorrow.PublisherArtifactId);
+        Assert.NotNull(day1TomorrowPostRollover);
+        Assert.Equal("DELETED", day1TomorrowPostRollover.TransmissionState);
+    }
 }
 
 public class GraphicAssemblyTests
@@ -1732,6 +1822,7 @@ public class GraphicOrchestrationTests : IDisposable
         Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Tomorrow));
     }
 }
+
 
 
 

@@ -152,7 +152,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 if (isDateRollover)
                 {
                     // For date roll-over (Day N -> Day N+1):
-                    // 1. Ephemeral publications (Tomorrow, Technical status) must be deleted from Telegram.
+                    // 1. Ephemeral publications (Tomorrow forecasts, Technical status) must be deleted from Telegram.
                     if (!isPersistent && pubState != PublicationState.Removed && pubRecord.TelegramMessageId.HasValue)
                     {
                         rolloverCleanupDecisions.Add(new EditorialDecision(
@@ -164,20 +164,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             pubRecord.TelegramMessageId
                         ));
                     }
-                    // 2. Persistent historical TODAY publications are carried forward to the new edition, preserving message_id.
-                    if (isPersistent)
-                    {
-                        var domainPub = new Publication(
-                            pubRecord.PublisherArtifactId,
-                            pubRecord.TerritoryId,
-                            type,
-                            DateTime.UtcNow,
-                            pubRecord.ContentHash,
-                            pubState,
-                            IsPersistent: true
-                        );
-                        todayEdition.AddPublication(domainPub);
-                    }
+                    // 2. Persistent historical publications of Day N (journal_header, city/villages, graphic) remain in Telegram
+                    // and in the registry as immutable history. They are NOT added to todayEdition so that the new day (Day N+1)
+                    // creates brand new publications (CREATE) for the new edition.
                 }
                 else
                 {
@@ -630,15 +619,35 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // Keep existing records that weren't mutated in this batch
-        var processedTextTerritories = updatedPublications.Where(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase)).Select(p => p.TerritoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Keep existing records that weren't mutated in this batch.
+        // For matching date runs, we check by TerritoryId (or PublicationId) so current day records get updated.
+        // For historical publications (e.g. from previous days during date rollover), persistent records must remain intact.
         if (registry != null)
         {
+            var processedArtifactIds = updatedPublications.Select(p => p.PublisherArtifactId).ToHashSet();
+            var processedTextTerritories = updatedPublications.Where(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase)).Select(p => p.TerritoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var oldPub in registry.Publications)
             {
-                if (oldPub.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && !processedTextTerritories.Contains(oldPub.TerritoryId))
+                if (oldPub.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))
                 {
-                    updatedPublications.Add(oldPub);
+                    if (isDateRollover)
+                    {
+                        // On date rollover, keep all historical persistent records that weren't deleted
+                        bool isEphemeral = oldPub.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                                           oldPub.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase);
+                        if (!isEphemeral && oldPub.TransmissionState != "DELETED" && !processedArtifactIds.Contains(oldPub.PublisherArtifactId))
+                        {
+                            updatedPublications.Add(oldPub);
+                        }
+                    }
+                    else
+                    {
+                        if (!processedTextTerritories.Contains(oldPub.TerritoryId))
+                        {
+                            updatedPublications.Add(oldPub);
+                        }
+                    }
                 }
             }
         }
