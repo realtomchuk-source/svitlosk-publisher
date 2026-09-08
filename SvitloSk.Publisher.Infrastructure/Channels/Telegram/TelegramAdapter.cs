@@ -136,39 +136,142 @@ public class TelegramAdapter : ITelegramAdapter
 
         // In Telegram linked discussion groups, when a post is published in the channel, Telegram auto-forwards it into the discussion group.
         // If we delete the auto-forwarded message in the discussion group, Telegram closes the comment thread and removes the "Leave a comment" button in the channel.
-        // We introduce a guaranteed 1000ms delay and up to 3 retries to allow Telegram servers time to complete the forward.
-        var url = $"{_baseUrl}/bot{_botToken}/deleteMessage";
-
-        for (int attempt = 1; attempt <= 3; attempt++)
+        // Since the discussion group message has its own message_id, we fetch updates from Telegram to find the exact discussion message ID.
+        for (int attempt = 1; attempt <= 4; attempt++)
         {
-            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
 
-            using var content = new MultipartFormDataContent();
-            content.Add(new StringContent(discussionGroupId), "chat_id");
-            content.Add(new StringContent(channelMessageId.ToString()), "message_id");
-
-            var result = await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
-            if (result.IsSuccess)
+            int? discussionMsgId = await FindDiscussionMessageIdAsync(discussionGroupId, channelMessageId, cancellationToken).ConfigureAwait(false);
+            if (discussionMsgId.HasValue)
             {
-                Console.WriteLine($"[INFO] Comments successfully closed in discussion group for channel msg {channelMessageId} (attempt {attempt}).");
-                return result;
+                bool deleted = await DeleteDiscussionMessageAsync(discussionGroupId, discussionMsgId.Value, cancellationToken).ConfigureAwait(false);
+                if (deleted)
+                {
+                    Console.WriteLine($"[INFO] Comments successfully closed in discussion group (deleted discussion msg {discussionMsgId.Value} for channel msg {channelMessageId}).");
+                    return new TelegramDispatchResult(true, null, null, false);
+                }
             }
             else
             {
-                Console.WriteLine($"[DEBUG] CloseComments attempt {attempt} for msg {channelMessageId} returned: {result.ErrorDescription}");
+                Console.WriteLine($"[DEBUG] CloseComments attempt {attempt} for msg {channelMessageId}: forward not found in updates yet.");
             }
         }
 
-        // Final attempt fallback
-        using var finalContent = new MultipartFormDataContent();
-        finalContent.Add(new StringContent(discussionGroupId), "chat_id");
-        finalContent.Add(new StringContent(channelMessageId.ToString()), "message_id");
-        var finalResult = await ExecuteRequestAsync(url, finalContent, cancellationToken).ConfigureAwait(false);
-        if (!finalResult.IsSuccess)
+        // Fallback attempt with channelMessageId directly
+        bool fallbackDeleted = await DeleteDiscussionMessageAsync(discussionGroupId, channelMessageId, cancellationToken).ConfigureAwait(false);
+        if (fallbackDeleted)
         {
-            Console.WriteLine($"[WARN] CloseComments final attempt failed for msg {channelMessageId}: {finalResult.ErrorDescription}");
+            Console.WriteLine($"[INFO] Comments successfully closed via direct ID fallback for channel msg {channelMessageId}.");
+            return new TelegramDispatchResult(true, null, null, false);
         }
-        return finalResult;
+
+        Console.WriteLine($"[WARN] CloseComments could not find or delete discussion message for channel msg {channelMessageId}.");
+        return new TelegramDispatchResult(false, null, "Could not locate or delete discussion message", false);
+    }
+
+    private async Task<int?> FindDiscussionMessageIdAsync(string discussionGroupId, int channelMessageId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            string url = $"{_baseUrl}/bot{_botToken}/getUpdates?allowed_updates=[\"message\"]&limit=100";
+            using var resp = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            string body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("result", out var resultArr) || resultArr.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            int? highestUpdateId = null;
+            int? matchedDiscussionMsgId = null;
+
+            foreach (var update in resultArr.EnumerateArray())
+            {
+                if (update.TryGetProperty("update_id", out var updateIdElem))
+                {
+                    int uId = updateIdElem.GetInt32();
+                    if (!highestUpdateId.HasValue || uId > highestUpdateId.Value)
+                    {
+                        highestUpdateId = uId;
+                    }
+                }
+
+                if (update.TryGetProperty("message", out var msgElem))
+                {
+                    if (msgElem.TryGetProperty("chat", out var chatElem) && chatElem.TryGetProperty("id", out var chatIdElem))
+                    {
+                        string chatIdStr = chatIdElem.GetRawText();
+                        if (chatIdStr.Equals(discussionGroupId, StringComparison.OrdinalIgnoreCase) || 
+                            discussionGroupId.EndsWith(chatIdStr.TrimStart('-'), StringComparison.OrdinalIgnoreCase) ||
+                            chatIdStr.EndsWith(discussionGroupId.TrimStart('-'), StringComparison.OrdinalIgnoreCase))
+                        {
+                            bool isMatch = false;
+
+                            if (msgElem.TryGetProperty("forward_from_message_id", out var fwdId) && fwdId.GetInt32() == channelMessageId)
+                            {
+                                isMatch = true;
+                            }
+                            else if (msgElem.TryGetProperty("forward_origin", out var origin) && 
+                                     origin.TryGetProperty("message_id", out var origMsgId) && 
+                                     origMsgId.GetInt32() == channelMessageId)
+                            {
+                                isMatch = true;
+                            }
+
+                            if (isMatch && msgElem.TryGetProperty("message_id", out var discMsgIdElem))
+                            {
+                                matchedDiscussionMsgId = discMsgIdElem.GetInt32();
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (highestUpdateId.HasValue)
+            {
+                try
+                {
+                    _ = await _httpClient.GetAsync($"{_baseUrl}/bot{_botToken}/getUpdates?offset={highestUpdateId.Value + 1}&limit=1", cancellationToken).ConfigureAwait(false);
+                }
+                catch { }
+            }
+
+            return matchedDiscussionMsgId;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<bool> DeleteDiscussionMessageAsync(string discussionGroupId, int discussionMessageId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/bot{_botToken}/deleteMessage";
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(discussionGroupId), "chat_id");
+            content.Add(new StringContent(discussionMessageId.ToString()), "message_id");
+
+            using var resp = await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                return true;
+            }
+            string body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            Console.WriteLine($"[DEBUG] deleteMessage in discussion group returned ({resp.StatusCode}): {body}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] deleteMessage exception in discussion group: {ex.Message}");
+            return false;
+        }
     }
 
     private async Task<TelegramDispatchResult> ExecuteRequestAsync(
