@@ -524,14 +524,14 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             formattedDate = parsedExact.ToString("dd.MM.yyyy");
         }
 
-        string titleText = "ЖУРНАЛ •";
+        string titleText = "ЖУРНАЛ";
         double dateWidth = MeasureArial28pxWidth(formattedDate);
         double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
         double titleWidth = MeasureArial28pxWidth(titleText);
 
         double dateStartX = 1040 - dateWidth;
-        double dayStartX = dateStartX - 16 - dayWidth;
-        double titleStartX = dayStartX - 16 - titleWidth;
+        double dayStartX = dateStartX - 20 - dayWidth;
+        double titleStartX = dayStartX - 20 - titleWidth;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
@@ -584,14 +584,14 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             formattedDate = parsedExact.ToString("dd.MM.yyyy");
         }
 
-        string titleText = "ПРОГНОЗ НА ЗАВТРА •";
+        string titleText = "ПРОГНОЗ НА ЗАВТРА";
         double dateWidth = MeasureArial28pxWidth(formattedDate);
         double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
         double titleWidth = MeasureArial28pxWidth(titleText);
 
         double dateStartX = 1040 - dateWidth;
-        double dayStartX = dateStartX - 16 - dayWidth;
-        double titleStartX = dayStartX - 16 - titleWidth;
+        double dayStartX = dateStartX - 20 - dayWidth;
+        double titleStartX = dayStartX - 20 - titleWidth;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
