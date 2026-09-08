@@ -67,6 +67,11 @@ public record GraphicInputPackage(
     IReadOnlyList<QueueSchedule> Queues
 );
 
+public interface IGraphicRasterizer
+{
+    byte[] RasterizeSvgToPng(byte[] svgBytes, int width = 1000, int height = 650);
+}
+
 public interface IGraphicAssembly
 {
     byte[] AssembleSvg(GraphicInputPackage inputPackage);
@@ -448,6 +453,174 @@ public class GraphicAssembly : IGraphicAssembly
                 }
             }
         }
+    }
+
+    private static string EscapeXml(string? unescaped)
+    {
+        if (string.IsNullOrEmpty(unescaped)) return string.Empty;
+        return unescaped
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;")
+            .Replace("'", "&apos;");
+    }
+}
+
+public interface IBannerGraphicAssembly
+{
+    byte[] AssembleDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Попередній графік відключень електроенергії");
+}
+
+public class BannerGraphicAssembly : IBannerGraphicAssembly
+{
+    private static string GetUkrainianDayOfWeek(DateTime date)
+    {
+        return date.DayOfWeek switch
+        {
+            DayOfWeek.Monday => "ПОНЕДІЛОК",
+            DayOfWeek.Tuesday => "ВІВТОРОК",
+            DayOfWeek.Wednesday => "СЕРЕДА",
+            DayOfWeek.Thursday => "ЧЕТВЕР",
+            DayOfWeek.Friday => "П'ЯТНИЦЯ",
+            DayOfWeek.Saturday => "СУБОТА",
+            DayOfWeek.Sunday => "НЕДІЛЯ",
+            _ => ""
+        };
+    }
+
+    private static double MeasureArial28pxWidth(string text)
+    {
+        double width = 0;
+        foreach (char c in text)
+        {
+            if (c == ' ' || c == '.' || c == '•') width += 10.0;
+            else if (c == 'І' || c == 'I' || c == '1' || c == 'l') width += 11.0;
+            else if (c == 'М' || c == 'Ш' || c == 'Щ' || c == 'Ю' || c == 'W' || c == 'M' || c == 'Ж') width += 25.0;
+            else width += 20.0;
+        }
+        return width;
+    }
+
+    public byte[] AssembleDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада")
+    {
+        if (string.IsNullOrWhiteSpace(editionDate))
+            throw new ArgumentException("Edition date cannot be null or empty.", nameof(editionDate));
+
+        int canvasWidth = 1080;
+        int canvasHeight = 140;
+
+        string formattedDate = editionDate;
+        string dayOfWeekStr = "СЬОГОДНІ";
+        if (DateTime.TryParse(editionDate, out var parsedDate))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
+            formattedDate = parsedDate.ToString("dd.MM.yyyy");
+        }
+        else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
+            formattedDate = parsedExact.ToString("dd.MM.yyyy");
+        }
+
+        string titleText = "ЖУРНАЛ •";
+        double dateWidth = MeasureArial28pxWidth(formattedDate);
+        double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
+        double titleWidth = MeasureArial28pxWidth(titleText);
+
+        double dateStartX = 1040 - dateWidth;
+        double dayStartX = dateStartX - 16 - dayWidth;
+        double titleStartX = dayStartX - 16 - titleWidth;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
+        sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
+
+        // Header region with Logo & Text
+        sb.AppendLine("  <!-- Logo and Brand -->");
+        sb.AppendLine("  <g transform=\"translate(40, 38)\">");
+        sb.AppendLine($"    <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"{GraphicAssembly.OutageColor}\"/>");
+        sb.AppendLine($"    <g transform=\"translate(10, 9) scale(0.086)\">");
+        sb.AppendLine($"      <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine($"      <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine("    </g>");
+        sb.AppendLine($"    <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</tspan><tspan fill=\"{GraphicAssembly.OutageColor}\">Sk</tspan></text>");
+        sb.AppendLine("  </g>");
+
+        // Right side: Header with Orange Day and Date
+        sb.AppendLine("  <!-- Date Header -->");
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{titleStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dayStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dateStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine($"  <text x=\"1040\" y=\"96\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(territorialScope)}</text>");
+
+        // Bottom subtle border divider
+        sb.AppendLine($"  <line x1=\"0\" y1=\"139\" x2=\"{canvasWidth}\" y2=\"139\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine("</svg>");
+
+        return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    public byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Попередній графік відключень електроенергії")
+    {
+        if (string.IsNullOrWhiteSpace(tomorrowDate))
+            throw new ArgumentException("Tomorrow date cannot be null or empty.", nameof(tomorrowDate));
+
+        int canvasWidth = 1080;
+        int canvasHeight = 140;
+
+        string formattedDate = tomorrowDate;
+        string dayOfWeekStr = "ЗАВТРА";
+        if (DateTime.TryParse(tomorrowDate, out var parsedDate))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
+            formattedDate = parsedDate.ToString("dd.MM.yyyy");
+        }
+        else if (DateTime.TryParseExact(tomorrowDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
+            formattedDate = parsedExact.ToString("dd.MM.yyyy");
+        }
+
+        string titleText = "ПРОГНОЗ НА ЗАВТРА •";
+        double dateWidth = MeasureArial28pxWidth(formattedDate);
+        double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
+        double titleWidth = MeasureArial28pxWidth(titleText);
+
+        double dateStartX = 1040 - dateWidth;
+        double dayStartX = dateStartX - 16 - dayWidth;
+        double titleStartX = dayStartX - 16 - titleWidth;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
+        sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
+
+        // Header region with Logo & Text
+        sb.AppendLine("  <!-- Logo and Brand -->");
+        sb.AppendLine("  <g transform=\"translate(40, 38)\">");
+        sb.AppendLine($"    <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"{GraphicAssembly.OutageColor}\"/>");
+        sb.AppendLine($"    <g transform=\"translate(10, 9) scale(0.086)\">");
+        sb.AppendLine($"      <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine($"      <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine("    </g>");
+        sb.AppendLine($"    <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</tspan><tspan fill=\"{GraphicAssembly.OutageColor}\">Sk</tspan></text>");
+        sb.AppendLine("  </g>");
+
+        // Right side: Header with Orange Day and Tomorrow Date
+        sb.AppendLine("  <!-- Tomorrow Date Header -->");
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{titleStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dayStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dateStartX:F1}\" y=\"64\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine($"  <text x=\"1040\" y=\"96\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(subtitle)}</text>");
+
+        // Bottom subtle border divider
+        sb.AppendLine($"  <line x1=\"0\" y1=\"139\" x2=\"{canvasWidth}\" y2=\"139\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine("</svg>");
+
+        return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
     }
 
     private static string EscapeXml(string? unescaped)

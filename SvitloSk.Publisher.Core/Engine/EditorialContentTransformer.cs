@@ -9,6 +9,15 @@ namespace SvitloSk.Publisher.Core.Engine;
 
 public class EditorialContentTransformer
 {
+    private readonly IBannerGraphicAssembly _bannerAssembly;
+    private readonly IGraphicRasterizer? _rasterizer;
+
+    public EditorialContentTransformer(IBannerGraphicAssembly? bannerAssembly = null, IGraphicRasterizer? rasterizer = null)
+    {
+        _bannerAssembly = bannerAssembly ?? new BannerGraphicAssembly();
+        _rasterizer = rasterizer;
+    }
+
     public string MapTerritory(string rawTerritoryName)
     {
         return TerritoryRegistry.MapRawTerritoryName(rawTerritoryName);
@@ -58,22 +67,8 @@ public class EditorialContentTransformer
 
     public string RenderJournalHeader(string editionDate, JournalSummaryStats stats)
     {
-        string formattedDate = FormatDate(editionDate);
-        
-        // Extract day of week from date if possible
-        string dayOfWeekStr = "Сьогодні";
-        if (DateTime.TryParse(editionDate, out var dt))
-        {
-            dayOfWeekStr = GetUkrainianDayOfWeek(dt.DayOfWeek);
-        }
-        else if (DateTime.TryParseExact(formattedDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExact))
-        {
-            dayOfWeekStr = GetUkrainianDayOfWeek(dtExact.DayOfWeek);
-        }
-
         var sb = new StringBuilder();
-        sb.AppendLine($"<blockquote><b>{dayOfWeekStr} {formattedDate}</b></blockquote>");
-        sb.AppendLine("Старокостянтинівська територіальна громада");
+        sb.AppendLine("<b>Старокостянтинівська міська територіальна громада</b>");
         sb.AppendLine();
 
         if (stats.PlannedSettlements.Count > 0)
@@ -111,11 +106,6 @@ public class EditorialContentTransformer
     public string RenderAggregatedTerritoryPost(AggregatedTerritoryData data, bool isTomorrow = false, string? tomorrowDate = null)
     {
         var sb = new StringBuilder();
-
-        if (isTomorrow && !string.IsNullOrWhiteSpace(tomorrowDate))
-        {
-            sb.AppendLine($"<b>ПРОГНОЗ НА ЗАВТРА — {FormatDate(tomorrowDate)}</b>");
-        }
 
         string territoryTitle = HttpUtility.HtmlEncode(data.CanonicalName);
         sb.AppendLine($"<b>{territoryTitle}</b>");
@@ -427,10 +417,24 @@ public class EditorialContentTransformer
         if (stats.TotalTerritories > 0)
         {
             string headerContent = RenderJournalHeader(dateLabel, stats);
+            byte[]? bannerPng = null;
+            if (_rasterizer != null)
+            {
+                try
+                {
+                    byte[] svgBytes = _bannerAssembly.AssembleDayHeaderSvg(dateLabel);
+                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 140);
+                }
+                catch
+                {
+                    // Fallback to text-only if rasterization fails
+                }
+            }
+
             packages.Add(new TransformedPackage(
                 "journal_header",
                 headerContent,
-                null,
+                bannerPng,
                 true
             ));
         }

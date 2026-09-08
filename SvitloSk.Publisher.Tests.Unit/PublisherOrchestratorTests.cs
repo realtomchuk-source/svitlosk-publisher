@@ -1740,8 +1740,7 @@ public class GraphicOrchestrationTests : IDisposable
         var stats = TerritoryAggregator.CalculateSummaryStats(records);
         var header = transformer.RenderJournalHeader("2026-09-05", stats);
 
-        Assert.Contains("<blockquote><b>Субота 05.09.2026</b></blockquote>", header);
-        Assert.Contains("Старокостянтинівська територіальна громада", header);
+        Assert.Contains("Старокостянтинівська міська територіальна громада", header);
         Assert.Contains("<b>Планові знеструмлення:</b>", header);
         Assert.Contains("м. Старокостянтинів", header);
         Assert.Contains("<b>Аварійні знеструмлення:</b>", header);

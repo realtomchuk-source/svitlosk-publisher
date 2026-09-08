@@ -156,7 +156,7 @@ public class SequentialDispatcher
             {
                 case DecisionResult.Create:
                     // Create maps to SendAsync. 
-                    result = await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", null, cancellationToken).ConfigureAwait(false);
+                    result = await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case DecisionResult.Update:
@@ -164,7 +164,7 @@ public class SequentialDispatcher
                         throw new InvalidOperationException("Cannot update publication without Guid/ID identifier.");
                     if (decision.TelegramMessageId == null)
                         throw new InvalidOperationException("Cannot update publication without its Telegram message ID.");
-                    result = await _telegramAdapter.UpdateAsync(chatNameOrId, decision.TelegramMessageId.Value, decision.TargetHash ?? "Update content", null, cancellationToken).ConfigureAwait(false);
+                    result = await _telegramAdapter.UpdateAsync(chatNameOrId, decision.TelegramMessageId.Value, decision.TargetHash ?? "Update content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case DecisionResult.Delete:

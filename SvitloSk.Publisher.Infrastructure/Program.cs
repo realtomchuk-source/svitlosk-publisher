@@ -139,7 +139,9 @@ public static class Program
             var decisionEngine = new EditorialDecisionEngine();
 
             var parser = new OutageFeedParser();
-            var transformer = new EditorialContentTransformer();
+            var bannerAssembly = new BannerGraphicAssembly();
+            var rasterizer = new SvgSkiaRasterizer();
+            var transformer = new EditorialContentTransformer(bannerAssembly, rasterizer);
 
             IGraphicPublisherDispatcher? graphicDispatcher = isDryRun 
                 ? new FakeGraphicDryRunDispatcher() 
@@ -463,6 +465,23 @@ public static class Program
 
             if (tomorrowAvailable && !string.IsNullOrWhiteSpace(tomorrowFeedContent))
             {
+                // Add Tomorrow Separator Banner
+                byte[]? tomBannerPng = null;
+                try
+                {
+                    byte[] tomBannerSvg = bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
+                    tomBannerPng = rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 140);
+                }
+                catch (Exception tomEx)
+                {
+                    Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
+                }
+
+                if (tomBannerPng != null && tomBannerPng.Length > 0)
+                {
+                    packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
+                }
+
                 if (tomorrowFeedContent.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || tomorrowFeedContent.Contains("ЗНЕСТРУМЛЕННЯ"))
                 {
                     var tomRecords = parser.Parse(tomorrowFeedContent);
@@ -481,7 +500,7 @@ public static class Program
                     string details = transformer.RenderRecordDetails(tomorrowFeedContent.Trim());
                     if (!string.IsNullOrWhiteSpace(details))
                     {
-                        string formattedTomorrow = $"<b>ПРОГНОЗ НА ЗАВТРА — {EditorialContentTransformer.FormatDate(tomorrowLabel)}</b>\nСтарокостянтинівська територіальна громада\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{details}";
+                        string formattedTomorrow = $"<b>Старокостянтинівська міська територіальна громада</b>\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{details}";
                         packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
                     }
                 }

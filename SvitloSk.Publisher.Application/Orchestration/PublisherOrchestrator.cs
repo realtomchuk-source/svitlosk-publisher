@@ -197,8 +197,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     return new BatchDispatchResult(false, 0, 0, "Svitlovodsk stub packages are prohibited in production pipelines.", Array.Empty<DispatchResultRecord>());
                 }
 
-                // If content is empty/whitespace, treat as invalid
-                if (string.IsNullOrWhiteSpace(rawPkg.Content))
+                // If content is empty/whitespace AND no graphic bytes, treat as invalid
+                if (string.IsNullOrWhiteSpace(rawPkg.Content) && (rawPkg.GraphicBytes == null || rawPkg.GraphicBytes.Length == 0))
                 {
                     continue;
                 }
@@ -206,7 +206,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 // Check if it's the raw today.txt feed content containing our outages structure.
                 // We run it through the parser to identify districts and queues.
                 if (!rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) && 
-                    (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
+                    rawPkg.Content != null && (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
                 {
                     var parsedRecords = _parser.Parse(rawPkg.Content);
                     var canonicalPackages = _transformer.TransformFeed(parsedRecords, $"СЬОГОДНІ — {input.EditionDate}");
@@ -250,7 +250,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
             else
             {
-                return new BatchDispatchResult(true, 0, 0, "NO_INPUT: No valid outage records found or parsed. Orchestration skipped.", Array.Empty<DispatchResultRecord>());
+                // Both feed and registry are empty
+                return new BatchDispatchResult(true, 0, 0, null, Array.Empty<DispatchResultRecord>());
             }
         }
 
@@ -258,15 +259,21 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         // Update the input packages with the transformed packages
         input = input with { Packages = transformedPackages };
 
-        // 3. Compute Decisions
+        // 3. Build Editorial Decisions for Today's Territorial Publications
         var decisions = new List<EditorialDecision>();
 
-        // Decision D-01: Edition Opening
-        var openDecision = _decisionEngine.EvaluateEditionOpening(registry == null ? null : todayEdition);
-        if (openDecision.DecisionResult == DecisionResult.Open)
+        // Prepend Rollover Cleanup Decisions (Delete yesterday's ephemeral publications)
+        decisions.AddRange(rolloverCleanupDecisions);
+
+        // Track seen territories to reject duplicates within the same batch (TC-F14.4)
+        var seenTerritories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pkg in transformedPackages)
         {
-            decisions.Add(openDecision);
-            todayEdition.TransitionTo(EditionState.Active);
+            if (!seenTerritories.Add(pkg.TerritoryId))
+            {
+                // Duplicate territory payload within the same incoming batch is forbidden
+                return new BatchDispatchResult(false, 0, 0, $"Duplicate territory '{pkg.TerritoryId}' in input package batch is prohibited.", Array.Empty<DispatchResultRecord>());
+            }
         }
 
         // Map existing publications by Territory ID for quick lookup (safely handle duplicates if any are reloaded from history/registry)
@@ -277,7 +284,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
 
         // Process each incoming territory package
-        foreach (var pkg in input.Packages)
+        foreach (var pkg in transformedPackages)
         {
             string incomingHash = _hashCalculator.ComputeHash(pkg.Content, pkg.GraphicBytes);
             existingPubs.TryGetValue(pkg.TerritoryId, out var existing);
@@ -290,7 +297,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             var createDecision = _decisionEngine.EvaluatePublicationCreation(validity, classification);
             if (createDecision.DecisionResult == DecisionResult.Create)
             {
-                decisions.Add(createDecision with { TargetHash = pkg.Content });
+                decisions.Add(createDecision with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
             }
             else
             {
@@ -313,11 +320,11 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     {
                         // If no active message_id exists to update, fall back to CREATE
                         var createFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Persistent, TerritoryIdentifier: pkg.TerritoryId, TargetHash: incomingHash), classification);
-                        decisions.Add(createFallback with { TargetHash = pkg.Content });
+                        decisions.Add(createFallback with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
                     }
                     else
                     {
-                        decisions.Add(updateDecision with { TelegramMessageId = msgId, TargetHash = pkg.Content });
+                        decisions.Add(updateDecision with { TelegramMessageId = msgId, TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
                     }
                 }
                 else
@@ -332,7 +339,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             var record = registry.Publications.FirstOrDefault(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase));
                             msgId = record?.TelegramMessageId;
                         }
-                        decisions.Add(removeDecision with { TelegramMessageId = msgId });
+                        decisions.Add(removeDecision with { TelegramMessageId = msgId, GraphicBytes = pkg.GraphicBytes });
                     }
                 }
             }

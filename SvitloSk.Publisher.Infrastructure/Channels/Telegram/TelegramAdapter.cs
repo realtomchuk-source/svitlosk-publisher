@@ -378,11 +378,6 @@ public class TelegramAdapter : ITelegramAdapter
     }
 }
 
-public interface IGraphicRasterizer
-{
-    byte[] RasterizeSvgToPng(byte[] svgBytes, int width = 1000, int height = 650);
-}
-
 public class SvgSkiaRasterizer : IGraphicRasterizer
 {
     public byte[] RasterizeSvgToPng(byte[] svgBytes, int width = 1000, int height = 650)
