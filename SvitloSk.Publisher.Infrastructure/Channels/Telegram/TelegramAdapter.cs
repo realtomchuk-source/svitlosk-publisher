@@ -150,7 +150,12 @@ public class TelegramAdapter : ITelegramAdapter
             var result = await ExecuteRequestAsync(url, content, cancellationToken).ConfigureAwait(false);
             if (result.IsSuccess)
             {
+                Console.WriteLine($"[INFO] Comments successfully closed in discussion group for channel msg {channelMessageId} (attempt {attempt}).");
                 return result;
+            }
+            else
+            {
+                Console.WriteLine($"[DEBUG] CloseComments attempt {attempt} for msg {channelMessageId} returned: {result.ErrorDescription}");
             }
         }
 
@@ -158,7 +163,12 @@ public class TelegramAdapter : ITelegramAdapter
         using var finalContent = new MultipartFormDataContent();
         finalContent.Add(new StringContent(discussionGroupId), "chat_id");
         finalContent.Add(new StringContent(channelMessageId.ToString()), "message_id");
-        return await ExecuteRequestAsync(url, finalContent, cancellationToken).ConfigureAwait(false);
+        var finalResult = await ExecuteRequestAsync(url, finalContent, cancellationToken).ConfigureAwait(false);
+        if (!finalResult.IsSuccess)
+        {
+            Console.WriteLine($"[WARN] CloseComments final attempt failed for msg {channelMessageId}: {finalResult.ErrorDescription}");
+        }
+        return finalResult;
     }
 
     private async Task<TelegramDispatchResult> ExecuteRequestAsync(
