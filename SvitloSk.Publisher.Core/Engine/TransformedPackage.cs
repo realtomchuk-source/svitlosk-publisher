@@ -534,36 +534,34 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         }
 
         string titleText = "ЖУРНАЛ";
-        double dateWidth = MeasureArial28pxWidth(formattedDate);
-        double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
-        double titleWidth = MeasureArial28pxWidth(titleText);
-
-        double dateStartX = 1040 - dateWidth;
-        double dayStartX = dateStartX - 20 - dayWidth;
-        double titleStartX = dayStartX - 20 - titleWidth;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Header region with Logo & Text centered vertically
-        sb.AppendLine("  <!-- Logo and Brand -->");
-        sb.AppendLine("  <g transform=\"translate(40, 108)\">");
-        sb.AppendLine($"    <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"{GraphicAssembly.OutageColor}\"/>");
-        sb.AppendLine($"    <g transform=\"translate(10, 9) scale(0.086)\">");
+        // Brand Stack (Left centered within safe margin x=140..260)
+        sb.AppendLine("  <!-- Vertical Brand Stack -->");
+        sb.AppendLine("  <g transform=\"translate(160, 50)\">");
+        sb.AppendLine($"    <rect width=\"80\" height=\"80\" rx=\"20\" fill=\"{GraphicAssembly.OutageColor}\"/>");
+        sb.AppendLine($"    <g transform=\"translate(13, 11) scale(0.106)\">");
         sb.AppendLine($"      <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine($"      <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine("    </g>");
-        sb.AppendLine($"    <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</tspan><tspan fill=\"{GraphicAssembly.OutageColor}\">Sk</tspan></text>");
+        sb.AppendLine($"    <text x=\"2\" y=\"122\" font-family=\"Arial, sans-serif\" font-size=\"27\" font-weight=\"900\" letter-spacing=\"-0.5\" fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</text>");
+        sb.AppendLine($"    <text x=\"74\" y=\"122\" font-family=\"Arial, sans-serif\" font-size=\"27\" font-weight=\"900\" letter-spacing=\"-0.5\" fill=\"{GraphicAssembly.OutageColor}\">Sk</text>");
         sb.AppendLine("  </g>");
 
-        // Right side: Header with Orange Day and Date
-        sb.AppendLine("  <!-- Date Header -->");
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{titleStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dayStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dateStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
-        sb.AppendLine($"  <text x=\"1040\" y=\"166\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(territorialScope)}</text>");
+        // Info Block (Stacked 2-line layout, right-aligned to safe x=920)
+        double dateWidth = MeasureArial28pxWidth(formattedDate);
+        double dateX = 920;
+        double dayX = dateX - dateWidth - 18;
+
+        sb.AppendLine("  <!-- Info Block -->");
+        sb.AppendLine($"  <text x=\"920\" y=\"100\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"900\" letter-spacing=\"1\" text-anchor=\"end\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dayX:F1}\" y=\"150\" font-family=\"Arial, sans-serif\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dateX:F1}\" y=\"150\" font-family=\"Arial, sans-serif\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine($"  <text x=\"920\" y=\"190\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(territorialScope)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -572,7 +570,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    public byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Попередній графік відключень електроенергії")
+    public byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Старокостянтинівська міська територіальна громада")
     {
         if (string.IsNullOrWhiteSpace(tomorrowDate))
             throw new ArgumentException("Tomorrow date cannot be null or empty.", nameof(tomorrowDate));
@@ -594,36 +592,34 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         }
 
         string titleText = "ПРОГНОЗ НА ЗАВТРА";
-        double dateWidth = MeasureArial28pxWidth(formattedDate);
-        double dayWidth = MeasureArial28pxWidth(dayOfWeekStr);
-        double titleWidth = MeasureArial28pxWidth(titleText);
-
-        double dateStartX = 1040 - dateWidth;
-        double dayStartX = dateStartX - 20 - dayWidth;
-        double titleStartX = dayStartX - 20 - titleWidth;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Header region with Logo & Text centered vertically
-        sb.AppendLine("  <!-- Logo and Brand -->");
-        sb.AppendLine("  <g transform=\"translate(40, 108)\">");
-        sb.AppendLine($"    <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"{GraphicAssembly.OutageColor}\"/>");
-        sb.AppendLine($"    <g transform=\"translate(10, 9) scale(0.086)\">");
+        // Brand Stack (Left centered within safe margin x=160)
+        sb.AppendLine("  <!-- Vertical Brand Stack -->");
+        sb.AppendLine("  <g transform=\"translate(160, 50)\">");
+        sb.AppendLine($"    <rect width=\"80\" height=\"80\" rx=\"20\" fill=\"{GraphicAssembly.OutageColor}\"/>");
+        sb.AppendLine($"    <g transform=\"translate(13, 11) scale(0.106)\">");
         sb.AppendLine($"      <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine($"      <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine("    </g>");
-        sb.AppendLine($"    <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</tspan><tspan fill=\"{GraphicAssembly.OutageColor}\">Sk</tspan></text>");
+        sb.AppendLine($"    <text x=\"2\" y=\"122\" font-family=\"Arial, sans-serif\" font-size=\"27\" font-weight=\"900\" letter-spacing=\"-0.5\" fill=\"{GraphicAssembly.PoweredColor}\">Svitlo</text>");
+        sb.AppendLine($"    <text x=\"74\" y=\"122\" font-family=\"Arial, sans-serif\" font-size=\"27\" font-weight=\"900\" letter-spacing=\"-0.5\" fill=\"{GraphicAssembly.OutageColor}\">Sk</text>");
         sb.AppendLine("  </g>");
 
-        // Right side: Header with Orange Day and Tomorrow Date
-        sb.AppendLine("  <!-- Tomorrow Date Header -->");
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{titleStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dayStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{dateStartX:F1}\" y=\"134\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
-        sb.AppendLine($"  <text x=\"1040\" y=\"166\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(subtitle)}</text>");
+        // Info Block (Stacked 2-line layout, right-aligned to safe x=920)
+        double tomDateWidth = MeasureArial28pxWidth(formattedDate);
+        double tomDateX = 920;
+        double tomDayX = tomDateX - tomDateWidth - 18;
+
+        sb.AppendLine("  <!-- Info Block -->");
+        sb.AppendLine($"  <text x=\"920\" y=\"100\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"900\" letter-spacing=\"1\" text-anchor=\"end\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{tomDayX:F1}\" y=\"150\" font-family=\"Arial, sans-serif\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{tomDateX:F1}\" y=\"150\" font-family=\"Arial, sans-serif\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine($"  <text x=\"920\" y=\"190\" font-family=\"Arial, sans-serif\" font-size=\"18\" font-weight=\"500\" text-anchor=\"end\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(subtitle)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");

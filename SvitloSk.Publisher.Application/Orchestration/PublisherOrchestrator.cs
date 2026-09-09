@@ -349,34 +349,13 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         // Persistent territory publications that were previously published must NOT be deleted even if absent from current feed.
         // They remain untouched (retained in registry and Telegram channel).
 
-        // D-06: Tomorrow Visibility
-        var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(input.TomorrowForecastAvailable);
-        if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
-        {
-            decisions.Add(tomorrowDecision);
-        }
-        else if (registry != null)
-        {
-            // If tomorrow forecast is not available, check if we need to clean up/delete all tomorrow publications
-            foreach (var oldTom in registry.Publications.Where(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (oldTom.TransmissionState != "DELETED" && oldTom.TelegramMessageId.HasValue)
-                {
-                    decisions.Add(new EditorialDecision(
-                        DecisionResult.Delete,
-                        PublicationClassification.Ephemeral,
-                        oldTom.PublisherArtifactId,
-                        oldTom.TerritoryId,
-                        null,
-                        oldTom.TelegramMessageId
-                    ));
-                }
-            }
-        }
+        // Separate persistent decisions (today) and ephemeral decisions (tomorrow)
+        var todayDecisions = decisions.Where(d => !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
+        var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
 
         // DO-06: Technical Publication (System Update Status)
-        // Format of the system update message. Contains the update timestamp as per RULE-017.
-        // We only generate this if processing active community packages or if requested via packages.
+        // Technical publication concludes today's journal stream, before tomorrow forecast
+        var techDecisions = new List<EditorialDecision>();
         if (transformedPackages.Count > 0 || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
         {
             string techContent = _transformer.RenderSystemStatus();
@@ -388,7 +367,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             var techCreate = _decisionEngine.EvaluatePublicationCreation(techValidity, PublicationClassification.Ephemeral);
             if (techCreate.DecisionResult == DecisionResult.Create)
             {
-                decisions.Add(techCreate with { TargetHash = techContent });
+                techDecisions.Add(techCreate with { TargetHash = techContent });
             }
 
             var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
@@ -406,20 +385,55 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 if (!techMsgId.HasValue)
                 {
                     var techCreateFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: techHash), PublicationClassification.Ephemeral);
-                    decisions.Add(techCreateFallback with { TargetHash = techContent });
+                    techDecisions.Add(techCreateFallback with { TargetHash = techContent });
                 }
                 else
                 {
-                    decisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
+                    techDecisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
                 }
             }
         }
 
-        // Prepend date rollover cleanup deletes to the dispatcher decisions list
+        // D-06: Tomorrow Visibility
+        var tomorrowVisibilityDecisions = new List<EditorialDecision>();
+        var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(input.TomorrowForecastAvailable);
+        if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
+        {
+            tomorrowVisibilityDecisions.Add(tomorrowDecision);
+        }
+        else if (registry != null)
+        {
+            // If tomorrow forecast is not available, check if we need to clean up/delete all tomorrow publications
+            foreach (var oldTom in registry.Publications.Where(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (oldTom.TransmissionState != "DELETED" && oldTom.TelegramMessageId.HasValue)
+                {
+                    tomorrowVisibilityDecisions.Add(new EditorialDecision(
+                        DecisionResult.Delete,
+                        PublicationClassification.Ephemeral,
+                        oldTom.PublisherArtifactId,
+                        oldTom.TerritoryId,
+                        null,
+                        oldTom.TelegramMessageId
+                    ));
+                }
+            }
+        }
+
+        // Ordered final decisions list:
+        // 1. Rollover deletes (cleanup yesterday's ephemeral)
+        // 2. Today's journal posts & banners
+        // 3. Technical system status (monitoring status for today)
+        // 4. Tomorrow separator banner & tomorrow forecast posts
+        decisions.Clear();
         if (rolloverCleanupDecisions.Count > 0)
         {
-            decisions.InsertRange(0, rolloverCleanupDecisions);
+            decisions.AddRange(rolloverCleanupDecisions);
         }
+        decisions.AddRange(todayDecisions);
+        decisions.AddRange(techDecisions);
+        decisions.AddRange(tomorrowVisibilityDecisions);
+        decisions.AddRange(tomorrowDecisions);
 
         // 4. Dispatch Decisions
         // Registry Backup creation before executing actual Telegram mutations
