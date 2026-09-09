@@ -301,33 +301,11 @@ public class GraphicAssembly : IGraphicAssembly
         sb.AppendLine($"    <text x=\"{qrX - 16}\" y=\"{qrY + 32}\" font-family=\"Arial, sans-serif\" font-size=\"14\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PrimaryTextColor}\">Відскануй для</text>");
         sb.AppendLine($"    <text x=\"{qrX - 16}\" y=\"{qrY + 52}\" font-family=\"Arial, sans-serif\" font-size=\"14\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PrimaryTextColor}\">моніторингу знеструмлень</text>");
 
-        // QR Code Container Box
+        // QR Code Container Box & Image
+        sb.AppendLine($"    <!-- Real PWA QR Code -->");
         sb.AppendLine($"    <g id=\"pwa_qr_code\" transform=\"translate({qrX}, {qrY})\">");
         sb.AppendLine($"      <rect width=\"{qrSize}\" height=\"{qrSize}\" fill=\"#FFFFFF\" rx=\"10\" stroke=\"{TrackBorderColor}\" stroke-width=\"1.5\"/>");
-        
-        // QR Position Marker Top-Left
-        sb.AppendLine($"      <rect x=\"8\" y=\"8\" width=\"20\" height=\"20\" fill=\"{OutageColor}\" rx=\"3\"/>");
-        sb.AppendLine("      <rect x=\"11\" y=\"11\" width=\"14\" height=\"14\" fill=\"#FFFFFF\" rx=\"2\"/>");
-        sb.AppendLine($"      <rect x=\"14\" y=\"14\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-
-        // QR Position Marker Top-Right
-        sb.AppendLine($"      <rect x=\"48\" y=\"8\" width=\"20\" height=\"20\" fill=\"{OutageColor}\" rx=\"3\"/>");
-        sb.AppendLine("      <rect x=\"51\" y=\"11\" width=\"14\" height=\"14\" fill=\"#FFFFFF\" rx=\"2\"/>");
-        sb.AppendLine($"      <rect x=\"54\" y=\"14\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-
-        // QR Position Marker Bottom-Left
-        sb.AppendLine($"      <rect x=\"8\" y=\"48\" width=\"20\" height=\"20\" fill=\"{OutageColor}\" rx=\"3\"/>");
-        sb.AppendLine("      <rect x=\"11\" y=\"51\" width=\"14\" height=\"14\" fill=\"#FFFFFF\" rx=\"2\"/>");
-        sb.AppendLine($"      <rect x=\"14\" y=\"54\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-
-        // Stylized Data Pattern bits
-        sb.AppendLine($"      <rect x=\"33\" y=\"12\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"33\" y=\"26\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"18\" y=\"33\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"33\" y=\"40\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"48\" y=\"33\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"48\" y=\"48\" width=\"8\" height=\"8\" fill=\"{OutageColor}\" rx=\"1\"/>");
-        sb.AppendLine($"      <rect x=\"58\" y=\"58\" width=\"10\" height=\"10\" fill=\"{OutageColor}\" rx=\"1\"/>");
+        sb.AppendLine($"      <image href=\"data:image/png;base64,{QrCodeAsset.PwaQrBase64Png}\" x=\"4\" y=\"4\" width=\"{qrSize - 8}\" height=\"{qrSize - 8}\" preserveAspectRatio=\"xMidYMid meet\"/>");
         sb.AppendLine("    </g>");
 
         sb.AppendLine("  </g>");
