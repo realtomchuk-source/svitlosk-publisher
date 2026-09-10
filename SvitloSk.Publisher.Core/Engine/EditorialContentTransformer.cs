@@ -423,7 +423,7 @@ public class EditorialContentTransformer
                 try
                 {
                     byte[] svgBytes = _bannerAssembly.AssembleDayHeaderSvg(dateLabel);
-                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 280);
+                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 480);
                 }
                 catch
                 {

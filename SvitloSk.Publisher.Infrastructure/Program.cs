@@ -497,7 +497,7 @@ public static class Program
                     try
                     {
                         byte[] tomBannerSvg = bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
-                        tomBannerPng = rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 280);
+                        tomBannerPng = rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 480);
                     }
                     catch (Exception tomEx)
                     {

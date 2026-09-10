@@ -487,7 +487,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             throw new ArgumentException("Edition date cannot be null or empty.", nameof(editionDate));
 
         int canvasWidth = 1080;
-        int canvasHeight = 280;
+        int canvasHeight = 480;
 
         string formattedDate = editionDate;
         string dayOfWeekStr = "СЬОГОДНІ";
@@ -511,37 +511,51 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             }
         }
 
-        string titleText = "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ";
-
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Professional High-Contrast Typography Content
-        // Line 1: Main Title (ЖУРНАЛ ЗНЕСТРУМЛЕНЬ) - font size 52, extra bold
-        sb.AppendLine($"  <text x=\"70\" y=\"88\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"1\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
+        // Right-Side Background Aesthetic Circular Arcs (from Reference Design)
+        sb.AppendLine("  <!-- Background Decorative Arcs -->");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"40\" opacity=\"0.6\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
 
-        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 38, bold
-        sb.AppendLine($"  <text x=\"70\" y=\"152\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
-        
-        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.4 + 20;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{70 + dayOffset:F1}\" y=\"152\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
-
-        // Line 3: Territorial Scope inside a modern contrasting Badge Pill (Fills empty bottom space and creates strong visual anchor)
-        double badgeTextWidth = MeasureArial28pxWidth(territorialScope) * 0.78 + 36;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"70\" y=\"182\" width=\"{badgeTextWidth:F1}\" height=\"42\" rx=\"10\" fill=\"#E2E8F0\"/>"));
-        sb.AppendLine($"  <text x=\"88\" y=\"210\" font-family=\"Arial, sans-serif\" font-size=\"21\" font-weight=\"700\" fill=\"#334155\">{EscapeXml(territorialScope)}</text>");
-
-        // Right-Side Refined Outlined Orange Bulb Icon (Thinner elegant 10px stroke, scaled to ~145px)
-        sb.AppendLine("  <!-- Refined Outlined Orange Bulb -->");
-        sb.AppendLine("  <g transform=\"translate(875, 54) scale(0.33)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"11\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"11\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        // Right-Side Stylized Bulb Accent
+        sb.AppendLine("  <!-- Outlined Orange Bulb matching reference -->");
+        sb.AppendLine("  <g transform=\"translate(850, 115) scale(0.48)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
         sb.AppendLine("  </g>");
 
+        // Typography Section (Left-Aligned per Reference)
+        // 2-Line High-Impact Bold Title (ЖУРНАЛ / ЗНЕСТРУМЛЕНЬ)
+        sb.AppendLine($"  <text x=\"75\" y=\"125\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЖУРНАЛ</text>");
+        sb.AppendLine($"  <text x=\"75\" y=\"205\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЗНЕСТРУМЛЕНЬ</text>");
+
+        // Date Line with Orange Accent Vertical Pill Bar
+        sb.AppendLine($"  <rect x=\"75\" y=\"240\" width=\"12\" height=\"52\" rx=\"6\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine($"  <text x=\"105\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+        
+        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.55 + 24;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{105 + dayOffset:F1}\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
+
+        // Bottom Territory Scope Pill Badge with Location Pin Icon
+        double badgeTextWidth = MeasureArial28pxWidth(territorialScope) * 0.9 + 88;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"355\" width=\"{badgeTextWidth:F1}\" height=\"62\" rx=\"31\" fill=\"#E8EFF6\"/>"));
+        
+        // Location Pin Icon inside Pill Badge
+        sb.AppendLine("  <!-- Location Pin Icon -->");
+        sb.AppendLine("  <g transform=\"translate(98, 371)\">");
+        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\"/>");
+        sb.AppendLine($"    <line x1=\"42\" y1=\"3\" x2=\"42\" y2=\"27\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
+        sb.AppendLine("  </g>");
+        
+        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"700\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+
         // Bottom subtle border divider
-        sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
         sb.AppendLine("</svg>");
 
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
@@ -553,7 +567,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             throw new ArgumentException("Tomorrow date cannot be null or empty.", nameof(tomorrowDate));
 
         int canvasWidth = 1080;
-        int canvasHeight = 280;
+        int canvasHeight = 480;
 
         string formattedDate = tomorrowDate;
         string dayOfWeekStr = "ЗАВТРА";
@@ -568,37 +582,51 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             formattedDate = parsedExact.ToString("dd.MM.yyyy");
         }
 
-        string titleText = "ПРОГНОЗ НА ЗАВТРА";
-
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Professional High-Contrast Typography Content
-        // Line 1: Main Title (ПРОГНОЗ НА ЗАВТРА) - font size 52, extra bold
-        sb.AppendLine($"  <text x=\"70\" y=\"88\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"1\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
+        // Right-Side Background Aesthetic Circular Arcs (from Reference Design)
+        sb.AppendLine("  <!-- Background Decorative Arcs -->");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"40\" opacity=\"0.6\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
 
-        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 38, bold
-        sb.AppendLine($"  <text x=\"70\" y=\"152\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
-        
-        double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.4 + 20;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{70 + tomDayOffset:F1}\" y=\"152\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
-
-        // Line 3: Subtitle / Territorial Scope inside a modern contrasting Badge Pill
-        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 0.78 + 36;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"70\" y=\"182\" width=\"{tomBadgeTextWidth:F1}\" height=\"42\" rx=\"10\" fill=\"#E2E8F0\"/>"));
-        sb.AppendLine($"  <text x=\"88\" y=\"210\" font-family=\"Arial, sans-serif\" font-size=\"21\" font-weight=\"700\" fill=\"#334155\">{EscapeXml(subtitle)}</text>");
-
-        // Right-Side Refined Outlined Orange Bulb Icon (Thinner elegant 10px stroke, scaled to ~145px)
-        sb.AppendLine("  <!-- Refined Outlined Orange Bulb -->");
-        sb.AppendLine("  <g transform=\"translate(875, 54) scale(0.33)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"11\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"11\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        // Right-Side Stylized Bulb Accent
+        sb.AppendLine("  <!-- Outlined Orange Bulb matching reference -->");
+        sb.AppendLine("  <g transform=\"translate(850, 115) scale(0.48)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
         sb.AppendLine("  </g>");
 
+        // Typography Section (Left-Aligned per Reference)
+        // 2-Line High-Impact Bold Title (ПРОГНОЗ / НА ЗАВТРА)
+        sb.AppendLine($"  <text x=\"75\" y=\"125\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ПРОГНОЗ</text>");
+        sb.AppendLine($"  <text x=\"75\" y=\"205\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">НА ЗАВТРА</text>");
+
+        // Date Line with Orange Accent Vertical Pill Bar
+        sb.AppendLine($"  <rect x=\"75\" y=\"240\" width=\"12\" height=\"52\" rx=\"6\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
+        sb.AppendLine($"  <text x=\"105\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+        
+        double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.55 + 24;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{105 + tomDayOffset:F1}\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
+
+        // Bottom Territory Scope Pill Badge with Location Pin Icon
+        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 0.9 + 88;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"355\" width=\"{tomBadgeTextWidth:F1}\" height=\"62\" rx=\"31\" fill=\"#E8EFF6\"/>"));
+        
+        // Location Pin Icon inside Pill Badge
+        sb.AppendLine("  <!-- Location Pin Icon -->");
+        sb.AppendLine("  <g transform=\"translate(98, 371)\">");
+        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\"/>");
+        sb.AppendLine($"    <line x1=\"42\" y1=\"3\" x2=\"42\" y2=\"27\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
+        sb.AppendLine("  </g>");
+        
+        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"700\" fill=\"#2B4B6F\">{EscapeXml(subtitle)}</text>");
+
         // Bottom subtle border divider
-        sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
         sb.AppendLine("</svg>");
 
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());

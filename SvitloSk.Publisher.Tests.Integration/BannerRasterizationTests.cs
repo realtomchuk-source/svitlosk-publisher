@@ -17,7 +17,7 @@ public class BannerRasterizationTests
     {
         // 1. Day Header Banner
         byte[] daySvg = _assembly.AssembleDayHeaderSvg("2026-09-08");
-        byte[] dayPng = _rasterizer.RasterizeSvgToPng(daySvg, 1080, 280);
+        byte[] dayPng = _rasterizer.RasterizeSvgToPng(daySvg, 1080, 480);
         Assert.NotNull(dayPng);
         Assert.True(dayPng.Length > 0);
 
@@ -26,7 +26,7 @@ public class BannerRasterizationTests
 
         // 2. Tomorrow Forecast Separator Banner
         byte[] tomSvg = _assembly.AssembleTomorrowHeaderSvg("2026-09-09");
-        byte[] tomPng = _rasterizer.RasterizeSvgToPng(tomSvg, 1080, 280);
+        byte[] tomPng = _rasterizer.RasterizeSvgToPng(tomSvg, 1080, 480);
         Assert.NotNull(tomPng);
         Assert.True(tomPng.Length > 0);
 

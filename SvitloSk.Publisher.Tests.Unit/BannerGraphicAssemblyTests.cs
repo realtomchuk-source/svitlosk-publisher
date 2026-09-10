@@ -22,7 +22,8 @@ public class BannerGraphicAssemblyTests
         string svgText = Encoding.UTF8.GetString(svgBytes);
         Assert.Contains("ВІВТОРОК", svgText);
         Assert.Contains("08.09.2026", svgText);
-        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", svgText);
+        Assert.Contains("ЖУРНАЛ", svgText);
+        Assert.Contains("ЗНЕСТРУМЛЕНЬ", svgText);
     }
 
     [Fact]
@@ -36,7 +37,8 @@ public class BannerGraphicAssemblyTests
         Assert.True(svgBytes.Length > 0);
 
         string svgText = Encoding.UTF8.GetString(svgBytes);
-        Assert.Contains("ПРОГНОЗ НА ЗАВТРА", svgText);
+        Assert.Contains("ПРОГНОЗ", svgText);
+        Assert.Contains("НА ЗАВТРА", svgText);
         Assert.Contains("СЕРЕДА", svgText);
         Assert.Contains("09.09.2026", svgText);
     }
