@@ -68,8 +68,6 @@ public class EditorialContentTransformer
     public string RenderJournalHeader(string editionDate, JournalSummaryStats stats)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("<b>Старокостянтинівська міська територіальна громада</b>");
-        sb.AppendLine();
 
         if (stats.PlannedSettlements.Count > 0)
         {
