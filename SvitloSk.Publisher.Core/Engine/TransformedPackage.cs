@@ -542,17 +542,17 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{105 + dayOffset:F1}\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
         // Bottom Territory Scope Pill Badge with Location Pin Icon
-        double badgeTextWidth = MeasureArial28pxWidth(territorialScope) * 0.9 + 88;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"355\" width=\"{badgeTextWidth:F1}\" height=\"62\" rx=\"31\" fill=\"#E8EFF6\"/>"));
+        double badgeTextWidth = MeasureArial28pxWidth(territorialScope) * 1.05 + 100;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"350\" width=\"{badgeTextWidth:F1}\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>"));
         
         // Location Pin Icon inside Pill Badge
         sb.AppendLine("  <!-- Location Pin Icon -->");
-        sb.AppendLine("  <g transform=\"translate(98, 371)\">");
-        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\"/>");
-        sb.AppendLine($"    <line x1=\"42\" y1=\"3\" x2=\"42\" y2=\"27\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
+        sb.AppendLine("  <g transform=\"translate(100, 368)\">");
+        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\" transform=\"scale(0.88)\"/>");
+        sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"30\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
         sb.AppendLine("  </g>");
         
-        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"700\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        sb.AppendLine($"  <text x=\"155\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -613,17 +613,17 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{105 + tomDayOffset:F1}\" y=\"280\" font-family=\"Arial, sans-serif\" font-size=\"42\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
         // Bottom Territory Scope Pill Badge with Location Pin Icon
-        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 0.9 + 88;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"355\" width=\"{tomBadgeTextWidth:F1}\" height=\"62\" rx=\"31\" fill=\"#E8EFF6\"/>"));
+        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 1.05 + 100;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"350\" width=\"{tomBadgeTextWidth:F1}\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>"));
         
         // Location Pin Icon inside Pill Badge
         sb.AppendLine("  <!-- Location Pin Icon -->");
-        sb.AppendLine("  <g transform=\"translate(98, 371)\">");
-        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\"/>");
-        sb.AppendLine($"    <line x1=\"42\" y1=\"3\" x2=\"42\" y2=\"27\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
+        sb.AppendLine("  <g transform=\"translate(100, 368)\">");
+        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\" transform=\"scale(0.88)\"/>");
+        sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"30\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
         sb.AppendLine("  </g>");
         
-        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"700\" fill=\"#2B4B6F\">{EscapeXml(subtitle)}</text>");
+        sb.AppendLine($"  <text x=\"155\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(subtitle)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
