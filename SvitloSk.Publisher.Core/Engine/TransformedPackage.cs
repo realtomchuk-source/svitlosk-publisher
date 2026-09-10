@@ -518,26 +518,26 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Clean Minimalist Bulb Accent (No button box, clean brand orange bulb icon)
-        sb.AppendLine("  <!-- Clean Bulb Accent Icon -->");
-        sb.AppendLine("  <g transform=\"translate(80, 52) scale(0.12)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"#94A3B8\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.OutageColor}\"/>");
-        sb.AppendLine("  </g>");
+        // High-Contrast Large Typography Content (Left aligned starting from clean margin x=80)
+        // Line 1: Main Title (ЖУРНАЛ ЗНЕСТРУМЛЕНЬ) - font size 50, extra bold
+        sb.AppendLine($"  <text x=\"80\" y=\"92\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
 
-        // High-Contrast Large Typography Content
-        // Line 1: Main Title (ЖУРНАЛ ЗНЕСТРУМЛЕНЬ) - font size 48, extra bold
-        sb.AppendLine($"  <text x=\"160\" y=\"96\" font-family=\"Arial, sans-serif\" font-size=\"48\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
-
-        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 36, bold
-        sb.AppendLine($"  <text x=\"160\" y=\"164\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 38, bold
+        sb.AppendLine($"  <text x=\"80\" y=\"162\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
         
         // Calculate offset after day of week
-        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.35 + 24;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{160 + dayOffset:F1}\" y=\"164\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.4 + 24;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{80 + dayOffset:F1}\" y=\"162\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
 
         // Line 3: Territorial Scope - font size 24, medium
-        sb.AppendLine($"  <text x=\"160\" y=\"218\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"600\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(territorialScope)}</text>");
+        sb.AppendLine($"  <text x=\"80\" y=\"218\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"600\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(territorialScope)}</text>");
+
+        // Right-Side Outlined Orange Bulb Icon matching full text height (y=45..225, ~180px)
+        sb.AppendLine("  <!-- Right-Side Outlined Orange Bulb -->");
+        sb.AppendLine("  <g transform=\"translate(890, 48) scale(0.36)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"22\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"22\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine("  </g>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -574,26 +574,26 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Clean Minimalist Bulb Accent (No button box, clean brand orange bulb icon)
-        sb.AppendLine("  <!-- Clean Bulb Accent Icon -->");
-        sb.AppendLine("  <g transform=\"translate(80, 52) scale(0.12)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"#94A3B8\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"{GraphicAssembly.OutageColor}\"/>");
-        sb.AppendLine("  </g>");
+        // High-Contrast Large Typography Content (Left aligned starting from clean margin x=80)
+        // Line 1: Main Title (ПРОГНОЗ НА ЗАВТРА) - font size 50, extra bold
+        sb.AppendLine($"  <text x=\"80\" y=\"92\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
 
-        // High-Contrast Large Typography Content
-        // Line 1: Main Title (ПРОГНОЗ НА ЗАВТРА) - font size 48, extra bold
-        sb.AppendLine($"  <text x=\"160\" y=\"96\" font-family=\"Arial, sans-serif\" font-size=\"48\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(titleText)}</text>");
-
-        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 36, bold
-        sb.AppendLine($"  <text x=\"160\" y=\"164\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+        // Line 2: Day of Week (Orange) + Date (Navy/Dark slate) - font size 38, bold
+        sb.AppendLine($"  <text x=\"80\" y=\"162\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
         
         // Calculate offset after day of week
-        double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.35 + 24;
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{160 + tomDayOffset:F1}\" y=\"164\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.4 + 24;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{80 + tomDayOffset:F1}\" y=\"162\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"{GraphicAssembly.PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
 
         // Line 3: Subtitle / Scope - font size 24, medium
-        sb.AppendLine($"  <text x=\"160\" y=\"218\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"600\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(subtitle)}</text>");
+        sb.AppendLine($"  <text x=\"80\" y=\"218\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"600\" fill=\"{GraphicAssembly.MutedTextColor}\">{EscapeXml(subtitle)}</text>");
+
+        // Right-Side Outlined Orange Bulb Icon matching full text height (y=45..225, ~180px)
+        sb.AppendLine("  <!-- Right-Side Outlined Orange Bulb -->");
+        sb.AppendLine("  <g transform=\"translate(890, 48) scale(0.36)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"22\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"22\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine("  </g>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"279\" x2=\"{canvasWidth}\" y2=\"279\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
