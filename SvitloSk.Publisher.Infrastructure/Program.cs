@@ -465,22 +465,7 @@ public static class Program
 
             if (tomorrowAvailable && !string.IsNullOrWhiteSpace(tomorrowFeedContent))
             {
-                // Add Tomorrow Separator Banner
-                byte[]? tomBannerPng = null;
-                try
-                {
-                    byte[] tomBannerSvg = bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
-                    tomBannerPng = rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 280);
-                }
-                catch (Exception tomEx)
-                {
-                    Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
-                }
-
-                if (tomBannerPng != null && tomBannerPng.Length > 0)
-                {
-                    packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
-                }
+                var tomorrowTerritoryPackages = new List<InputTerritoryPackage>();
 
                 if (tomorrowFeedContent.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || tomorrowFeedContent.Contains("ЗНЕСТРУМЛЕННЯ"))
                 {
@@ -491,7 +476,7 @@ public static class Program
                         foreach (var tAgg in tomAggregated)
                         {
                             string formattedTom = transformer.RenderAggregatedTerritoryPost(tAgg, isTomorrow: true, tomorrowDate: tomorrowLabel);
-                            packages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
+                            tomorrowTerritoryPackages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
                         }
                     }
                 }
@@ -501,8 +486,30 @@ public static class Program
                     if (!string.IsNullOrWhiteSpace(details))
                     {
                         string formattedTomorrow = $"<b>Старокостянтинівська міська територіальна громада</b>\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{details}";
-                        packages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
+                        tomorrowTerritoryPackages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
                     }
+                }
+
+                // Add Tomorrow Separator Banner ONLY if there are actual tomorrow forecast posts to display
+                if (tomorrowTerritoryPackages.Count > 0)
+                {
+                    byte[]? tomBannerPng = null;
+                    try
+                    {
+                        byte[] tomBannerSvg = bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
+                        tomBannerPng = rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 280);
+                    }
+                    catch (Exception tomEx)
+                    {
+                        Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
+                    }
+
+                    if (tomBannerPng != null && tomBannerPng.Length > 0)
+                    {
+                        packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
+                    }
+
+                    packages.AddRange(tomorrowTerritoryPackages);
                 }
             }
 

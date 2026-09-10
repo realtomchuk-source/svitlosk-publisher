@@ -22,8 +22,7 @@ public class BannerGraphicAssemblyTests
         string svgText = Encoding.UTF8.GetString(svgBytes);
         Assert.Contains("ВІВТОРОК", svgText);
         Assert.Contains("08.09.2026", svgText);
-        Assert.Contains("Svitlo", svgText);
-        Assert.Contains("ЖУРНАЛ", svgText);
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", svgText);
     }
 
     [Fact]
