@@ -1,6 +1,9 @@
 ## User-specific files
 .agents/
 *.md
+!docs/*.md
+!docs/**/*.md
+!README.md
 
 ## Build outputs
 bin/
