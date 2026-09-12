@@ -794,6 +794,53 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.NotNull(day1TomorrowPostRollover);
         Assert.Equal("DELETED", day1TomorrowPostRollover.TransmissionState);
     }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_SystemStatus_RecreatedAtBottomWhenNewPostsCreated()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var fakeTelegramAdapter = new FakeTelegramAdapter();
+        var delayProvider = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(fakeTelegramAdapter, delayProvider);
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            dispatcher,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        // Pre-existing registry with an active system_status message
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-09-12",
+            Status: "ACTIVE",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", 501, "old-status-hash", "SENT", "Text")
+            }
+        );
+
+        var input = new EditorialInput(
+            EditionDate: "2026-09-12",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("journal_header", "<b>ЖУРНАЛ ЗНЕСТРУМЛЕНЬ</b>", Array.Empty<byte>(), true)
+            },
+            TomorrowForecastAvailable: false
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-1001234567890", input);
+
+        Assert.True(result.IsSuccess);
+        // Verify that system_status resulted in DELETE (of message 501) and CREATE of a new message
+        Assert.Contains(result.Results, r => r.TerritoryIdentifier == "journal_header" && r.DecisionResult == "Create");
+        Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+    }
 }
 
 public class GraphicAssemblyTests
@@ -1822,6 +1869,7 @@ public class GraphicOrchestrationTests : IDisposable
         Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Tomorrow));
     }
 }
+
 
 
 

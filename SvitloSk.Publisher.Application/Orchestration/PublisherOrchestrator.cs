@@ -364,32 +364,67 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
             var techValidity = _decisionEngine.EvaluatePublicationValidity("system_status", techHash, existingTech);
 
-            var techCreate = _decisionEngine.EvaluatePublicationCreation(techValidity, PublicationClassification.Ephemeral);
-            if (techCreate.DecisionResult == DecisionResult.Create)
+            int? techMsgId = null;
+            Guid? existingTechArtifactId = null;
+            if (registry != null)
             {
-                techDecisions.Add(techCreate with { TargetHash = techContent });
+                var record = registry.Publications.FirstOrDefault(p => 
+                    p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
+                    p.TransmissionState != "DELETED" &&
+                    p.TelegramMessageId.HasValue);
+                techMsgId = record?.TelegramMessageId;
+                existingTechArtifactId = record?.PublisherArtifactId;
             }
 
-            var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
-            if (techUpdate.DecisionResult == DecisionResult.Update)
+            // CRITICAL SEQUENCING RULE:
+            // If any today journal publication was newly created (CREATE), an existing system_status message
+            // would end up above the newly created posts if only updated in place.
+            // In that scenario, we MUST delete the old system_status from Telegram and post a new one at the very end of the stream.
+            bool anyNewJournalCreates = todayDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
+
+            if (anyNewJournalCreates && techMsgId.HasValue)
             {
-                int? techMsgId = null;
-                if (registry != null)
+                // 1. Delete previous system_status message from Telegram
+                techDecisions.Add(new EditorialDecision(
+                    DecisionResult.Delete,
+                    PublicationClassification.Ephemeral,
+                    existingTechArtifactId ?? existingTech?.PublicationId ?? Guid.NewGuid(),
+                    "system_status",
+                    null,
+                    techMsgId
+                ));
+
+                // 2. Create fresh system_status message at the bottom of the stream
+                techDecisions.Add(new EditorialDecision(
+                    DecisionResult.Create,
+                    PublicationClassification.Ephemeral,
+                    Guid.NewGuid(),
+                    "system_status",
+                    techContent
+                ));
+            }
+            else
+            {
+                var techCreate = _decisionEngine.EvaluatePublicationCreation(techValidity, PublicationClassification.Ephemeral);
+                if (techCreate.DecisionResult == DecisionResult.Create)
                 {
-                    var record = registry.Publications.FirstOrDefault(p => 
-                        p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
-                        p.TransmissionState != "DELETED" &&
-                        p.TelegramMessageId.HasValue);
-                    techMsgId = record?.TelegramMessageId;
-                }
-                if (!techMsgId.HasValue)
-                {
-                    var techCreateFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: techHash), PublicationClassification.Ephemeral);
-                    techDecisions.Add(techCreateFallback with { TargetHash = techContent });
+                    techDecisions.Add(techCreate with { TargetHash = techContent });
                 }
                 else
                 {
-                    techDecisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
+                    var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
+                    if (techUpdate.DecisionResult == DecisionResult.Update)
+                    {
+                        if (!techMsgId.HasValue)
+                        {
+                            var techCreateFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: techHash), PublicationClassification.Ephemeral);
+                            techDecisions.Add(techCreateFallback with { TargetHash = techContent });
+                        }
+                        else
+                        {
+                            techDecisions.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = techContent });
+                        }
+                    }
                 }
             }
         }

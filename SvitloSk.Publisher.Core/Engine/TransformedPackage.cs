@@ -688,7 +688,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"30\" stroke=\"#CBD5E1\" stroke-width=\"2.5\"/>");
         sb.AppendLine("  </g>");
         
-        sb.AppendLine($"  <text x=\"165\" y=\"365\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        sb.AppendLine($"  <text x=\"165\" y=\"365\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
 
         // Middle Section: 2-Column Composition (Left: Cards, Right: Concentric Rings + Sleek Bulb)
         // Right Column: Refined elegant thinner strokes (~7.5px) for both arc and bulb
