@@ -148,7 +148,9 @@ public class PublisherOrchestratorTests : IDisposable
         var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input);
         Assert.True(result.IsSuccess);
         Assert.NotNull(store.CurrentModel);
-        Assert.Equal(5, store.CurrentModel.Publications.Count(p => p.TransmissionState == "SENT" || p.TransmissionState == "UPDATED"));
+        Assert.Equal(5, store.CurrentModel.Publications.Count(p => p.TerritoryId.StartsWith("territory") && (p.TransmissionState == "SENT" || p.TransmissionState == "UPDATED")));
+        Assert.Contains(store.CurrentModel.Publications, p => p.TerritoryId == "journal_header");
+        Assert.Contains(store.CurrentModel.Publications, p => p.TerritoryId == "system_status");
     }
 
     [Fact]

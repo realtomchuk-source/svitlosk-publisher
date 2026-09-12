@@ -96,6 +96,16 @@ public class EditorialContentTransformer
         return sb.ToString().TrimEnd();
     }
 
+    public string RenderNoOutagesPost()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Планових та аварійних знеструмлень в Старокостянтинівській територіальній громаді не зафіксовано.");
+        sb.AppendLine();
+        sb.AppendLine("<b>Планові знеструмлення:</b> відсутні");
+        sb.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
+        return sb.ToString().TrimEnd();
+    }
+
     public string RenderSystemStatus()
     {
         return $"Останнє оновлення журналу: {DateTime.UtcNow.AddHours(3):HH:mm}\nСтан моніторингу: активний";
@@ -407,6 +417,28 @@ public class EditorialContentTransformer
         var packages = new List<TransformedPackage>();
         if (parsedRecords == null || parsedRecords.Count == 0)
         {
+            string headerContent = RenderNoOutagesPost();
+            byte[]? bannerPng = null;
+            if (_rasterizer != null)
+            {
+                try
+                {
+                    byte[] svgBytes = _bannerAssembly.AssembleNoOutagesSvg(dateLabel);
+                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
+                }
+                catch
+                {
+                    // Fallback to text-only if rasterization fails
+                }
+            }
+
+            packages.Add(new TransformedPackage(
+                "journal_header",
+                headerContent,
+                bannerPng,
+                true
+            ));
+
             return packages;
         }
 
@@ -422,6 +454,30 @@ public class EditorialContentTransformer
                 {
                     byte[] svgBytes = _bannerAssembly.AssembleDayHeaderSvg(dateLabel);
                     bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 480);
+                }
+                catch
+                {
+                    // Fallback to text-only if rasterization fails
+                }
+            }
+
+            packages.Add(new TransformedPackage(
+                "journal_header",
+                headerContent,
+                bannerPng,
+                true
+            ));
+        }
+        else
+        {
+            string headerContent = RenderNoOutagesPost();
+            byte[]? bannerPng = null;
+            if (_rasterizer != null)
+            {
+                try
+                {
+                    byte[] svgBytes = _bannerAssembly.AssembleNoOutagesSvg(dateLabel);
+                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
                 }
                 catch
                 {
