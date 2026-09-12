@@ -841,6 +841,57 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
         Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
     }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_SystemStatus_RecreatedAtBottomWhenPhysicallyAboveExistingPosts()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var fakeTelegramAdapter = new FakeTelegramAdapter();
+        var delayProvider = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(fakeTelegramAdapter, delayProvider);
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            dispatcher,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        string headerContent = "<b>ЖУРНАЛ ЗНЕСТРУМЛЕНЬ</b>";
+        string headerHash = new ContentHashCalculator().ComputeHash(headerContent, null);
+
+        // Pre-existing registry where system_status has msg ID 501, but journal_header has msg ID 502 (system_status is above header!)
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-09-12",
+            Status: "ACTIVE",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", 501, "old-status-hash", "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "journal_header", 502, headerHash, "SENT", "Text")
+            }
+        );
+
+        // Input with NO changes to journal_header (Decision will be KEEP / UPDATE, no CREATE)
+        var input = new EditorialInput(
+            EditionDate: "2026-09-12",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("journal_header", headerContent, Array.Empty<byte>(), true)
+            },
+            TomorrowForecastAvailable: false
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-1001234567890", input);
+
+        Assert.True(result.IsSuccess);
+        // Even without new CREATE in todayDecisions, out-of-order system_status must be DELETED and CREATED anew
+        Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+    }
 }
 
 public class GraphicAssemblyTests

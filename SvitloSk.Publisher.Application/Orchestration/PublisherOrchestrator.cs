@@ -377,12 +377,19 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
 
             // CRITICAL SEQUENCING RULE:
-            // If any today journal publication was newly created (CREATE), an existing system_status message
-            // would end up above the newly created posts if only updated in place.
-            // In that scenario, we MUST delete the old system_status from Telegram and post a new one at the very end of the stream.
+            // If any today journal publication was newly created (CREATE), OR if the existing system_status message
+            // has a TelegramMessageId smaller than any active journal publication (i.e. physically positioned above),
+            // we MUST delete the old system_status from Telegram and post a new one at the very end of the stream.
             bool anyNewJournalCreates = todayDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
+            bool isPhysicallyAboveOtherPosts = techMsgId.HasValue && registry != null && registry.Publications.Any(p =>
+                !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
+                p.TransmissionState != "DELETED" &&
+                p.TelegramMessageId.HasValue &&
+                p.TelegramMessageId.Value > techMsgId.Value);
 
-            if (anyNewJournalCreates && techMsgId.HasValue)
+            bool shouldRecreateAtTail = (anyNewJournalCreates || isPhysicallyAboveOtherPosts) && techMsgId.HasValue;
+
+            if (shouldRecreateAtTail)
             {
                 // 1. Delete previous system_status message from Telegram
                 techDecisions.Add(new EditorialDecision(
