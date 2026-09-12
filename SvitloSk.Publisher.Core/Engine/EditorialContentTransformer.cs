@@ -409,13 +409,40 @@ public class EditorialContentTransformer
 
     public List<TransformedPackage> TransformFeed(IReadOnlyList<OutageRecord> parsedRecords)
     {
-        return TransformFeed(parsedRecords, "СЬОГОДНІ");
+        return TransformFeed(parsedRecords, "СЬОГОДНІ", null);
     }
 
     public List<TransformedPackage> TransformFeed(IReadOnlyList<OutageRecord> parsedRecords, string dateLabel)
     {
+        return TransformFeed(parsedRecords, dateLabel, null);
+    }
+
+    public List<TransformedPackage> TransformFeed(IReadOnlyList<OutageRecord> parsedRecords, string dateLabel, IReadOnlyList<string>? historicalTerritoryIds)
+    {
         var packages = new List<TransformedPackage>();
-        if (parsedRecords == null || parsedRecords.Count == 0)
+
+        // Extract historical settlements if any outages were already published today (Option 1: Chronicle of the day)
+        var historicalSettlements = new List<string>();
+        if (historicalTerritoryIds != null)
+        {
+            foreach (var tid in historicalTerritoryIds)
+            {
+                var canon = TerritoryRegistry.Territories.FirstOrDefault(t => t.TerritoryId.Equals(tid, StringComparison.OrdinalIgnoreCase));
+                if (canon != null)
+                {
+                    string prefix = canon.Type == TerritoryType.CITY ? "м." : "с.";
+                    string settlementName = $"{prefix} {canon.CenterSettlement}";
+                    if (!historicalSettlements.Contains(settlementName))
+                    {
+                        historicalSettlements.Add(settlementName);
+                    }
+                }
+            }
+        }
+
+        bool hasAnyOutagesToday = (parsedRecords != null && parsedRecords.Count > 0) || historicalSettlements.Count > 0;
+
+        if (!hasAnyOutagesToday)
         {
             string headerContent = RenderNoOutagesPost();
             byte[]? bannerPng = null;
@@ -443,72 +470,67 @@ public class EditorialContentTransformer
         }
 
         // 1. Calculate Summary Stats and create journal_header as first package
-        var stats = TerritoryAggregator.CalculateSummaryStats(parsedRecords);
-        if (stats.TotalTerritories > 0)
-        {
-            string headerContent = RenderJournalHeader(dateLabel, stats);
-            byte[]? bannerPng = null;
-            if (_rasterizer != null)
-            {
-                try
-                {
-                    byte[] svgBytes = _bannerAssembly.AssembleDayHeaderSvg(dateLabel);
-                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 480);
-                }
-                catch
-                {
-                    // Fallback to text-only if rasterization fails
-                }
-            }
+        var stats = parsedRecords != null && parsedRecords.Count > 0
+            ? TerritoryAggregator.CalculateSummaryStats(parsedRecords)
+            : new JournalSummaryStats(0, Array.Empty<string>(), Array.Empty<string>());
 
-            packages.Add(new TransformedPackage(
-                "journal_header",
-                headerContent,
-                bannerPng,
-                true
-            ));
-        }
-        else
+        // Merge historical settlements into cumulative stats
+        var combinedEmergencySettlements = new List<string>(stats.EmergencySettlements);
+        foreach (var hs in historicalSettlements)
         {
-            string headerContent = RenderNoOutagesPost();
-            byte[]? bannerPng = null;
-            if (_rasterizer != null)
+            if (!combinedEmergencySettlements.Contains(hs) && !stats.PlannedSettlements.Contains(hs))
             {
-                try
-                {
-                    byte[] svgBytes = _bannerAssembly.AssembleNoOutagesSvg(dateLabel);
-                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
-                }
-                catch
-                {
-                    // Fallback to text-only if rasterization fails
-                }
+                combinedEmergencySettlements.Add(hs);
             }
-
-            packages.Add(new TransformedPackage(
-                "journal_header",
-                headerContent,
-                bannerPng,
-                true
-            ));
         }
+
+        var cumulativeStats = new JournalSummaryStats(
+            Math.Max(stats.TotalTerritories, combinedEmergencySettlements.Count + stats.PlannedSettlements.Count),
+            stats.PlannedSettlements,
+            combinedEmergencySettlements
+        );
+
+        string headerContentText = RenderJournalHeader(dateLabel, cumulativeStats);
+        byte[]? dayBannerPng = null;
+        if (_rasterizer != null)
+        {
+            try
+            {
+                byte[] svgBytes = _bannerAssembly.AssembleDayHeaderSvg(dateLabel);
+                dayBannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 480);
+            }
+            catch
+            {
+                // Fallback to text-only if rasterization fails
+            }
+        }
+
+        packages.Add(new TransformedPackage(
+            "journal_header",
+            headerContentText,
+            dayBannerPng,
+            true
+        ));
 
         // 2. Aggregate records per territory (1 post per territory)
-        var aggregatedTerritories = TerritoryAggregator.AggregateByTerritory(parsedRecords);
-        foreach (var agg in aggregatedTerritories)
+        if (parsedRecords != null && parsedRecords.Count > 0)
         {
-            string formattedContent = RenderAggregatedTerritoryPost(agg);
-
-            // Safe split if exceeding Telegram limit
-            var splitMsgs = SplitTelegramMessage(formattedContent, 3800);
-            foreach (var chunk in splitMsgs)
+            var aggregatedTerritories = TerritoryAggregator.AggregateByTerritory(parsedRecords);
+            foreach (var agg in aggregatedTerritories)
             {
-                packages.Add(new TransformedPackage(
-                    agg.TerritoryId,
-                    chunk,
-                    null,
-                    true
-                ));
+                string formattedContent = RenderAggregatedTerritoryPost(agg);
+
+                // Safe split if exceeding Telegram limit
+                var splitMsgs = SplitTelegramMessage(formattedContent, 3800);
+                foreach (var chunk in splitMsgs)
+                {
+                    packages.Add(new TransformedPackage(
+                        agg.TerritoryId,
+                        chunk,
+                        null,
+                        true
+                    ));
+                }
             }
         }
 

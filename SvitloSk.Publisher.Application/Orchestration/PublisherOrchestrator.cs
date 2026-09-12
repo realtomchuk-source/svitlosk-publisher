@@ -208,8 +208,24 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 if (!rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) && 
                     rawPkg.Content != null && (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
                 {
+                    var historicalTerritoryIds = new List<string>();
+                    if (registry != null && !isDateRollover)
+                    {
+                        foreach (var pub in registry.Publications)
+                        {
+                            if (pub.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) &&
+                                !pub.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) &&
+                                !pub.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
+                                !pub.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
+                                pub.TransmissionState != "DELETED")
+                            {
+                                historicalTerritoryIds.Add(pub.TerritoryId);
+                            }
+                        }
+                    }
+
                     var parsedRecords = _parser.Parse(rawPkg.Content);
-                    var canonicalPackages = _transformer.TransformFeed(parsedRecords, input.EditionDate);
+                    var canonicalPackages = _transformer.TransformFeed(parsedRecords, input.EditionDate, historicalTerritoryIds);
                     foreach (var cPkg in canonicalPackages)
                     {
                         transformedPackages.Add(new InputTerritoryPackage(cPkg.TerritoryId, cPkg.Content, cPkg.GraphicBytes, cPkg.IsPersistent));

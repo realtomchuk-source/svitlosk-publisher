@@ -892,6 +892,60 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
         Assert.Contains(result.Results, r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
     }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_WhenOutageFinishes_MaintainsDayHeaderAndHistoricalStats()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var fakeTelegramAdapter = new FakeTelegramAdapter();
+        var delayProvider = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(fakeTelegramAdapter, delayProvider);
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            dispatcher,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        // Pre-existing registry with rosolivetskyi published earlier today
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-09-12",
+            Status: "ACTIVE",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "journal_header", 233, "some-hash", "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "rosolivetskyi", 234, "rosolivetskyi-hash", "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", 235, "status-hash", "SENT", "Text")
+            }
+        );
+
+        // Raw feed now says "Відключень не зафіксовано" (outage ended at 16:00)
+        string emptyFeedContent = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 12.09.2026\n============================================\nВідключень не зафіксовано.\n============================================\nКІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var input = new EditorialInput(
+            EditionDate: "2026-09-12",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", emptyFeedContent, Array.Empty<byte>(), true)
+            },
+            TomorrowForecastAvailable: false
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-1001234567890", input);
+
+        Assert.True(result.IsSuccess);
+        // rosolivetskyi must NOT be deleted
+        Assert.DoesNotContain(result.Results, r => r.TerritoryIdentifier == "rosolivetskyi" && r.DecisionResult == "Delete");
+        // journal_header must still contain с. Росолівці as cumulative history
+        var journalHeaderPackage = input.Packages.FirstOrDefault(p => p.TerritoryId == "journal_header");
+        // We verify that the sent text contains с. Росолівці
+        Assert.Contains(fakeTelegramAdapter.SentTexts, t => t.Contains("с. Росолівці"));
+    }
 }
 
 public class GraphicAssemblyTests
