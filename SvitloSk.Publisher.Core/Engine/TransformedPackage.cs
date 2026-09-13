@@ -639,7 +639,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
             throw new ArgumentException("Edition date cannot be null or empty.", nameof(editionDate));
 
         int canvasWidth = 1080;
-        int canvasHeight = 1080;
+        int canvasHeight = 600;
 
         string formattedDate = editionDate;
         string dayOfWeekStr = "СЬОГОДНІ";
@@ -668,7 +668,20 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Top Typography Section
+        // Right-Side Background Aesthetic Circular Arcs (matching standard header design)
+        sb.AppendLine("  <!-- Background Decorative Arcs -->");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"40\" opacity=\"0.6\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
+
+        // Right-Side Stylized Bulb Accent
+        sb.AppendLine("  <!-- Outlined Orange Bulb matching reference -->");
+        sb.AppendLine("  <g transform=\"translate(850, 115) scale(0.48)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine("  </g>");
+
+        // Typography Section (Left-Aligned per Reference)
         sb.AppendLine($"  <text x=\"75\" y=\"115\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЖУРНАЛ</text>");
         sb.AppendLine($"  <text x=\"75\" y=\"195\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЗНЕСТРУМЛЕНЬ</text>");
 
@@ -680,63 +693,26 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
         // Territory Scope Pill Badge with Location Pin Icon
-        sb.AppendLine($"  <rect x=\"75\" y=\"320\" width=\"930\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>");
+        double badgeTextWidth = MeasureArial28pxWidth(territorialScope) * 1.05 + 100;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"340\" width=\"{badgeTextWidth:F1}\" height=\"64\" rx=\"32\" fill=\"#E8EFF6\"/>"));
         
-        sb.AppendLine("  <!-- Location Pin Icon & Centered Territory Text -->");
-        sb.AppendLine("  <g transform=\"translate(105, 338)\">");
-        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\" transform=\"scale(0.90)\"/>");
-        sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"30\" stroke=\"#CBD5E1\" stroke-width=\"2.5\"/>");
+        sb.AppendLine("  <!-- Location Pin Icon -->");
+        sb.AppendLine("  <g transform=\"translate(100, 356)\">");
+        sb.AppendLine($"    <path d=\"M14 0C6.27 0 0 6.27 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.27 21.73 0 14 0ZM14 19C11.24 19 9 16.76 9 14C9 11.24 11.24 9 14 9C16.76 9 19 11.24 19 14C19 16.76 16.76 19 14 19Z\" fill=\"#2B4B6F\" transform=\"scale(0.88)\"/>");
+        sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"30\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
         sb.AppendLine("  </g>");
         
-        sb.AppendLine($"  <text x=\"165\" y=\"365\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        sb.AppendLine($"  <text x=\"155\" y=\"382\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
 
-        // Middle Section: 2-Column Composition (Left: Cards, Right: Concentric Rings + Sleek Bulb)
-        // Right Column: Refined elegant thinner strokes (~7.5px) for both arc and bulb
-        double bulbCenterX = 770;
-        double bulbCenterY = 615;
-        double bulbScale = 0.56;
-        double bulbTransX = bulbCenterX - 256.0 * bulbScale;
-        double bulbTransY = bulbCenterY - 255.0 * bulbScale;
-
-        sb.AppendLine("  <!-- Right Column Graphic Layer -->");
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <circle cx=\"{bulbCenterX}\" cy=\"{bulbCenterY}\" r=\"210\" fill=\"#F8FAFC\" stroke=\"#E2E8F0\" stroke-width=\"12\" opacity=\"0.6\"/>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <circle cx=\"{bulbCenterX}\" cy=\"{bulbCenterY}\" r=\"175\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"7.5\" stroke-dasharray=\"350 460\" stroke-linecap=\"round\" transform=\"rotate(-35 {bulbCenterX} {bulbCenterY})\" opacity=\"0.95\"/>"));
-
-        // Compact Orange Outlined Bulb (With refined elegant stroke thickness)
-        sb.AppendLine("  <!-- Compact Sleek Orange Bulb Centered in Circle -->");
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <g transform=\"translate({bulbTransX:F1}, {bulbTransY:F1}) scale({bulbScale:F2})\">"));
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"13.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"{GraphicAssembly.PoweredColor}\" stroke-width=\"13.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine("  </g>");
-
-        // Left Column: 2 Cards with Orange Checkmarks and Exactly Equal Large Font Sizes
-        // 1. Planned Outages Card
-        sb.AppendLine("  <!-- Planned Outages Card -->");
-        sb.AppendLine("  <rect x=\"75\" y=\"430\" width=\"465\" height=\"155\" rx=\"24\" fill=\"#FFFFFF\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
-        // Orange Checkmark Circle
-        sb.AppendLine($"  <circle cx=\"116\" cy=\"475\" r=\"18\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
-        sb.AppendLine("  <path d=\"M109 475 L114 480 L124 468\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-        sb.AppendLine("  <text x=\"146\" y=\"483\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"900\" fill=\"#0F2942\" letter-spacing=\"0.3\">ПЛАНОВІ ЗНЕСТРУМЛЕННЯ</text>");
-        sb.AppendLine("  <text x=\"100\" y=\"548\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"900\" fill=\"#0F2942\" letter-spacing=\"0.5\">НЕ ЗАПЛАНОВАНО</text>");
-
-        // 2. Emergency Outages Card
-        sb.AppendLine("  <!-- Emergency Outages Card -->");
-        sb.AppendLine("  <rect x=\"75\" y=\"615\" width=\"465\" height=\"155\" rx=\"24\" fill=\"#FFFFFF\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
-        // Orange Checkmark Circle
-        sb.AppendLine($"  <circle cx=\"116\" cy=\"660\" r=\"18\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
-        sb.AppendLine("  <path d=\"M109 660 L114 665 L124 653\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-        sb.AppendLine("  <text x=\"146\" y=\"668\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"900\" fill=\"#0F2942\" letter-spacing=\"0.3\">АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</text>");
-        sb.AppendLine("  <text x=\"100\" y=\"733\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"900\" fill=\"#0F2942\" letter-spacing=\"0.5\">НЕ ЗАФІКСОВАНО</text>");
-
-        // Bottom Summary Banner: ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ (Clean single-line green banner)
+        // Bottom Status Banner: ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ
         sb.AppendLine("  <!-- Bottom Summary Banner (Green, single centered line) -->");
-        sb.AppendLine($"  <rect x=\"75\" y=\"850\" width=\"930\" height=\"120\" rx=\"24\" fill=\"#ECFDF5\" stroke=\"#A7F3D0\" stroke-width=\"2.5\"/>");
-        sb.AppendLine($"  <circle cx=\"130\" cy=\"910\" r=\"22\" fill=\"#10B981\"/>");
-        sb.AppendLine("  <path d=\"M121 910 L127 916 L139 902\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"4.0\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-        sb.AppendLine("  <text x=\"175\" y=\"924\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"900\" fill=\"#065F46\">ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ</text>");
+        sb.AppendLine($"  <rect x=\"75\" y=\"440\" width=\"930\" height=\"105\" rx=\"24\" fill=\"#ECFDF5\" stroke=\"#A7F3D0\" stroke-width=\"2.5\"/>");
+        sb.AppendLine($"  <circle cx=\"130\" cy=\"492\" r=\"22\" fill=\"#10B981\"/>");
+        sb.AppendLine("  <path d=\"M121 492 L127 498 L139 484\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"4.0\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        sb.AppendLine("  <text x=\"175\" y=\"505\" font-family=\"Arial, sans-serif\" font-size=\"36\" font-weight=\"900\" fill=\"#065F46\">ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ</text>");
 
-        // Bottom border divider
-        sb.AppendLine($"  <line x1=\"0\" y1=\"1079\" x2=\"{canvasWidth}\" y2=\"1079\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        // Bottom subtle border divider
+        sb.AppendLine($"  <line x1=\"0\" y1=\"599\" x2=\"{canvasWidth}\" y2=\"599\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
         sb.AppendLine("</svg>");
 
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());

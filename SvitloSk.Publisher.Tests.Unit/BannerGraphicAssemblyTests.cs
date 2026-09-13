@@ -57,11 +57,9 @@ public class BannerGraphicAssemblyTests
         Assert.Contains("ЖУРНАЛ", svgText);
         Assert.Contains("ЗНЕСТРУМЛЕНЬ", svgText);
         Assert.Contains("СУБОТА", svgText);
+        Assert.Contains("12.09.2026", svgText);
         Assert.Contains("ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ", svgText);
-        Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", svgText);
-        Assert.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", svgText);
-        Assert.Contains("НЕ ЗАПЛАНОВАНО", svgText);
-        Assert.Contains("НЕ ЗАФІКСОВАНО", svgText);
+        Assert.Contains("viewBox=\"0 0 1080 600\"", svgText);
     }
 
     [Fact]
@@ -74,8 +72,8 @@ public class BannerGraphicAssemblyTests
 
         Assert.Single(packages);
         Assert.Equal("journal_header", packages[0].TerritoryId);
-        Assert.Contains("Планових та аварійних знеструмлень в Старокостянтинівській територіальній громаді не зафіксовано.", packages[0].Content);
-        Assert.Contains("Планові знеструмлення:</b> відсутні", packages[0].Content);
-        Assert.Contains("Аварійні знеструмлення:</b> відсутні", packages[0].Content);
+        Assert.Contains("<b>Планові знеструмлення:</b> відсутні", packages[0].Content);
+        Assert.Contains("<b>Аварійні знеструмлення:</b> відсутні", packages[0].Content);
+        Assert.DoesNotContain("Планових та аварійних знеструмлень в Старокостянтинівській територіальній громаді не зафіксовано.", packages[0].Content);
     }
 }

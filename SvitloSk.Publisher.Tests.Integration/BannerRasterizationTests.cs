@@ -32,13 +32,13 @@ public class BannerRasterizationTests
 
         File.WriteAllBytes(Path.Combine(artifactDir, "tomorrow_banner_preview.png"), tomPng);
 
-        // 3. No Outages Square Banner (1080x1080)
+        // 3. No Outages Rectangle Banner (1080x600)
         byte[] noOutagesSvg = _assembly.AssembleNoOutagesSvg("2026-09-12");
-        byte[] noOutagesPng = _rasterizer.RasterizeSvgToPng(noOutagesSvg, 1080, 1080);
+        byte[] noOutagesPng = _rasterizer.RasterizeSvgToPng(noOutagesSvg, 1080, 600);
         Assert.NotNull(noOutagesPng);
         Assert.True(noOutagesPng.Length > 0);
 
         File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_preview.png"), noOutagesPng);
-        File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_v5.png"), noOutagesPng);
+        File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_v6_1080x600.png"), noOutagesPng);
     }
 }

@@ -99,8 +99,6 @@ public class EditorialContentTransformer
     public string RenderNoOutagesPost()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Планових та аварійних знеструмлень в Старокостянтинівській територіальній громаді не зафіксовано.");
-        sb.AppendLine();
         sb.AppendLine("<b>Планові знеструмлення:</b> відсутні");
         sb.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
         return sb.ToString().TrimEnd();
@@ -451,7 +449,7 @@ public class EditorialContentTransformer
                 try
                 {
                     byte[] svgBytes = _bannerAssembly.AssembleNoOutagesSvg(dateLabel);
-                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
+                    bannerPng = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 600);
                 }
                 catch
                 {
