@@ -135,8 +135,7 @@ public class Program
                 decisionEngine,
                 pipeline,
                 parser,
-                transformer,
-                graphicDispatcher
+                transformer
             );
 
             var diagnosticsService = new PublisherDiagnosticsService();

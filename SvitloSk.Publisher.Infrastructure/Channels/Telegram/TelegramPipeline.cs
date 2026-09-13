@@ -73,7 +73,8 @@ public class TelegramPipeline : IChannelPipeline
                     decision.DecisionResult.ToString(),
                     IsSuccess: true,
                     MessageId: null,
-                    ErrorDescription: null
+                    ErrorDescription: null,
+                    PublicationType: decision.Type.ToString()
                 ));
                 totalSuccessful++;
                 continue;
@@ -85,19 +86,26 @@ public class TelegramPipeline : IChannelPipeline
             try
             {
                 // Route Graphic schedule decisions to specialized TelegramGraphicPublisherDispatcher
-                if (decision.Type == PublicationType.Graphic && _graphicDispatcher != null)
+                if (decision.Type == PublicationType.Graphic)
                 {
-                    var graphicPayload = new GraphicOperationPayload(
-                        ChatNameOrId: _chatId,
-                        OperationType: decision.DecisionResult.ToString(),
-                        TerritoryId: decision.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
-                        ContentHash: decision.TargetHash ?? "graphic-hash",
-                        SvgBytes: decision.SvgBytes,
-                        ExternalMessageId: decision.ExternalMessageId,
-                        ScheduleDate: decision.ScheduleDate
-                    );
+                    if (_graphicDispatcher != null)
+                    {
+                        var graphicPayload = new GraphicOperationPayload(
+                            ChatNameOrId: _chatId,
+                            OperationType: decision.DecisionResult.ToString().ToUpperInvariant(),
+                            TerritoryId: decision.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
+                            ContentHash: decision.TargetHash ?? "graphic-hash",
+                            SvgBytes: decision.SvgBytes,
+                            ExternalMessageId: decision.ExternalMessageId,
+                            ScheduleDate: decision.ScheduleDate
+                        );
 
-                    adapterResult = await _graphicDispatcher.DispatchGraphicAsync(graphicPayload, cancellationToken).ConfigureAwait(false);
+                        adapterResult = await _graphicDispatcher.DispatchGraphicAsync(graphicPayload, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        adapterResult = new TelegramDispatchResult(true, decision.TelegramMessageId, null, false);
+                    }
                 }
                 else
                 {
@@ -139,7 +147,8 @@ public class TelegramPipeline : IChannelPipeline
                     decision.DecisionResult.ToString(),
                     IsSuccess: false,
                     MessageId: null,
-                    ErrorDescription: desc
+                    ErrorDescription: desc,
+                    PublicationType: decision.Type.ToString()
                 ));
                 return new BatchDispatchResult(false, totalProcessed, totalSuccessful, desc, results);
             }
@@ -150,7 +159,8 @@ public class TelegramPipeline : IChannelPipeline
                 decision.DecisionResult.ToString(),
                 adapterResult.IsSuccess,
                 adapterResult.MessageId,
-                adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription
+                adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription,
+                decision.Type.ToString()
             ));
 
             if (adapterResult.IsSuccess)

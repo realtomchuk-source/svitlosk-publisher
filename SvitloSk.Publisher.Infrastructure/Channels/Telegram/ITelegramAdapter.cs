@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SvitloSk.Publisher.Application.Interfaces;
+namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 
 public record TelegramDispatchResult(
     bool IsSuccess, 
@@ -48,4 +48,3 @@ public interface IGraphicPublisherDispatcher
 {
     Task<TelegramDispatchResult> DispatchGraphicAsync(GraphicOperationPayload payload, CancellationToken cancellationToken = default);
 }
-

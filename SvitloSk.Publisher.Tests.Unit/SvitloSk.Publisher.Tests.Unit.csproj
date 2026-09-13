@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SvitloSk.Publisher.Core\SvitloSk.Publisher.Core.csproj" />
     <ProjectReference Include="..\SvitloSk.Publisher.Application\SvitloSk.Publisher.Application.csproj" />
+    <ProjectReference Include="..\SvitloSk.Publisher.Infrastructure\SvitloSk.Publisher.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

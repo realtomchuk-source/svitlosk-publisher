@@ -9,7 +9,8 @@ public record DispatchResultRecord(
     string DecisionResult,
     bool IsSuccess,
     int? MessageId,
-    string? ErrorDescription
+    string? ErrorDescription,
+    string PublicationType = "Text"
 );
 
 public record BatchDispatchResult(

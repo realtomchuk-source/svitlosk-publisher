@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
+using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 using Xunit;
 
 namespace SvitloSk.Publisher.Tests.Unit.Orchestration;

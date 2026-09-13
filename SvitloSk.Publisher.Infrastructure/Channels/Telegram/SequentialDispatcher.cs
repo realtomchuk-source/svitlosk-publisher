@@ -1,16 +1,17 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Model;
+using SvitloSk.Publisher.Core.Domain;
 using SvitloSk.Publisher.Core.Engine;
 
-namespace SvitloSk.Publisher.Application.Orchestration;
+namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 
 /// <summary>
 /// Backward-compatible dispatcher bridge implementing Clean Architecture port IChannelPipeline.
-/// Allows PublisherOrchestrator to dispatch decisions polymorphically across channels.
+/// Encapsulates direct Telegram dispatch operations for legacy or unit-test scenarios.
 /// </summary>
 public class SequentialDispatcher : IChannelPipeline
 {
@@ -18,15 +19,22 @@ public class SequentialDispatcher : IChannelPipeline
     private readonly IDelayProvider _delayProvider;
     private readonly string? _defaultChatId;
     private readonly string? _defaultDiscussionGroupId;
+    private readonly IGraphicPublisherDispatcher? _graphicDispatcher;
 
     public string ChannelName => "Telegram";
 
-    public SequentialDispatcher(ITelegramAdapter telegramAdapter, IDelayProvider delayProvider, string? defaultChatId = null, string? defaultDiscussionGroupId = null)
+    public SequentialDispatcher(
+        ITelegramAdapter telegramAdapter,
+        IDelayProvider delayProvider,
+        string? defaultChatId = null,
+        string? defaultDiscussionGroupId = null,
+        IGraphicPublisherDispatcher? graphicDispatcher = null)
     {
         _telegramAdapter = telegramAdapter ?? throw new ArgumentNullException(nameof(telegramAdapter));
         _delayProvider = delayProvider ?? throw new ArgumentNullException(nameof(delayProvider));
         _defaultChatId = defaultChatId;
         _defaultDiscussionGroupId = defaultDiscussionGroupId;
+        _graphicDispatcher = graphicDispatcher;
     }
 
     public Task<BatchDispatchResult> DispatchAsync(IReadOnlyList<EditorialDecision> decisions, CancellationToken cancellationToken = default)
@@ -71,7 +79,8 @@ public class SequentialDispatcher : IChannelPipeline
                     decision.DecisionResult.ToString(),
                     IsSuccess: true,
                     MessageId: null,
-                    ErrorDescription: null
+                    ErrorDescription: null,
+                    PublicationType: decision.Type.ToString()
                 ));
                 totalSuccessful++;
                 continue;
@@ -82,17 +91,41 @@ public class SequentialDispatcher : IChannelPipeline
 
             try
             {
-                adapterResult = await ExecuteWithRetryPolicyAsync(chatNameOrId, decision, cancellationToken).ConfigureAwait(false);
-
-                if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(discussionGroupId))
+                if (decision.Type == PublicationType.Graphic)
                 {
-                    try
+                    if (_graphicDispatcher != null)
                     {
-                        await _telegramAdapter.CloseCommentsAsync(discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                        var graphicPayload = new GraphicOperationPayload(
+                            ChatNameOrId: chatNameOrId,
+                            OperationType: decision.DecisionResult.ToString().ToUpperInvariant(),
+                            TerritoryId: decision.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
+                            ContentHash: decision.TargetHash ?? "graphic-hash",
+                            SvgBytes: decision.SvgBytes,
+                            ExternalMessageId: decision.ExternalMessageId,
+                            ScheduleDate: decision.ScheduleDate
+                        );
+
+                        adapterResult = await _graphicDispatcher.DispatchGraphicAsync(graphicPayload, cancellationToken).ConfigureAwait(false);
                     }
-                    catch (Exception closeEx) when (closeEx is not OperationCanceledException)
+                    else
                     {
-                        Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
+                        adapterResult = new TelegramDispatchResult(true, decision.TelegramMessageId, null, false);
+                    }
+                }
+                else
+                {
+                    adapterResult = await ExecuteWithRetryPolicyAsync(chatNameOrId, decision, cancellationToken).ConfigureAwait(false);
+
+                    if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(discussionGroupId))
+                    {
+                        try
+                        {
+                            await _telegramAdapter.CloseCommentsAsync(discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception closeEx) when (closeEx is not OperationCanceledException)
+                        {
+                            Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
+                        }
                     }
                 }
             }
@@ -109,7 +142,8 @@ public class SequentialDispatcher : IChannelPipeline
                     decision.DecisionResult.ToString(),
                     IsSuccess: false,
                     MessageId: null,
-                    ErrorDescription: desc
+                    ErrorDescription: desc,
+                    PublicationType: decision.Type.ToString()
                 ));
                 return new BatchDispatchResult(false, totalProcessed, totalSuccessful, desc, results);
             }
@@ -120,7 +154,8 @@ public class SequentialDispatcher : IChannelPipeline
                 decision.DecisionResult.ToString(),
                 adapterResult.IsSuccess,
                 adapterResult.MessageId,
-                adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription
+                adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription,
+                decision.Type.ToString()
             ));
 
             if (adapterResult.IsSuccess)
@@ -149,39 +184,19 @@ public class SequentialDispatcher : IChannelPipeline
         EditorialDecision decision,
         CancellationToken cancellationToken)
     {
-        int attempt = 0;
-        const int maxAttempts = 3;
+        int maxAttempts = 3;
 
-        while (true)
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            attempt++;
             cancellationToken.ThrowIfCancellationRequested();
 
-            TelegramDispatchResult result;
-
-            switch (decision.DecisionResult)
+            TelegramDispatchResult result = decision.DecisionResult switch
             {
-                case DecisionResult.Create:
-                    result = await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                case DecisionResult.Update:
-                    if (decision.PublicationId == null)
-                        throw new InvalidOperationException("Cannot update publication without Guid/ID identifier.");
-                    if (decision.TelegramMessageId == null)
-                        throw new InvalidOperationException("Cannot update publication without its Telegram message ID.");
-                    result = await _telegramAdapter.UpdateAsync(chatNameOrId, decision.TelegramMessageId.Value, decision.TargetHash ?? "Update content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                case DecisionResult.Delete:
-                    if (decision.TelegramMessageId == null)
-                        throw new InvalidOperationException("Cannot delete publication without its Telegram message ID.");
-                    result = await _telegramAdapter.DeleteAsync(chatNameOrId, decision.TelegramMessageId.Value, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                default:
-                    throw new InvalidOperationException($"Unsupported Telegram operation result: {decision.DecisionResult}");
-            }
+                DecisionResult.Create => await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false),
+                DecisionResult.Update => await _telegramAdapter.UpdateAsync(chatNameOrId, decision.TelegramMessageId ?? 0, decision.TargetHash ?? "Update content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false),
+                DecisionResult.Delete => await _telegramAdapter.DeleteAsync(chatNameOrId, decision.TelegramMessageId ?? 0, cancellationToken).ConfigureAwait(false),
+                _ => throw new InvalidOperationException($"Unsupported dispatch operation: {decision.DecisionResult}")
+            };
 
             if (result.IsSuccess || !result.IsRetryable || attempt >= maxAttempts)
             {
@@ -207,5 +222,7 @@ public class SequentialDispatcher : IChannelPipeline
 
             await _delayProvider.DelayAsync(delayMs, cancellationToken).ConfigureAwait(false);
         }
+
+        return new TelegramDispatchResult(false, null, "Exhausted all retry attempts.", false);
     }
 }

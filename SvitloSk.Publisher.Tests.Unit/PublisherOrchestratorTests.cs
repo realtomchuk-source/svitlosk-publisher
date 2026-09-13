@@ -7,6 +7,7 @@ using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
+using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 using Xunit;
 
 namespace SvitloSk.Publisher.Tests.Unit.Orchestration;
@@ -1306,8 +1307,8 @@ public class GraphicOrchestrationTests : IDisposable
         var git = new PublisherOrchestratorTests.FakeGitTransport();
         var hashCalc = new ContentHashCalculator();
         var decisionEngine = new EditorialDecisionEngine();
-        var dispatcher = new SequentialDispatcher(new PublisherOrchestratorTests.FakeTelegramAdapter(), new FakeDelayProvider());
         var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(new PublisherOrchestratorTests.FakeTelegramAdapter(), new FakeDelayProvider(), graphicDispatcher: graphicDispatcher);
 
         var orchestrator = new PublisherOrchestrator(
             store,
@@ -1316,8 +1317,7 @@ public class GraphicOrchestrationTests : IDisposable
             decisionEngine,
             dispatcher,
             new OutageFeedParser(),
-            new EditorialContentTransformer(),
-            graphicDispatcher
+            new EditorialContentTransformer()
         );
 
 
@@ -1374,8 +1374,8 @@ public class GraphicOrchestrationTests : IDisposable
         var git = new PublisherOrchestratorTests.FakeGitTransport();
         var hashCalc = new ContentHashCalculator();
         var decisionEngine = new EditorialDecisionEngine();
-        var dispatcher = new SequentialDispatcher(new PublisherOrchestratorTests.FakeTelegramAdapter(), new FakeDelayProvider());
         var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(new PublisherOrchestratorTests.FakeTelegramAdapter(), new FakeDelayProvider(), graphicDispatcher: graphicDispatcher);
 
         var orchestrator = new PublisherOrchestrator(
             store,
@@ -1384,8 +1384,7 @@ public class GraphicOrchestrationTests : IDisposable
             decisionEngine,
             dispatcher,
             new OutageFeedParser(),
-            new EditorialContentTransformer(),
-            graphicDispatcher
+            new EditorialContentTransformer()
         );
 
 
@@ -1444,8 +1443,8 @@ public class GraphicOrchestrationTests : IDisposable
         var adapter = new PublisherOrchestratorTests.FakeTelegramAdapter();
         var hashCalc = new ContentHashCalculator();
         var decisionEngine = new EditorialDecisionEngine();
-        var dispatcher = new SequentialDispatcher(adapter, new FakeDelayProvider());
         var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(adapter, new FakeDelayProvider(), graphicDispatcher: graphicDispatcher);
 
         var orchestrator = new PublisherOrchestrator(
             store,
@@ -1454,8 +1453,7 @@ public class GraphicOrchestrationTests : IDisposable
             decisionEngine,
             dispatcher,
             new OutageFeedParser(),
-            new EditorialContentTransformer(),
-            graphicDispatcher
+            new EditorialContentTransformer()
         );
 
         // Pre-populate registry with Deleted Text record and Active Graphic record (message_id=38)
@@ -1530,8 +1528,8 @@ public class GraphicOrchestrationTests : IDisposable
         var adapter = new PublisherOrchestratorTests.FakeTelegramAdapter();
         var hashCalc = new ContentHashCalculator();
         var decisionEngine = new EditorialDecisionEngine();
-        var dispatcher = new SequentialDispatcher(adapter, new FakeDelayProvider());
         var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(adapter, new FakeDelayProvider(), graphicDispatcher: graphicDispatcher);
 
         var orchestrator = new PublisherOrchestrator(
             store,
@@ -1540,8 +1538,7 @@ public class GraphicOrchestrationTests : IDisposable
             decisionEngine,
             dispatcher,
             new OutageFeedParser(),
-            new EditorialContentTransformer(),
-            graphicDispatcher
+            new EditorialContentTransformer()
         );
 
         // Pre-populate registry with Active Graphic record (message_id=38)

@@ -218,7 +218,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
         string validSvg = "<svg viewBox=\"0 0 1000 650\" width=\"1000\" height=\"650\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1000\" height=\"650\" fill=\"#1E1E1E\"/></svg>";
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинів",
@@ -261,7 +261,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
         string validSvg = "<svg viewBox=\"0 0 1000 650\" width=\"1000\" height=\"650\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1000\" height=\"650\" fill=\"#1E1E1E\"/></svg>";
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "UPDATE",
             "Старокостянтинів",
@@ -301,7 +301,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "DELETE",
             "Старокостянтинів",
@@ -344,7 +344,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
         string validSvg = "<svg viewBox=\"0 0 1000 650\" width=\"1000\" height=\"650\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1000\" height=\"650\" fill=\"#1E1E1E\"/></svg>";
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинів",
@@ -390,7 +390,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
         string validSvg = "<svg viewBox=\"0 0 1000 650\" width=\"1000\" height=\"650\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1000\" height=\"650\" fill=\"#1E1E1E\"/></svg>";
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинів",
@@ -429,7 +429,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay);
 
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинів",
@@ -462,7 +462,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, secretToken, delay);
 
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинів",
@@ -605,7 +605,7 @@ public class TelegramGraphicPublisherDispatcherTests
         var delay = new FakeDelayProvider();
         var dispatcher = new TelegramGraphicPublisherDispatcher(client, "test-token", delay, rasterizer);
 
-        var payload = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payload = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинівська МТГ",
@@ -688,7 +688,7 @@ public class TelegramGraphicPublisherDispatcherTests
         // Step 1: CREATE
         var pkg1 = parser.ParseLegacyGraphicJson(legacyJson1, "Старокостянтинівська МТГ");
         byte[] svgBytes1 = assembly.AssembleSvg(pkg1);
-        var payloadCreate = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payloadCreate = new GraphicOperationPayload(
             "-100123",
             "CREATE",
             "Старокостянтинівська МТГ",
@@ -706,7 +706,7 @@ public class TelegramGraphicPublisherDispatcherTests
         string legacyJson2 = legacyJson1.Replace("\"111111110000111111111111\"", "\"111111110000000011111111\""); // extended outage 08:00-16:00
         var pkg2 = parser.ParseLegacyGraphicJson(legacyJson2, "Старокостянтинівська МТГ");
         byte[] svgBytes2 = assembly.AssembleSvg(pkg2);
-        var payloadUpdate = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payloadUpdate = new GraphicOperationPayload(
             "-100123",
             "UPDATE",
             "Старокостянтинівська МТГ",
@@ -721,7 +721,7 @@ public class TelegramGraphicPublisherDispatcherTests
         Assert.Equal(2, httpCalls);
 
         // Step 3: DELETE
-        var payloadDelete = new SvitloSk.Publisher.Application.Interfaces.GraphicOperationPayload(
+        var payloadDelete = new GraphicOperationPayload(
             "-100123",
             "DELETE",
             "Старокостянтинівська МТГ",

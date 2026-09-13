@@ -23,7 +23,6 @@ public class PublisherOrchestrator : IPublisherOrchestrator
     private readonly IChannelPipeline _dispatcher;
     private readonly IOutageFeedParser _parser;
     private readonly EditorialContentTransformer _transformer;
-    private readonly IGraphicPublisherDispatcher? _graphicDispatcher;
     private readonly IGraphicAssembly _graphicAssembly;
     private readonly EditorialPolicyService _policyService;
 
@@ -35,7 +34,6 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         IChannelPipeline dispatcher,
         IOutageFeedParser parser,
         EditorialContentTransformer transformer,
-        IGraphicPublisherDispatcher? graphicDispatcher = null,
         IGraphicAssembly? graphicAssembly = null,
         EditorialPolicyService? policyService = null)
     {
@@ -46,7 +44,6 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _parser = parser ?? throw new ArgumentNullException(nameof(parser));
         _transformer = transformer ?? throw new ArgumentNullException(nameof(transformer));
-        _graphicDispatcher = graphicDispatcher;
         _graphicAssembly = graphicAssembly ?? new GraphicAssembly();
         _policyService = policyService ?? new EditorialPolicyService(_decisionEngine, _hashCalculator);
     }
@@ -374,64 +371,17 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // Assemble Final Decisions
-        decisions.Clear();
-        if (rolloverCleanupDecisions.Count > 0)
-        {
-            decisions.AddRange(rolloverCleanupDecisions);
-        }
-        decisions.AddRange(todayDecisions);
-        decisions.AddRange(techDecisions);
-        decisions.AddRange(tomorrowVisibilityDecisions);
-        decisions.AddRange(tomorrowDecisions);
+        // 6.5 Evaluate Graphic Generation
+        EditorialDecision? graphicDecisionItem = null;
+        RegistryPublicationRecord? unchangedGraphicRecord = null;
 
-        // Registry Backup
-        if (!string.Equals(chatNameOrId, "dryrun", StringComparison.OrdinalIgnoreCase) && !registryPath.Contains("dry_run"))
-        {
-            try
-            {
-                string dirName = System.IO.Path.GetDirectoryName(registryPath) ?? "local/registry";
-                string backupDir = System.IO.Path.Combine(dirName, "backups");
-                if (System.IO.File.Exists(registryPath))
-                {
-                    System.IO.Directory.CreateDirectory(backupDir);
-                    string timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-                    string backupFileName = $"{System.IO.Path.GetFileNameWithoutExtension(registryPath)}_{timestamp}.json";
-                    string backupPath = System.IO.Path.Combine(backupDir, backupFileName);
-                    System.IO.File.Copy(registryPath, backupPath, false);
-                }
-            }
-            catch (Exception backupEx)
-            {
-                return new BatchDispatchResult(false, 0, 0, $"[FATAL] Registry backup failed: {backupEx.Message}", Array.Empty<DispatchResultRecord>());
-            }
-        }
-
-        // 7. Dispatch via IChannelPipeline
-        BatchDispatchResult dispatchResult;
-        if (_dispatcher is SequentialDispatcher seqDispatcher)
-        {
-            dispatchResult = await seqDispatcher.DispatchAsync(chatNameOrId, decisions, discussionGroupId, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            dispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!dispatchResult.IsSuccess)
-        {
-            return dispatchResult;
-        }
-
-        // 8. Graphic Pipeline Orchestration
-        var graphicRegistryUpdates = new List<RegistryPublicationRecord>();
         if (input.GraphicPackage != null)
         {
             string graphicScope = input.GraphicPackage.TerritorialScope;
             string graphicHash = _hashCalculator.ComputeGraphicHash(input.GraphicPackage);
-            
-            var existingGraphicPub = registry?.Publications.FirstOrDefault(p => 
-                p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) && 
+
+            var existingGraphicPub = registry?.Publications.FirstOrDefault(p =>
+                p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
                 p.TerritoryId.Equals(graphicScope, StringComparison.OrdinalIgnoreCase));
 
             Publication? domainGraphicPub = null;
@@ -460,74 +410,99 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             if (graphicDecision.DecisionResult == DecisionResult.Generate)
             {
                 bool isCreate = existingGraphicPub == null || existingGraphicPub.TransmissionState == "DELETED" || !existingGraphicPub.TelegramMessageId.HasValue;
-                string opType = isCreate ? "CREATE" : "UPDATE";
-                int? existingMsgId = existingGraphicPub?.TelegramMessageId;
                 var artifactId = existingGraphicPub?.PublisherArtifactId ?? Guid.NewGuid();
-
                 byte[] svgBytes = _graphicAssembly.AssembleSvg(input.GraphicPackage);
 
-                if (_graphicDispatcher != null)
-                {
-                    var payload = new GraphicOperationPayload(
-                        chatNameOrId,
-                        opType,
-                        graphicScope,
-                        graphicHash,
-                        svgBytes,
-                        existingGraphicPub?.ExternalMessageId,
-                        input.GraphicPackage.Metadata.TargetDate
-                    );
-
-                    var gResult = await _graphicDispatcher.DispatchGraphicAsync(payload, cancellationToken).ConfigureAwait(false);
-                    if (!gResult.IsSuccess)
-                    {
-                        return new BatchDispatchResult(false, dispatchResult.TotalProcessed + 1, dispatchResult.TotalSuccessful, $"Graphic dispatch failed: {gResult.ErrorDescription}", dispatchResult.Results);
-                    }
-
-                    int? finalMsgId = gResult.MessageId ?? existingMsgId;
-                    graphicRegistryUpdates.Add(new RegistryPublicationRecord(
-                        artifactId,
-                        graphicScope,
-                        finalMsgId?.ToString(),
-                        graphicHash,
-                        isCreate ? "SENT" : "UPDATED",
-                        "Graphic"
-                    ));
-                }
-                else
-                {
-                    graphicRegistryUpdates.Add(new RegistryPublicationRecord(
-                        artifactId,
-                        graphicScope,
-                        existingMsgId?.ToString(),
-                        graphicHash,
-                        isCreate ? "SENT" : "UPDATED",
-                        "Graphic"
-                    ));
-                }
+                graphicDecisionItem = new EditorialDecision(
+                    DecisionResult: isCreate ? DecisionResult.Create : DecisionResult.Update,
+                    Classification: PublicationClassification.Persistent,
+                    PublicationId: artifactId,
+                    TerritoryIdentifier: graphicScope,
+                    TargetHash: graphicHash,
+                    ExternalMessageId: existingGraphicPub?.ExternalMessageId,
+                    GraphicBytes: null,
+                    Type: PublicationType.Graphic,
+                    ScheduleDate: input.GraphicPackage.Metadata.TargetDate,
+                    SvgBytes: svgBytes
+                );
             }
             else
             {
-                if (existingGraphicPub != null)
-                {
-                    graphicRegistryUpdates.Add(existingGraphicPub);
-                }
-            }
-        }
-        else if (registry != null)
-        {
-            foreach (var oldPub in registry.Publications.Where(p => p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase)))
-            {
-                graphicRegistryUpdates.Add(oldPub);
+                unchangedGraphicRecord = existingGraphicPub;
             }
         }
 
-        // 9. Update Registry Model
+        // Assemble Final Decisions
+        decisions.Clear();
+        if (rolloverCleanupDecisions.Count > 0)
+        {
+            decisions.AddRange(rolloverCleanupDecisions);
+        }
+        decisions.AddRange(todayDecisions);
+        decisions.AddRange(techDecisions);
+        decisions.AddRange(tomorrowVisibilityDecisions);
+        decisions.AddRange(tomorrowDecisions);
+        if (graphicDecisionItem != null)
+        {
+            decisions.Add(graphicDecisionItem);
+        }
+
+        // Registry Backup
+        if (!string.Equals(chatNameOrId, "dryrun", StringComparison.OrdinalIgnoreCase) && !registryPath.Contains("dry_run"))
+        {
+            try
+            {
+                string dirName = System.IO.Path.GetDirectoryName(registryPath) ?? "local/registry";
+                string backupDir = System.IO.Path.Combine(dirName, "backups");
+                if (System.IO.File.Exists(registryPath))
+                {
+                    System.IO.Directory.CreateDirectory(backupDir);
+                    string timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                    string backupFileName = $"{System.IO.Path.GetFileNameWithoutExtension(registryPath)}_{timestamp}.json";
+                    string backupPath = System.IO.Path.Combine(backupDir, backupFileName);
+                    System.IO.File.Copy(registryPath, backupPath, false);
+                }
+            }
+            catch (Exception backupEx)
+            {
+                return new BatchDispatchResult(false, 0, 0, $"[FATAL] Registry backup failed: {backupEx.Message}", Array.Empty<DispatchResultRecord>());
+            }
+        }
+
+        // 7. Dispatch via IChannelPipeline
+        BatchDispatchResult dispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
+
+        if (!dispatchResult.IsSuccess)
+        {
+            return dispatchResult;
+        }
+
+        // 8. Update Registry Model
         var updatedPublications = new List<RegistryPublicationRecord>();
+        var graphicRegistryUpdates = new List<RegistryPublicationRecord>();
 
         foreach (var res in dispatchResult.Results)
         {
             if (!res.IsSuccess) continue;
+
+            if (res.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
+            {
+                var pubId = res.PublicationId ?? Guid.NewGuid();
+                string gHash = graphicDecisionItem?.TargetHash ?? "graphic-hash";
+                string opState = res.DecisionResult == DecisionResult.Create.ToString() ? "SENT" : "UPDATED";
+                int? existingMsgId = registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))?.TelegramMessageId;
+                int? finalMsgId = res.MessageId ?? existingMsgId;
+
+                graphicRegistryUpdates.Add(new RegistryPublicationRecord(
+                    pubId,
+                    res.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
+                    finalMsgId?.ToString(),
+                    gHash,
+                    opState,
+                    "Graphic"
+                ));
+                continue;
+            }
 
             if (res.DecisionResult == DecisionResult.Create.ToString())
             {
@@ -585,6 +560,18 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
+        if (unchangedGraphicRecord != null)
+        {
+            graphicRegistryUpdates.Add(unchangedGraphicRecord);
+        }
+        else if (input.GraphicPackage == null && registry != null)
+        {
+            foreach (var oldPub in registry.Publications.Where(p => p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase)))
+            {
+                graphicRegistryUpdates.Add(oldPub);
+            }
+        }
+
         if (registry != null && !isDateRollover)
         {
             var processedTextTerritories = updatedPublications.Where(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase)).Select(p => p.TerritoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -613,7 +600,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             Publications: updatedPublications
         );
 
-        // 10. Save Atomically & Push
+        // 9. Save Atomically & Push
         await _registryStore.SaveAsync(registryPath, newRegistry, cancellationToken).ConfigureAwait(false);
         await _gitTransport.CommitAndPushAsync(registryPath, $"Sync run for edition {todayEdition.EditionDate}", cancellationToken).ConfigureAwait(false);
 
