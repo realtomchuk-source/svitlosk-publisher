@@ -153,7 +153,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 {
                     // For date roll-over (Day N -> Day N+1):
                     // 1. Ephemeral publications (Tomorrow forecasts, Technical status) must be deleted from Telegram.
-                    if (!isPersistent && pubState != PublicationState.Removed && pubRecord.TelegramMessageId.HasValue)
+                    if (!isPersistent && pubState != PublicationState.Removed && !string.IsNullOrEmpty(pubRecord.ExternalMessageId))
                     {
                         rolloverCleanupDecisions.Add(new EditorialDecision(
                             DecisionResult.Delete,
@@ -161,7 +161,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             pubRecord.PublisherArtifactId,
                             pubRecord.TerritoryId,
                             null,
-                            pubRecord.TelegramMessageId
+                            pubRecord.ExternalMessageId
                         ));
                     }
                     // 2. Persistent historical publications of Day N (journal_header, city/villages, graphic) remain in Telegram
@@ -414,7 +414,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     existingTechArtifactId ?? existingTech?.PublicationId ?? Guid.NewGuid(),
                     "system_status",
                     null,
-                    techMsgId
+                    techMsgId?.ToString()
                 ));
 
                 // 2. Create fresh system_status message at the bottom of the stream
@@ -464,7 +464,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             // If tomorrow forecast is not available, check if we need to clean up/delete all tomorrow publications
             foreach (var oldTom in registry.Publications.Where(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)))
             {
-                if (oldTom.TransmissionState != "DELETED" && oldTom.TelegramMessageId.HasValue)
+                if (oldTom.TransmissionState != "DELETED" && !string.IsNullOrEmpty(oldTom.ExternalMessageId))
                 {
                     tomorrowVisibilityDecisions.Add(new EditorialDecision(
                         DecisionResult.Delete,
@@ -472,7 +472,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                         oldTom.PublisherArtifactId,
                         oldTom.TerritoryId,
                         null,
-                        oldTom.TelegramMessageId
+                        oldTom.ExternalMessageId
                     ));
                 }
             }
@@ -576,7 +576,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                         graphicScope,
                         graphicHash,
                         svgBytes,
-                        existingMsgId,
+                        existingGraphicPub?.ExternalMessageId,
                         input.GraphicPackage.Metadata.TargetDate
                     );
 
@@ -590,7 +590,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     graphicRegistryUpdates.Add(new RegistryPublicationRecord(
                         artifactId,
                         graphicScope,
-                        finalMsgId,
+                        finalMsgId?.ToString(),
                         graphicHash,
                         isCreate ? "SENT" : "UPDATED",
                         "Graphic"
@@ -602,7 +602,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     graphicRegistryUpdates.Add(new RegistryPublicationRecord(
                         artifactId,
                         graphicScope,
-                        existingMsgId,
+                        existingMsgId?.ToString(),
                         graphicHash,
                         isCreate ? "SENT" : "UPDATED",
                         "Graphic"
@@ -651,7 +651,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var record = new RegistryPublicationRecord(
                     pubId,
                     res.TerritoryIdentifier ?? "unknown",
-                    res.MessageId,
+                    res.MessageId?.ToString(),
                     computedHash, 
                     "SENT",
                     "Text"
@@ -667,7 +667,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var record = new RegistryPublicationRecord(
                     pubId,
                     res.TerritoryIdentifier ?? "unknown",
-                    res.MessageId ?? (registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))?.TelegramMessageId),
+                    res.MessageId?.ToString() ?? (registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId),
                     computedHash,
                     "UPDATED",
                     "Text"

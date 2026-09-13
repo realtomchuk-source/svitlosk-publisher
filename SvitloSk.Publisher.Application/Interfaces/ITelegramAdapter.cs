@@ -25,9 +25,24 @@ public record GraphicOperationPayload(
     string TerritoryId,
     string ContentHash,
     byte[]? SvgBytes,
-    int? TelegramMessageId,
+    string? ExternalMessageId,
     string? ScheduleDate = null
-);
+)
+{
+    public GraphicOperationPayload(
+        string chatNameOrId,
+        string operationType,
+        string territoryId,
+        string contentHash,
+        byte[]? svgBytes,
+        int telegramMessageId,
+        string? scheduleDate = null
+    ) : this(chatNameOrId, operationType, territoryId, contentHash, svgBytes, telegramMessageId.ToString(), scheduleDate)
+    {
+    }
+
+    public int? TelegramMessageId => int.TryParse(ExternalMessageId, out int id) ? id : null;
+}
 
 public interface IGraphicPublisherDispatcher
 {

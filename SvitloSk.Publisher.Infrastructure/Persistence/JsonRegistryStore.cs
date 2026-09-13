@@ -95,11 +95,11 @@ public class JsonRegistryStore : IRegistryStore
             if (string.IsNullOrWhiteSpace(pub.TransmissionState))
                 throw new InvalidOperationException("Publication record has a missing transmission_state.");
 
-            // SENT and UPDATED records must have telegram_message_id
+            // SENT and UPDATED records must have an external_message_id
             string state = pub.TransmissionState.ToUpperInvariant();
-            if ((state == "SENT" || state == "UPDATED") && pub.TelegramMessageId == null)
+            if ((state == "SENT" || state == "UPDATED") && string.IsNullOrWhiteSpace(pub.ExternalMessageId))
             {
-                throw new InvalidOperationException($"Publication in state '{pub.TransmissionState}' must possess a telegram_message_id.");
+                throw new InvalidOperationException($"Publication in state '{pub.TransmissionState}' must possess an external_message_id.");
             }
         }
     }

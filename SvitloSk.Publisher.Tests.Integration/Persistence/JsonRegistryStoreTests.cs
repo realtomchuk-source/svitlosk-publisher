@@ -195,4 +195,48 @@ public class JsonRegistryStoreTests : IDisposable
         await Assert.ThrowsAsync<TaskCanceledException>(() => _store.SaveAsync(path, model, cts.Token));
         Assert.False(File.Exists(path));
     }
+
+    [Fact]
+    public async Task D02_T13_BackwardCompatibility_ShouldDeserializeLegacyTelegramMessageIdAndExternalMessageId()
+    {
+        string path = Path.Combine(_testDirectory, "legacy_and_modern.json");
+        string json = @"
+{
+  ""schema_version"": 1,
+  ""edition_date"": ""2026-09-13"",
+  ""status"": ""ACTIVE"",
+  ""publications"": [
+    {
+      ""publisher_artifact_id"": ""43491788-c2e1-4469-8399-008cd9454bed"",
+      ""territory_id"": ""system_status"",
+      ""telegram_message_id"": 237,
+      ""content_hash"": ""hash1"",
+      ""transmission_state"": ""UPDATED"",
+      ""publication_type"": ""Text""
+    },
+    {
+      ""publisher_artifact_id"": ""0dc82f44-bc7b-4a5f-9283-a4efcfd9ef25"",
+      ""territory_id"": ""journal_header"",
+      ""external_message_id"": ""fb_post_999"",
+      ""content_hash"": ""hash2"",
+      ""transmission_state"": ""UPDATED"",
+      ""publication_type"": ""Text""
+    }
+  ]
+}";
+        await File.WriteAllTextAsync(path, json);
+
+        var loaded = await _store.LoadAsync(path);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(2, loaded.Publications.Count);
+        
+        // Legacy Telegram message ID (number in JSON)
+        Assert.Equal("237", loaded.Publications[0].ExternalMessageId);
+        Assert.Equal(237, loaded.Publications[0].TelegramMessageId);
+
+        // Modern External message ID (string in JSON)
+        Assert.Equal("fb_post_999", loaded.Publications[1].ExternalMessageId);
+        Assert.Null(loaded.Publications[1].TelegramMessageId);
+    }
 }
