@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,15 +8,31 @@ using SvitloSk.Publisher.Core.Engine;
 
 namespace SvitloSk.Publisher.Application.Orchestration;
 
-public class SequentialDispatcher
+/// <summary>
+/// Backward-compatible dispatcher bridge implementing Clean Architecture port IChannelPipeline.
+/// Allows PublisherOrchestrator to dispatch decisions polymorphically across channels.
+/// </summary>
+public class SequentialDispatcher : IChannelPipeline
 {
     private readonly ITelegramAdapter _telegramAdapter;
     private readonly IDelayProvider _delayProvider;
+    private readonly string? _defaultChatId;
+    private readonly string? _defaultDiscussionGroupId;
 
-    public SequentialDispatcher(ITelegramAdapter telegramAdapter, IDelayProvider delayProvider)
+    public string ChannelName => "Telegram";
+
+    public SequentialDispatcher(ITelegramAdapter telegramAdapter, IDelayProvider delayProvider, string? defaultChatId = null, string? defaultDiscussionGroupId = null)
     {
         _telegramAdapter = telegramAdapter ?? throw new ArgumentNullException(nameof(telegramAdapter));
         _delayProvider = delayProvider ?? throw new ArgumentNullException(nameof(delayProvider));
+        _defaultChatId = defaultChatId;
+        _defaultDiscussionGroupId = defaultDiscussionGroupId;
+    }
+
+    public Task<BatchDispatchResult> DispatchAsync(IReadOnlyList<EditorialDecision> decisions, CancellationToken cancellationToken = default)
+    {
+        string chat = _defaultChatId ?? "-100123";
+        return DispatchAsync(chat, decisions, _defaultDiscussionGroupId, cancellationToken);
     }
 
     public async Task<BatchDispatchResult> DispatchAsync(
@@ -42,8 +58,6 @@ public class SequentialDispatcher
             var decision = decisions[i];
 
             // 1. Throttling: 1000ms delay between consecutive Telegram operations.
-            // A Telegram operation is sent for CREATE (Create), UPDATE (Update), or DELETE (Delete).
-            // We apply throttling before an operation if at least one operation has already been processed.
             if (totalProcessed > 0 && IsTelegramOperation(decision.DecisionResult))
             {
                 await _delayProvider.DelayAsync(1000, cancellationToken).ConfigureAwait(false);
@@ -51,7 +65,6 @@ public class SequentialDispatcher
 
             if (!IsTelegramOperation(decision.DecisionResult))
             {
-                // KEEP or NO_ACTION or other non-Telegram decisions
                 results.Add(new DispatchResultRecord(
                     decision.PublicationId,
                     decision.TerritoryIdentifier,
@@ -71,8 +84,6 @@ public class SequentialDispatcher
             {
                 adapterResult = await ExecuteWithRetryPolicyAsync(chatNameOrId, decision, cancellationToken).ConfigureAwait(false);
 
-                // If this was a successful CREATE for a text post and a discussionGroupId is configured,
-                // close comments by deleting the auto-forwarded message in the discussion group.
                 if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(discussionGroupId))
                 {
                     try
@@ -81,7 +92,6 @@ public class SequentialDispatcher
                     }
                     catch (Exception closeEx) when (closeEx is not OperationCanceledException)
                     {
-                        // Fail-safe: Comment closing error in discussion group must not break channel publishing
                         Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
                     }
                 }
@@ -92,7 +102,6 @@ public class SequentialDispatcher
             }
             catch (Exception ex)
             {
-                // Unhandled exception during operation: treat as a fatal run failure.
                 string desc = $"Fatal unhandled exception during operation: {ex.Message}";
                 results.Add(new DispatchResultRecord(
                     decision.PublicationId,
@@ -120,8 +129,6 @@ public class SequentialDispatcher
             }
             else
             {
-                // Non-success at this point means retry limits were exhausted, or it's a fatal failure.
-                // Either way, we must abort immediately in a Fail-Closed manner.
                 string fatalDesc = adapterResult.ErrorDescription ?? "Operation failed after retries or encountered a fatal error.";
                 return new BatchDispatchResult(false, totalProcessed, totalSuccessful, fatalDesc, results);
             }
@@ -155,7 +162,6 @@ public class SequentialDispatcher
             switch (decision.DecisionResult)
             {
                 case DecisionResult.Create:
-                    // Create maps to SendAsync. 
                     result = await _telegramAdapter.SendAsync(chatNameOrId, decision.TargetHash ?? "Create content", decision.GraphicBytes, cancellationToken).ConfigureAwait(false);
                     break;
 
@@ -177,31 +183,20 @@ public class SequentialDispatcher
                     throw new InvalidOperationException($"Unsupported Telegram operation result: {decision.DecisionResult}");
             }
 
-            if (result.IsSuccess)
+            if (result.IsSuccess || !result.IsRetryable || attempt >= maxAttempts)
             {
                 return result;
             }
 
-            if (!result.IsRetryable || attempt >= maxAttempts)
-            {
-                return result;
-            }
-
-            // Calculate delay
             int delayMs;
             if (result.RetryAfterSeconds.HasValue)
             {
-                // HTTP 429
                 int delaySec = result.RetryAfterSeconds.Value;
-                if (delaySec > 60)
-                {
-                    delaySec = 60; // Max delay cap
-                }
+                if (delaySec > 60) delaySec = 60;
                 delayMs = delaySec * 1000;
             }
             else
             {
-                // HTTP 5xx or transient timeout: exponential backoff (attempt 1 -> 1000ms, attempt 2 -> 2000ms)
                 delayMs = attempt switch
                 {
                     1 => 1000,

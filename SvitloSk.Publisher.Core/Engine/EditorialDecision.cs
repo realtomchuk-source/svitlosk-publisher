@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using SvitloSk.Publisher.Core.Domain;
 
 namespace SvitloSk.Publisher.Core.Engine;
 
@@ -9,7 +10,10 @@ public record EditorialDecision(
     string? TerritoryIdentifier = null,
     string? TargetHash = null,
     string? ExternalMessageId = null,
-    byte[]? GraphicBytes = null
+    byte[]? GraphicBytes = null,
+    PublicationType Type = PublicationType.Text,
+    string? ScheduleDate = null,
+    byte[]? SvgBytes = null
 )
 {
     public DecisionResult DecisionResult { get; init; } = DecisionResult;
@@ -19,6 +23,9 @@ public record EditorialDecision(
     public string? TargetHash { get; init; } = TargetHash;
     public string? ExternalMessageId { get; init; } = ExternalMessageId;
     public byte[]? GraphicBytes { get; init; } = GraphicBytes;
+    public PublicationType Type { get; init; } = Type;
+    public string? ScheduleDate { get; init; } = ScheduleDate;
+    public byte[]? SvgBytes { get; init; } = SvgBytes;
 
     public EditorialDecision(
         DecisionResult decisionResult,

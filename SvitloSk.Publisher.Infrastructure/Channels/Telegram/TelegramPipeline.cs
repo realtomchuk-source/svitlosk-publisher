@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Model;
+using SvitloSk.Publisher.Core.Domain;
 using SvitloSk.Publisher.Core.Engine;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
@@ -12,11 +13,12 @@ namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 /// <summary>
 /// Dedicated Telegram Channel Pipeline per Clean Architecture port IChannelPipeline.
 /// Encapsulates platform-specific dispatch sequencing, rate limiting, comment closure,
-/// and tail-positioning invariants (system_status) for the Telegram broadcast channel.
+/// tail-positioning invariants (system_status), and 12-subqueue graphic dispatching.
 /// </summary>
 public class TelegramPipeline : IChannelPipeline
 {
     private readonly ITelegramAdapter _telegramAdapter;
+    private readonly IGraphicPublisherDispatcher? _graphicDispatcher;
     private readonly TelegramRateLimiter _rateLimiter;
     private readonly TelegramDiscussionManager? _discussionManager;
     private readonly string _chatId;
@@ -28,12 +30,14 @@ public class TelegramPipeline : IChannelPipeline
         ITelegramAdapter telegramAdapter,
         string chatId,
         string? discussionGroupId = null,
+        IGraphicPublisherDispatcher? graphicDispatcher = null,
         TelegramRateLimiter? rateLimiter = null,
         TelegramDiscussionManager? discussionManager = null)
     {
         _telegramAdapter = telegramAdapter ?? throw new ArgumentNullException(nameof(telegramAdapter));
         _chatId = !string.IsNullOrWhiteSpace(chatId) ? chatId : throw new ArgumentException("Chat ID cannot be null or empty.", nameof(chatId));
         _discussionGroupId = discussionGroupId;
+        _graphicDispatcher = graphicDispatcher;
         _rateLimiter = rateLimiter ?? new TelegramRateLimiter();
         _discussionManager = discussionManager;
     }
@@ -80,27 +84,45 @@ public class TelegramPipeline : IChannelPipeline
 
             try
             {
-                adapterResult = await ExecuteWithRetryPolicyAsync(_chatId, decision, cancellationToken).ConfigureAwait(false);
-
-                // If this was a successful CREATE for a post and a discussionGroupId is configured,
-                // close comments by deleting the auto-forwarded message in the discussion group.
-                if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(_discussionGroupId))
+                // Route Graphic schedule decisions to specialized TelegramGraphicPublisherDispatcher
+                if (decision.Type == PublicationType.Graphic && _graphicDispatcher != null)
                 {
-                    try
+                    var graphicPayload = new GraphicOperationPayload(
+                        ChatNameOrId: _chatId,
+                        OperationType: decision.DecisionResult.ToString(),
+                        TerritoryId: decision.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
+                        ContentHash: decision.TargetHash ?? "graphic-hash",
+                        SvgBytes: decision.SvgBytes,
+                        ExternalMessageId: decision.ExternalMessageId,
+                        ScheduleDate: decision.ScheduleDate
+                    );
+
+                    adapterResult = await _graphicDispatcher.DispatchGraphicAsync(graphicPayload, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    adapterResult = await ExecuteWithRetryPolicyAsync(_chatId, decision, cancellationToken).ConfigureAwait(false);
+
+                    // If this was a successful CREATE for a post and a discussionGroupId is configured,
+                    // close comments by deleting the auto-forwarded message in the discussion group.
+                    if (adapterResult.IsSuccess && decision.DecisionResult == DecisionResult.Create && adapterResult.MessageId.HasValue && !string.IsNullOrWhiteSpace(_discussionGroupId))
                     {
-                        if (_discussionManager != null)
+                        try
                         {
-                            await _discussionManager.CloseCommentsAsync(_discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                            if (_discussionManager != null)
+                            {
+                                await _discussionManager.CloseCommentsAsync(_discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                await _telegramAdapter.CloseCommentsAsync(_discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                            }
                         }
-                        else
+                        catch (Exception closeEx) when (closeEx is not OperationCanceledException)
                         {
-                            await _telegramAdapter.CloseCommentsAsync(_discussionGroupId, adapterResult.MessageId.Value, cancellationToken).ConfigureAwait(false);
+                            // Fail-safe: Comment closing error in discussion group must not break channel publishing
+                            Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
                         }
-                    }
-                    catch (Exception closeEx) when (closeEx is not OperationCanceledException)
-                    {
-                        // Fail-safe: Comment closing error in discussion group must not break channel publishing
-                        Console.Error.WriteLine($"[WARN] Could not close comments in discussion group for msg {adapterResult.MessageId.Value}: {closeEx.Message}");
                     }
                 }
             }

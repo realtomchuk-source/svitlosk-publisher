@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Text;
+using SvitloSk.Publisher.Core.Domain;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 
@@ -32,5 +34,48 @@ public static class TelegramRenderer
     public static string FormatGraphicScheduleCaption(string formattedDate)
     {
         return $"Графік знеструмлень на {formattedDate}\n#графік #старокостянтинів #svitlosk";
+    }
+
+    /// <summary>
+    /// Renders technical system status message for Telegram.
+    /// </summary>
+    public static string RenderSystemStatus(SystemStatusModel model)
+    {
+        var localTime = model.LastUpdatedUtc.AddHours(3);
+        return $"Останнє оновлення журналу: {localTime:HH:mm}\nСтан моніторингу: {model.MonitoringState}";
+    }
+
+    /// <summary>
+    /// Renders clean domain JournalHeaderModel into valid Telegram HTML format.
+    /// </summary>
+    public static string RenderJournalHeader(JournalHeaderModel model)
+    {
+        var sb = new StringBuilder();
+
+        if (model.PlannedSettlements.Count > 0)
+        {
+            string pList = string.Join(", ", model.PlannedSettlements);
+            sb.AppendLine("<b>Планові знеструмлення:</b>");
+            sb.AppendLine(pList);
+        }
+        else
+        {
+            sb.AppendLine("<b>Планові знеструмлення:</b> відсутні");
+        }
+
+        sb.AppendLine();
+
+        if (model.EmergencySettlements.Count > 0)
+        {
+            string eList = string.Join(", ", model.EmergencySettlements);
+            sb.AppendLine("<b>Аварійні знеструмлення:</b>");
+            sb.AppendLine(eList);
+        }
+        else
+        {
+            sb.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
+        }
+
+        return sb.ToString().TrimEnd();
     }
 }
