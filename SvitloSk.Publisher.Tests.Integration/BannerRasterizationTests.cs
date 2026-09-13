@@ -21,8 +21,11 @@ public class BannerRasterizationTests
         Assert.NotNull(dayPng);
         Assert.True(dayPng.Length > 0);
 
-        string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\8459d6eb-d4ef-436e-a6fb-5801df454ea5";
-        File.WriteAllBytes(Path.Combine(artifactDir, "day_header_banner_preview.png"), dayPng);
+        string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\5c319537-8b33-4b99-945b-4b3866e21113";
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "day_header_banner_preview.png"), dayPng);
+        }
 
         // 2. Tomorrow Forecast Separator Banner
         byte[] tomSvg = _assembly.AssembleTomorrowHeaderSvg("2026-09-09");
@@ -30,7 +33,10 @@ public class BannerRasterizationTests
         Assert.NotNull(tomPng);
         Assert.True(tomPng.Length > 0);
 
-        File.WriteAllBytes(Path.Combine(artifactDir, "tomorrow_banner_preview.png"), tomPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "tomorrow_banner_preview.png"), tomPng);
+        }
 
         // 3. No Outages Rectangle Banner (1080x600)
         byte[] noOutagesSvg = _assembly.AssembleNoOutagesSvg("2026-09-12");
@@ -38,7 +44,9 @@ public class BannerRasterizationTests
         Assert.NotNull(noOutagesPng);
         Assert.True(noOutagesPng.Length > 0);
 
-        File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_preview.png"), noOutagesPng);
-        File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_v6_1080x600.png"), noOutagesPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_preview.png"), noOutagesPng);
+        }
     }
 }
