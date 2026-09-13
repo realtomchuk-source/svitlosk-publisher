@@ -287,7 +287,7 @@ public class TelegramGraphicPublisherDispatcherTests
                 Assert.Equal(HttpMethod.Post, req.Method);
                 Assert.Equal("/bottest-token/deleteMessage", req.RequestUri?.PathAndQuery);
 
-                string contentStr = await req.Content.ReadAsStringAsync();
+                string contentStr = await req.Content!.ReadAsStringAsync();
                 Assert.Contains("6666", contentStr);
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
@@ -773,7 +773,7 @@ public class TelegramGraphicPublisherDispatcherTests
         byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
 
         // Find solution/project root
-        string current = AppContext.BaseDirectory;
+        string? current = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(current) && !System.IO.File.Exists(System.IO.Path.Combine(current, "SvitloSk.Publisher.sln")))
         {
             current = System.IO.Directory.GetParent(current)?.FullName;

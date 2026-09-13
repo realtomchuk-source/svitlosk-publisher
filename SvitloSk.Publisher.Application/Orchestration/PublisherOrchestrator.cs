@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -20,7 +20,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
     private readonly IGitTransport _gitTransport;
     private readonly ContentHashCalculator _hashCalculator;
     private readonly EditorialDecisionEngine _decisionEngine;
-    private readonly SequentialDispatcher _dispatcher;
+    private readonly IChannelPipeline _dispatcher;
     private readonly IOutageFeedParser _parser;
     private readonly EditorialContentTransformer _transformer;
     private readonly IGraphicPublisherDispatcher? _graphicDispatcher;
@@ -32,7 +32,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         IGitTransport gitTransport,
         ContentHashCalculator hashCalculator,
         EditorialDecisionEngine decisionEngine,
-        SequentialDispatcher dispatcher,
+        IChannelPipeline dispatcher,
         IOutageFeedParser parser,
         EditorialContentTransformer transformer,
         IGraphicPublisherDispatcher? graphicDispatcher = null,
@@ -336,8 +336,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        var todayDecisions = decisions.Where(d => !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
-        var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
+        var todayDecisions = decisions.Where(d => d.TerritoryIdentifier == null || !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
+        var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier != null && d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
 
         // 5. Evaluate System Status via Domain Policy Service (Tail Invariant)
         var techDecisions = new List<EditorialDecision>();
@@ -408,7 +408,15 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
 
         // 7. Dispatch via IChannelPipeline
-        var dispatchResult = await _dispatcher.DispatchAsync(chatNameOrId, decisions, discussionGroupId, cancellationToken).ConfigureAwait(false);
+        BatchDispatchResult dispatchResult;
+        if (_dispatcher is SequentialDispatcher seqDispatcher)
+        {
+            dispatchResult = await seqDispatcher.DispatchAsync(chatNameOrId, decisions, discussionGroupId, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            dispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
+        }
 
         if (!dispatchResult.IsSuccess)
         {
