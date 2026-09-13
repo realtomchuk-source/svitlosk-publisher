@@ -701,7 +701,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         // Keep existing records that weren't mutated in this batch.
         // For matching date runs, we check by TerritoryId (or PublicationId) so current day records get updated.
         // For historical publications (e.g. from previous days during date rollover), persistent records must remain intact.
-        if (registry != null)
+        if (registry != null && !isDateRollover)
         {
             var processedArtifactIds = updatedPublications.Select(p => p.PublisherArtifactId).ToHashSet();
             var processedTextTerritories = updatedPublications.Where(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase)).Select(p => p.TerritoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -710,22 +710,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             {
                 if (oldPub.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (isDateRollover)
+                    if (!processedTextTerritories.Contains(oldPub.TerritoryId))
                     {
-                        // On date rollover, keep all historical persistent records that weren't deleted
-                        bool isEphemeral = oldPub.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
-                                           oldPub.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase);
-                        if (!isEphemeral && oldPub.TransmissionState != "DELETED" && !processedArtifactIds.Contains(oldPub.PublisherArtifactId))
-                        {
-                            updatedPublications.Add(oldPub);
-                        }
-                    }
-                    else
-                    {
-                        if (!processedTextTerritories.Contains(oldPub.TerritoryId))
-                        {
-                            updatedPublications.Add(oldPub);
-                        }
+                        updatedPublications.Add(oldPub);
                     }
                 }
             }

@@ -77,6 +77,8 @@ public class PublisherOrchestratorTests : IDisposable
         public bool ForceFatal { get; set; }
         public List<string> SentTexts { get; } = new();
 
+        public int DeleteCount { get; private set; }
+
         public Task<TelegramDispatchResult> SendAsync(string chatNameOrId, string text, byte[]? graphicBytes = null, CancellationToken cancellationToken = default)
         {
             SendCount++;
@@ -96,6 +98,7 @@ public class PublisherOrchestratorTests : IDisposable
 
         public Task<TelegramDispatchResult> DeleteAsync(string chatNameOrId, int messageId, CancellationToken cancellationToken = default)
         {
+            DeleteCount++;
             return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
         }
 
@@ -779,20 +782,18 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.NotNull(store.CurrentModel);
         Assert.Equal("2026-09-08", store.CurrentModel.EditionDate);
 
-        // Verify that Day 1's persistent city publication was preserved in registry
+        // Verify that Day 1's persistent city publication is NOT carried over into Day 2 active registry
         var preservedDay1City = store.CurrentModel.Publications.FirstOrDefault(p => p.PublisherArtifactId == day1CityId);
-        Assert.NotNull(preservedDay1City);
-        Assert.Equal("SENT", preservedDay1City.TransmissionState);
+        Assert.Null(preservedDay1City);
 
-        // Verify that Day 2 generated a BRAND NEW publication for city with a different ArtifactId
-        var day2City = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv" && p.PublisherArtifactId != day1CityId);
+        // Verify that Day 2 generated a BRAND NEW publication for city with a new ArtifactId
+        var day2City = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv");
         Assert.NotNull(day2City);
         Assert.NotEqual(day1CityId, day2City.PublisherArtifactId);
+        Assert.Equal("SENT", day2City.TransmissionState);
 
-        // Verify that Day 1's ephemeral tomorrow post was marked DELETED
-        var day1TomorrowPostRollover = store.CurrentModel.Publications.FirstOrDefault(p => p.PublisherArtifactId == day1Tomorrow.PublisherArtifactId);
-        Assert.NotNull(day1TomorrowPostRollover);
-        Assert.Equal("DELETED", day1TomorrowPostRollover.TransmissionState);
+        // Verify that Day 1's ephemeral tomorrow post was deleted in Telegram (adapter.DeleteCount > 0)
+        Assert.True(adapter.DeleteCount >= 1);
     }
 
     [Fact]
