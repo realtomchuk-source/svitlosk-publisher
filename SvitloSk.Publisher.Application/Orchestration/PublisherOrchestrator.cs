@@ -495,13 +495,13 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var pubId = res.PublicationId ?? Guid.NewGuid();
                 string gHash = graphicDecisionItem?.TargetHash ?? "graphic-hash";
                 string opState = res.DecisionResult == DecisionResult.Create.ToString() ? "SENT" : "UPDATED";
-                int? existingMsgId = registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))?.TelegramMessageId;
-                int? finalMsgId = res.MessageId ?? existingMsgId;
+                string? existingExtId = registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId;
+                string? finalExtId = res.ExternalMessageId ?? res.MessageId?.ToString() ?? existingExtId;
 
                 graphicRegistryUpdates.Add(new RegistryPublicationRecord(
                     pubId,
                     res.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
-                    finalMsgId?.ToString(),
+                    finalExtId,
                     gHash,
                     opState,
                     "Graphic"
@@ -518,7 +518,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var record = new RegistryPublicationRecord(
                     pubId,
                     res.TerritoryIdentifier ?? "unknown",
-                    res.MessageId?.ToString(),
+                    res.ExternalMessageId ?? res.MessageId?.ToString(),
                     computedHash, 
                     "SENT",
                     "Text"
@@ -534,7 +534,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 var record = new RegistryPublicationRecord(
                     pubId,
                     res.TerritoryIdentifier ?? "unknown",
-                    res.MessageId?.ToString() ?? (registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId),
+                    res.ExternalMessageId ?? res.MessageId?.ToString() ?? (registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId),
                     computedHash,
                     "UPDATED",
                     "Text"

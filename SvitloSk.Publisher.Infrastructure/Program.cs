@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
+using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 using SvitloSk.Publisher.Infrastructure.Git;
 using SvitloSk.Publisher.Infrastructure.Persistence;
@@ -25,6 +26,7 @@ public class Program
         bool runRegistryVerify = false;
         bool runDiagnostics = false;
         bool runTelegramCheck = false;
+        bool runFacebookCheck = false;
         bool runFeedCheck = false;
 
         foreach (var arg in args)
@@ -36,6 +38,7 @@ public class Program
             else if (arg.Equals("--registry-verify", StringComparison.OrdinalIgnoreCase)) runRegistryVerify = true;
             else if (arg.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase)) runDiagnostics = true;
             else if (arg.Equals("--telegram-check", StringComparison.OrdinalIgnoreCase)) runTelegramCheck = true;
+            else if (arg.Equals("--facebook-check", StringComparison.OrdinalIgnoreCase)) runFacebookCheck = true;
             else if (arg.Equals("--feed-check", StringComparison.OrdinalIgnoreCase)) runFeedCheck = true;
         }
 
@@ -92,6 +95,22 @@ public class Program
                 }
             }
 
+            // 1.1 Facebook Environment & Configuration
+            string? fbPageId = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ID");
+            string? fbToken = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ACCESS_TOKEN");
+            string? fbRegistryPath = Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH");
+
+            if (isDryRun)
+            {
+                fbPageId ??= "fb_dryrun_page";
+                fbToken ??= "fb_dryrun_token";
+                fbRegistryPath = Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_facebook_registry.json");
+            }
+            else
+            {
+                fbRegistryPath ??= "local/registry/facebook_registry.json";
+            }
+
             // 2. Composition Root
             using var httpClient = new HttpClient();
             var atomicWriter = new FileSystemAtomicWriter();
@@ -128,6 +147,16 @@ public class Program
                 discussionManager
             );
 
+            IFacebookAdapter? facebookAdapter = isDryRun
+                ? new FacebookDryRunAdapter()
+                : (!string.IsNullOrWhiteSpace(fbToken) && !string.IsNullOrWhiteSpace(fbPageId)
+                    ? new FacebookGraphApiClient(httpClient, fbToken)
+                    : null);
+
+            IChannelPipeline? facebookPipeline = (facebookAdapter != null && !string.IsNullOrWhiteSpace(fbPageId))
+                ? new FacebookPipeline(facebookAdapter, fbPageId, rasterizer, bannerAssembly)
+                : null;
+
             var orchestrator = new PublisherOrchestrator(
                 registryStore,
                 gitTransport,
@@ -155,6 +184,27 @@ public class Program
 
             if (runTelegramCheck)
                 return await diagnosticsService.RunTelegramCheckAsync(httpClient, botToken, cts.Token);
+
+            if (runFacebookCheck)
+            {
+                if (string.IsNullOrWhiteSpace(fbToken) || string.IsNullOrWhiteSpace(fbPageId))
+                {
+                    Console.Error.WriteLine("[FATAL] Facebook check requires FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN environment variables.");
+                    return 1;
+                }
+                var fbClient = new FacebookGraphApiClient(httpClient, fbToken);
+                var chkResult = await fbClient.CheckPageAccessAsync(fbPageId, cts.Token);
+                if (chkResult.IsSuccess)
+                {
+                    Console.WriteLine($"[SUCCESS] {chkResult.ErrorDescription}");
+                    return 0;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ERROR] Facebook page check failed: {chkResult.ErrorDescription}");
+                    return 1;
+                }
+            }
 
             if (runFeedCheck)
                 return await diagnosticsService.RunFeedCheckAsync(httpClient, parser, cts.Token);
@@ -195,8 +245,55 @@ public class Program
 
             if (result.IsSuccess)
             {
-                Console.WriteLine($"[SUCCESS] Sync cycle completed. Total operations: {result.TotalProcessed}. Successful: {result.TotalSuccessful}.");
+                Console.WriteLine($"[SUCCESS] Telegram sync cycle completed. Total operations: {result.TotalProcessed}. Successful: {result.TotalSuccessful}.");
                 Console.WriteLine($"[INFO] Metrics -> CREATE: {createCount} | UPDATE: {updateCount} | DELETE: {deleteCount} | NOOP: {noopCount}");
+
+                // 6. Facebook Channel Synchronization (Isolated Blast Radius)
+                if (facebookPipeline != null && !string.IsNullOrWhiteSpace(fbRegistryPath) && !string.IsNullOrWhiteSpace(fbPageId))
+                {
+                    Console.WriteLine($"\n[START] Facebook Channel Synchronization");
+                    Console.WriteLine($"[INFO] Facebook Registry: '{fbRegistryPath}', Page ID: '{fbPageId}'");
+                    try
+                    {
+                        var fbOrchestrator = new PublisherOrchestrator(
+                            registryStore,
+                            gitTransport,
+                            hashCalculator,
+                            decisionEngine,
+                            facebookPipeline,
+                            parser,
+                            transformer
+                        );
+
+                        var fbWatch = Stopwatch.StartNew();
+                        var fbResult = await fbOrchestrator.RunOrchestrationAsync(fbRegistryPath, fbPageId, input, null, cts.Token).ConfigureAwait(false);
+                        fbWatch.Stop();
+
+                        int fbCreate = fbResult.Results.Count(r => r.DecisionResult == "Create");
+                        int fbUpdate = fbResult.Results.Count(r => r.DecisionResult == "Update");
+                        int fbDelete = fbResult.Results.Count(r => r.DecisionResult == "Delete");
+                        int fbNoop = fbResult.Results.Count(r => r.DecisionResult is not ("Create" or "Update" or "Delete"));
+
+                        if (fbResult.IsSuccess)
+                        {
+                            Console.WriteLine($"[SUCCESS] Facebook sync completed in {fbWatch.ElapsedMilliseconds}ms. Total: {fbResult.TotalProcessed}, Successful: {fbResult.TotalSuccessful}.");
+                            Console.WriteLine($"[INFO][Facebook] Metrics -> CREATE: {fbCreate} | UPDATE: {fbUpdate} | DELETE: {fbDelete} | NOOP: {fbNoop}");
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"[WARN][Facebook] Sync encountered issues: {fbResult.FatalErrorDescription}");
+                        }
+                    }
+                    catch (Exception fbEx)
+                    {
+                        Console.Error.WriteLine($"[ERROR][Facebook] Non-fatal exception in Facebook channel: {fbEx.Message}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[INFO] Facebook channel is not configured, skipping.");
+                }
+
                 return 0;
             }
             else

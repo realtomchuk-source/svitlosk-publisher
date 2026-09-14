@@ -48,5 +48,32 @@ public class BannerRasterizationTests
         {
             File.WriteAllBytes(Path.Combine(artifactDir, "no_outages_banner_preview.png"), noOutagesPng);
         }
+
+        // 4. Facebook Day Header Banner (1200x630)
+        byte[] fbDaySvg = _assembly.AssembleFacebookDayHeaderSvg("2026-09-14");
+        byte[] fbDayPng = _rasterizer.RasterizeSvgToPng(fbDaySvg, 1200, 630);
+        Assert.NotNull(fbDayPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "facebook_day_header_preview.png"), fbDayPng);
+        }
+
+        // 5. Facebook Tomorrow Separator Banner (1200x630)
+        byte[] fbTomSvg = _assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-15");
+        byte[] fbTomPng = _rasterizer.RasterizeSvgToPng(fbTomSvg, 1200, 630);
+        Assert.NotNull(fbTomPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "facebook_tomorrow_preview.png"), fbTomPng);
+        }
+
+        // 6. Facebook No Outages Banner (1200x630)
+        byte[] fbNoOutagesSvg = _assembly.AssembleFacebookNoOutagesSvg("2026-09-14");
+        byte[] fbNoOutagesPng = _rasterizer.RasterizeSvgToPng(fbNoOutagesSvg, 1200, 630);
+        Assert.NotNull(fbNoOutagesPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "facebook_no_outages_preview.png"), fbNoOutagesPng);
+        }
     }
 }

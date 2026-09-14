@@ -76,4 +76,50 @@ public class BannerGraphicAssemblyTests
         Assert.Contains("<b>Аварійні знеструмлення:</b> відсутні", packages[0].Content);
         Assert.DoesNotContain("Планових та аварійних знеструмлень в Старокостянтинівській територіальній громаді не зафіксовано.", packages[0].Content);
     }
+
+    [Fact]
+    public void AssembleFacebookDayHeaderSvg_GeneratesFacebook1200x630Svg()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookDayHeaderSvg("2026-09-14");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("width=\"1200\"", svgText);
+        Assert.Contains("height=\"630\"", svgText);
+        Assert.Contains("ПОНЕДІЛОК", svgText);
+        Assert.Contains("14.09.2026", svgText);
+        Assert.Contains("ЖУРНАЛ", svgText);
+        Assert.Contains("ЗНЕСТРУМЛЕНЬ", svgText);
+    }
+
+    [Fact]
+    public void AssembleFacebookTomorrowHeaderSvg_GeneratesFacebook1200x630Svg()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-15");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("width=\"1200\"", svgText);
+        Assert.Contains("height=\"630\"", svgText);
+        Assert.Contains("ВІВТОРОК", svgText);
+        Assert.Contains("15.09.2026", svgText);
+        Assert.Contains("ПРОГНОЗ", svgText);
+        Assert.Contains("НА ЗАВТРА", svgText);
+    }
+
+    [Fact]
+    public void AssembleFacebookNoOutagesSvg_GeneratesFacebook1200x630Svg()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookNoOutagesSvg("2026-09-14");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("width=\"1200\"", svgText);
+        Assert.Contains("height=\"630\"", svgText);
+        Assert.Contains("ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ", svgText);
+    }
 }
+
