@@ -22,5 +22,11 @@ if ([string]::IsNullOrWhiteSpace($env:TELEGRAM_BOT_TOKEN) -or [string]::IsNullOr
     Write-Error "System Environment configuration variables are missing. Please run set-publisher-secrets.ps1 first."
 }
 
-# Run SvitloSk Publisher
-dotnet run --project SvitloSk.Publisher.Infrastructure -- $args
+$repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+Push-Location $repoRoot
+try {
+    dotnet run --project "$repoRoot\SvitloSk.Publisher.Infrastructure" -- $args
+}
+finally {
+    Pop-Location
+}
