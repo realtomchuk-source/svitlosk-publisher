@@ -1,6 +1,8 @@
 ## User-specific files
 .agents/
 *.md
+!docs/channels/**/*.md
+!/README.md
 
 ## Build outputs
 bin/
@@ -19,11 +21,10 @@ ehthumbs.db
 Desktop.ini
 
 ## Sandbox operational data
-local/registry/*.json
-local/fixtures/
+local/
+local_*
 *.json
 !local/config/*.json
-local/secrets/*
 !local/secrets/README.md
 
 ## Deploy secrets and script outputs

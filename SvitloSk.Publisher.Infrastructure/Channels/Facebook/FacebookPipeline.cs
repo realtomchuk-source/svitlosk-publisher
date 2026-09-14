@@ -6,7 +6,7 @@ using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Core.Domain;
 using SvitloSk.Publisher.Core.Engine;
-using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
+using SvitloSk.Publisher.Infrastructure.Graphics;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 

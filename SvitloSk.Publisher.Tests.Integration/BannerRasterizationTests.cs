@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using SvitloSk.Publisher.Core.Engine;
-using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
+using SvitloSk.Publisher.Infrastructure.Graphics;
 using Xunit;
 
 namespace SvitloSk.Publisher.Tests.Integration;

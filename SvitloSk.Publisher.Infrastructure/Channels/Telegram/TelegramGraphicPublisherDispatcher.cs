@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
+using SvitloSk.Publisher.Infrastructure.Graphics;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 

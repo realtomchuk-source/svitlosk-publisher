@@ -10,6 +10,7 @@ using SvitloSk.Publisher.Core.Engine;
 using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
 using SvitloSk.Publisher.Infrastructure.Git;
+using SvitloSk.Publisher.Infrastructure.Graphics;
 using SvitloSk.Publisher.Infrastructure.Persistence;
 using SvitloSk.Publisher.Infrastructure.Services;
 
