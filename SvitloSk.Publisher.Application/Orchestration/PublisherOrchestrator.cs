@@ -336,17 +336,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         var todayDecisions = decisions.Where(d => d.TerritoryIdentifier == null || !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
         var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier != null && d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        // 5. Evaluate System Status via Domain Policy Service (Tail Invariant)
-        var techDecisions = new List<EditorialDecision>();
-        if (transformedPackages.Count > 0 || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
-        {
-            string techContent = _transformer.RenderSystemStatus();
-            existingPubs.TryGetValue("system_status", out var existingTech);
-            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, todayDecisions, registry?.Publications, existingTech);
-            techDecisions.AddRange(evaluatedTechDecisions);
-        }
-
-        // 6. Evaluate Tomorrow Visibility
+        // 5. Evaluate Tomorrow Visibility
         var tomorrowVisibilityDecisions = new List<EditorialDecision>();
         var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(input.TomorrowForecastAvailable);
         if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
@@ -371,7 +361,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // 6.5 Evaluate Graphic Generation
+        // 6. Evaluate Graphic Generation
         EditorialDecision? graphicDecisionItem = null;
         RegistryPublicationRecord? unchangedGraphicRecord = null;
 
@@ -432,20 +422,35 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // Assemble Final Decisions
+        // 7. Evaluate System Status via Domain Policy Service (Tail Invariant)
+        // Positioned at the absolute tail of all journal publications (today, tomorrow forecasts, and graphic)
+        var techDecisions = new List<EditorialDecision>();
+        if (transformedPackages.Count > 0 || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
+        {
+            var precedingJournalDecisions = new List<EditorialDecision>();
+            precedingJournalDecisions.AddRange(todayDecisions);
+            precedingJournalDecisions.AddRange(tomorrowDecisions);
+
+            string techContent = _transformer.RenderSystemStatus();
+            existingPubs.TryGetValue("system_status", out var existingTech);
+            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, precedingJournalDecisions, registry?.Publications, existingTech);
+            techDecisions.AddRange(evaluatedTechDecisions);
+        }
+
+        // Assemble Final Decisions: Rollover -> Today -> Tomorrow -> Graphic -> System Status (Tail)
         decisions.Clear();
         if (rolloverCleanupDecisions.Count > 0)
         {
             decisions.AddRange(rolloverCleanupDecisions);
         }
         decisions.AddRange(todayDecisions);
-        decisions.AddRange(techDecisions);
         decisions.AddRange(tomorrowVisibilityDecisions);
         decisions.AddRange(tomorrowDecisions);
         if (graphicDecisionItem != null)
         {
             decisions.Add(graphicDecisionItem);
         }
+        decisions.AddRange(techDecisions);
 
         // Registry Backup
         if (!string.Equals(chatNameOrId, "dryrun", StringComparison.OrdinalIgnoreCase) && !registryPath.Contains("dry_run"))

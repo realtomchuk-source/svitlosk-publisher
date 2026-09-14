@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SvitloSk.Publisher.Core.Domain;
@@ -28,7 +28,7 @@ public class EditorialPolicyService
     /// </summary>
     public IReadOnlyList<EditorialDecision> EvaluateSystemStatus(
         string statusContent,
-        IReadOnlyList<EditorialDecision> todayDecisions,
+        IReadOnlyList<EditorialDecision> precedingDecisions,
         IReadOnlyList<Model.RegistryPublicationRecord>? existingRecords,
         Publication? existingTechPub)
     {
@@ -49,7 +49,7 @@ public class EditorialPolicyService
             existingTechArtifactId = record?.PublisherArtifactId;
         }
 
-        bool anyNewJournalCreates = todayDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
+        bool anyNewJournalCreates = precedingDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
         bool isPhysicallyAboveOtherPosts = techMsgId.HasValue && existingRecords != null && existingRecords.Any(p =>
             !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
             p.TransmissionState != "DELETED" &&
