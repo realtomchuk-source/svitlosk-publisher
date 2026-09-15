@@ -149,7 +149,7 @@ public class FacebookPipeline : IChannelPipeline
                 }
                 else
                 {
-                    string cleanText = FacebookContentFormatter.StripHtml(decision.TargetHash);
+                    string cleanText = FormatPostText(decision);
                     byte[]? bannerBytes = ResolveFacebookBanner(decision);
 
                     pubRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
@@ -195,7 +195,7 @@ public class FacebookPipeline : IChannelPipeline
                     }
                     else
                     {
-                        string cleanText = FacebookContentFormatter.StripHtml(decision.TargetHash);
+                        string cleanText = FormatPostText(decision);
                         byte[]? bannerBytes = ResolveFacebookBanner(decision);
                         updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
                     }
@@ -203,7 +203,7 @@ public class FacebookPipeline : IChannelPipeline
                 else
                 {
                     // Pure text post can be edited in place
-                    string cleanText = FacebookContentFormatter.StripHtml(decision.TargetHash);
+                    string cleanText = FormatPostText(decision);
                     updRes = await _facebookAdapter.UpdatePostAsync(decision.ExternalMessageId ?? string.Empty, cleanText, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -264,5 +264,16 @@ public class FacebookPipeline : IChannelPipeline
             Console.Error.WriteLine($"[WARN][Facebook] Failed to render specialized 1200x630 banner: {ex.Message}. Falling back to default.");
             return decision.GraphicBytes;
         }
+    }
+
+    private static string FormatPostText(EditorialDecision decision)
+    {
+        if (string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase) ||
+            decision.TerritoryIdentifier?.StartsWith("tomorrow_") == true)
+        {
+            return FacebookContentFormatter.StripHtml(decision.TargetHash);
+        }
+
+        return FacebookContentFormatter.FormatTerritoryPost(decision.TargetHash);
     }
 }

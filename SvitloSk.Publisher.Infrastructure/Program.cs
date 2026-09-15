@@ -29,6 +29,7 @@ public class Program
         bool runTelegramCheck = false;
         bool runFacebookCheck = false;
         bool runFacebookTestPost = false;
+        bool runFacebookSync = false;
         bool runFeedCheck = false;
 
         foreach (var arg in args)
@@ -42,6 +43,7 @@ public class Program
             else if (arg.Equals("--telegram-check", StringComparison.OrdinalIgnoreCase)) runTelegramCheck = true;
             else if (arg.Equals("--facebook-check", StringComparison.OrdinalIgnoreCase)) runFacebookCheck = true;
             else if (arg.Equals("--facebook-test-post", StringComparison.OrdinalIgnoreCase)) runFacebookTestPost = true;
+            else if (arg.Equals("--facebook-sync", StringComparison.OrdinalIgnoreCase)) runFacebookSync = true;
             else if (arg.Equals("--feed-check", StringComparison.OrdinalIgnoreCase)) runFeedCheck = true;
         }
 
@@ -83,7 +85,7 @@ public class Program
                 registryPath = Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_registry.json");
                 Console.WriteLine($"[DryRun] Isolated registry path: {registryPath}");
             }
-            else if (!runFacebookCheck && !runFacebookTestPost)
+            else if (!runFacebookCheck && !runFacebookTestPost && !runFacebookSync)
             {
                 if (string.IsNullOrWhiteSpace(botToken))
                 {
@@ -247,6 +249,57 @@ public class Program
                 else
                 {
                     Console.Error.WriteLine($"[ERROR] Facebook test post failed: {postResult.ErrorDescription}");
+                    return 1;
+                }
+            }
+
+            if (runFacebookSync)
+            {
+                if (string.IsNullOrWhiteSpace(fbToken) || string.IsNullOrWhiteSpace(fbPageId))
+                {
+                    Console.Error.WriteLine("[FATAL] Facebook sync requires FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN environment variables.");
+                    return 1;
+                }
+
+                Console.WriteLine("\n[START] Facebook Channel Standalone Synchronization");
+                Console.WriteLine($"[INFO] Facebook Registry: '{fbRegistryPath}', Page ID: '{fbPageId}'");
+
+                var fbIngestionService = new FeedIngestionService(parser, bannerAssembly, rasterizer, transformer);
+                var fbInput = await fbIngestionService.IngestEditorialInputAsync(httpClient, isDryRun, cts.Token);
+
+                if (facebookPipeline == null)
+                {
+                    facebookPipeline = new FacebookPipeline(new FacebookGraphApiClient(httpClient, fbToken), fbPageId, rasterizer, bannerAssembly);
+                }
+
+                var fbOrchestrator = new PublisherOrchestrator(
+                    registryStore,
+                    gitTransport,
+                    hashCalculator,
+                    decisionEngine,
+                    facebookPipeline,
+                    parser,
+                    transformer
+                );
+
+                var fbWatch = Stopwatch.StartNew();
+                var fbResult = await fbOrchestrator.RunOrchestrationAsync(fbRegistryPath!, fbPageId, fbInput, null, cts.Token).ConfigureAwait(false);
+                fbWatch.Stop();
+
+                int fbCreate = fbResult.Results.Count(r => r.DecisionResult == "Create");
+                int fbUpdate = fbResult.Results.Count(r => r.DecisionResult == "Update");
+                int fbDelete = fbResult.Results.Count(r => r.DecisionResult == "Delete");
+                int fbNoop = fbResult.Results.Count(r => r.DecisionResult is not ("Create" or "Update" or "Delete"));
+
+                if (fbResult.IsSuccess)
+                {
+                    Console.WriteLine($"[SUCCESS] Facebook sync completed in {fbWatch.ElapsedMilliseconds}ms. Total: {fbResult.TotalProcessed}, Successful: {fbResult.TotalSuccessful}.");
+                    Console.WriteLine($"[INFO][Facebook] Metrics -> CREATE: {fbCreate} | UPDATE: {fbUpdate} | DELETE: {fbDelete} | NOOP: {fbNoop}");
+                    return 0;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ERROR][Facebook] Sync failed: {fbResult.FatalErrorDescription}");
                     return 1;
                 }
             }

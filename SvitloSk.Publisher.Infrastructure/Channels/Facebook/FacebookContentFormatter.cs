@@ -111,4 +111,25 @@ public static class FacebookContentFormatter
 
         return sb.ToString().TrimEnd();
     }
+
+    public static string FormatTerritoryPost(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        string clean = StripHtml(input);
+
+        // Enhance headers with distinct visual indicators for Facebook feed
+        clean = Regex.Replace(clean, @"^(Місто Старокостянтинів)", "🏙️ $1", RegexOptions.Multiline);
+        clean = Regex.Replace(clean, @"^([А-Яа-яІіЇїЄєҐґ'\-]+ старостинський округ)", "📍 $1", RegexOptions.Multiline);
+        clean = Regex.Replace(clean, @"\b(АВАРІЙНІ ЗНЕСТРУМЛЕННЯ)\b", "🚨 $1");
+        clean = Regex.Replace(clean, @"\b(ПЛАНОВІ ЗНЕСТРУМЛЕННЯ)\b", "📋 $1");
+
+        var sb = new StringBuilder(clean);
+        sb.AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("⚡ SvitloSk Journal | Старокостянтинівська міська територіальна громада");
+        sb.AppendLine("#відключення #старокостянтинів #громада #svitlosk");
+
+        return sb.ToString().TrimEnd();
+    }
 }
