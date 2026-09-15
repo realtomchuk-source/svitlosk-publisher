@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
+using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
 using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
@@ -30,6 +31,7 @@ public class Program
         bool runFacebookCheck = false;
         bool runFacebookTestPost = false;
         bool runFacebookSync = false;
+        bool runFacebookCleanup = false;
         bool runFeedCheck = false;
 
         foreach (var arg in args)
@@ -44,6 +46,7 @@ public class Program
             else if (arg.Equals("--facebook-check", StringComparison.OrdinalIgnoreCase)) runFacebookCheck = true;
             else if (arg.Equals("--facebook-test-post", StringComparison.OrdinalIgnoreCase)) runFacebookTestPost = true;
             else if (arg.Equals("--facebook-sync", StringComparison.OrdinalIgnoreCase)) runFacebookSync = true;
+            else if (arg.Equals("--facebook-cleanup-legacy", StringComparison.OrdinalIgnoreCase)) runFacebookCleanup = true;
             else if (arg.Equals("--feed-check", StringComparison.OrdinalIgnoreCase)) runFeedCheck = true;
         }
 
@@ -253,6 +256,45 @@ public class Program
                 }
             }
 
+            if (runFacebookCleanup)
+            {
+                if (string.IsNullOrWhiteSpace(fbToken) || string.IsNullOrWhiteSpace(fbPageId))
+                {
+                    Console.Error.WriteLine("[FATAL] Facebook cleanup requires FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN environment variables.");
+                    return 1;
+                }
+
+                Console.WriteLine("\n[START] Facebook Channel Legacy Posts Cleanup");
+                var fbClient = new FacebookGraphApiClient(httpClient, fbToken);
+
+                if (File.Exists(fbRegistryPath))
+                {
+                    var fbReg = await registryStore.LoadAsync(fbRegistryPath, cts.Token);
+                    if (fbReg != null)
+                    {
+                        foreach (var pub in fbReg.Publications)
+                        {
+                            if (!string.IsNullOrEmpty(pub.ExternalMessageId) && !pub.ExternalMessageId.StartsWith("fb_virtual_"))
+                            {
+                                Console.WriteLine($"[INFO] Deleting legacy post '{pub.ExternalMessageId}' ({pub.TerritoryId})...");
+                                var delRes = await fbClient.DeletePostAsync(pub.ExternalMessageId, cts.Token);
+                                Console.WriteLine(delRes.IsSuccess ? $"[DELETED] {pub.ExternalMessageId}" : $"[FAILED] {pub.ExternalMessageId}: {delRes.ErrorDescription}");
+                            }
+                        }
+                    }
+                }
+
+                var emptyReg = new RegistryModel(
+                    SchemaVersion: 1,
+                    EditionDate: DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                    Status: "PLANNED",
+                    Publications: Array.Empty<RegistryPublicationRecord>()
+                );
+                await registryStore.SaveAsync(fbRegistryPath!, emptyReg, cts.Token);
+                Console.WriteLine($"[SUCCESS] Reset '{fbRegistryPath}' to clean state ready for new 3-pillar journal.");
+                return 0;
+            }
+
             if (runFacebookSync)
             {
                 if (string.IsNullOrWhiteSpace(fbToken) || string.IsNullOrWhiteSpace(fbPageId))
@@ -265,7 +307,7 @@ public class Program
                 Console.WriteLine($"[INFO] Facebook Registry: '{fbRegistryPath}', Page ID: '{fbPageId}'");
 
                 var fbIngestionService = new FeedIngestionService(parser, bannerAssembly, rasterizer, transformer);
-                var fbInput = await fbIngestionService.IngestEditorialInputAsync(httpClient, isDryRun, cts.Token);
+                var fbInput = await fbIngestionService.IngestFacebookEditorialInputAsync(httpClient, isDryRun, cts.Token);
 
                 if (facebookPipeline == null)
                 {

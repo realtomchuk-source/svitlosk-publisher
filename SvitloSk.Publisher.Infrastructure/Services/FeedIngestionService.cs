@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Core.Engine;
+using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 
 namespace SvitloSk.Publisher.Infrastructure.Services;
 
@@ -216,6 +217,177 @@ public class FeedIngestionService
             EditionDate: editionDate,
             Packages: packages,
             TomorrowForecastAvailable: hasActiveTomorrowPackages,
+            GraphicPackage: graphicPackage
+        );
+    }
+
+    public async Task<EditorialInput> IngestFacebookEditorialInputAsync(
+        HttpClient httpClient,
+        bool isDryRun,
+        CancellationToken cancellationToken = default)
+    {
+        string todayFeedContent = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 20.08.2026\n============================================\nВідключень не зафіксовано.\n============================================\nКІНЕЦЬ ДОКУМЕНТУ\n";
+        string? tomorrowFeedContent = null;
+        bool tomorrowAvailable = false;
+
+        string localFeedFallbackPath = @"../ParserAktualVidkl/starokostiantyniv-outages/data/tg_posts/today.txt";
+
+        if (!isDryRun)
+        {
+            try
+            {
+                Console.WriteLine("[INFO][Facebook] Fetching online today.txt feed from GitHub...");
+                todayFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/today.txt", cancellationToken).ConfigureAwait(false);
+                Console.WriteLine("[INFO][Facebook] Successfully fetched today.txt online.");
+            }
+            catch (Exception onlineEx)
+            {
+                Console.WriteLine($"[WARN][Facebook] Could not fetch today.txt online ({onlineEx.Message}). Falling back to local today.txt.");
+                if (File.Exists(localFeedFallbackPath))
+                {
+                    todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            try
+            {
+                Console.WriteLine("[INFO][Facebook] Fetching online tomorrow.txt forecast from GitHub...");
+                tomorrowFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/tomorrow.txt", cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(tomorrowFeedContent) && !tomorrowFeedContent.Contains("404"))
+                {
+                    tomorrowAvailable = true;
+                    Console.WriteLine("[INFO][Facebook] Successfully fetched tomorrow.txt online.");
+                }
+            }
+            catch
+            {
+                Console.WriteLine("[INFO][Facebook] Tomorrow forecast not found or unavailable online.");
+            }
+        }
+        else
+        {
+            if (File.Exists(localFeedFallbackPath))
+            {
+                todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        // Parse date from feed metadata
+        string editionDate;
+        var dateMatch = Regex.Match(todayFeedContent, @"Дата:\s*(\d{2})\.(\d{2})\.(\d{4})");
+        if (dateMatch.Success)
+        {
+            editionDate = $"{dateMatch.Groups[3].Value}-{dateMatch.Groups[2].Value}-{dateMatch.Groups[1].Value}";
+            Console.WriteLine($"[INFO][Facebook] Parsed EditionDate from feed: {editionDate}");
+        }
+        else
+        {
+            throw new InvalidOperationException("[FATAL] Malformed or missing Date in feed metadata. Fail-Closed.");
+        }
+
+        var packages = new List<InputTerritoryPackage>();
+        var todayRecords = _parser.Parse(todayFeedContent);
+        var todayAggregated = TerritoryAggregator.AggregateByTerritory(todayRecords);
+
+        // 1. Emergency post (Created ONLY if emergency records exist)
+        bool hasEmergencies = todayAggregated.Any(t => t.EmergencyRecords != null && t.EmergencyRecords.Count > 0);
+        if (hasEmergencies)
+        {
+            string? emergText = FacebookContentFormatter.FormatFacebookEmergencyPost(editionDate, todayAggregated, _transformer);
+            if (!string.IsNullOrWhiteSpace(emergText))
+            {
+                byte[] emergSvg = _bannerAssembly.AssembleFacebookEmergencyHeaderSvg(editionDate);
+                byte[] emergPng = _rasterizer.RasterizeSvgToPng(emergSvg, 1200, 630);
+                packages.Add(new InputTerritoryPackage("fb_emergency", emergText, emergPng, false));
+                Console.WriteLine("[INFO][Facebook] Assembled emergency package 'fb_emergency'.");
+            }
+        }
+        else
+        {
+            Console.WriteLine("[INFO][Facebook] No active emergency outages recorded for today. 'fb_emergency' post omitted.");
+        }
+
+        // 2. Planned post (Always created/maintained for today)
+        string plannedText = FacebookContentFormatter.FormatFacebookPlannedPost(editionDate, todayAggregated, _transformer);
+        bool hasPlanned = todayAggregated.Any(t => t.PlannedRecords != null && t.PlannedRecords.Count > 0);
+        byte[] planSvg = hasPlanned
+            ? _bannerAssembly.AssembleFacebookDayHeaderSvg(editionDate)
+            : _bannerAssembly.AssembleFacebookNoOutagesSvg(editionDate);
+        byte[] planPng = _rasterizer.RasterizeSvgToPng(planSvg, 1200, 630);
+        packages.Add(new InputTerritoryPackage("fb_planned", plannedText, planPng, true));
+        Console.WriteLine($"[INFO][Facebook] Assembled planned package 'fb_planned' (HasPlanned: {hasPlanned}).");
+
+        // 3. Tomorrow forecast post (Created when tomorrow data exists)
+        DateTime parsedToday = DateTime.Parse(editionDate);
+        DateTime tomorrowDate = parsedToday.AddDays(1);
+        string tomorrowLabel = tomorrowDate.ToString("yyyy-MM-dd");
+
+        if (tomorrowAvailable && !string.IsNullOrWhiteSpace(tomorrowFeedContent))
+        {
+            if (tomorrowFeedContent.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || tomorrowFeedContent.Contains("ЗНЕСТРУМЛЕННЯ"))
+            {
+                var tomRecords = _parser.Parse(tomorrowFeedContent);
+                var tomAggregated = TerritoryAggregator.AggregateByTerritory(tomRecords);
+                string? tomText = FacebookContentFormatter.FormatFacebookTomorrowPost(tomorrowLabel, tomAggregated, _transformer);
+                if (!string.IsNullOrWhiteSpace(tomText))
+                {
+                    byte[] tomSvg = _bannerAssembly.AssembleFacebookTomorrowHeaderSvg(tomorrowLabel);
+                    byte[] tomPng = _rasterizer.RasterizeSvgToPng(tomSvg, 1200, 630);
+                    packages.Add(new InputTerritoryPackage("fb_tomorrow", tomText, tomPng, false));
+                    Console.WriteLine("[INFO][Facebook] Assembled tomorrow forecast package 'fb_tomorrow'.");
+                }
+            }
+        }
+
+        // 4. Ingestion of 12-subqueue graphic schedule (if available)
+        GraphicInputPackage? graphicPackage = null;
+        string? graphicJsonContent = null;
+
+        if (!isDryRun)
+        {
+            string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
+            try
+            {
+                graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
+                try
+                {
+                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cancellationToken).ConfigureAwait(false);
+                }
+                catch { }
+            }
+        }
+        else
+        {
+            string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
+            if (File.Exists(sampleFixture))
+            {
+                graphicJsonContent = await File.ReadAllTextAsync(sampleFixture, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(graphicJsonContent))
+        {
+            try
+            {
+                graphicPackage = _parser.ParseLegacyGraphicJson(graphicJsonContent, "Старокостянтинівська МТГ");
+                Console.WriteLine("[INFO][Facebook] Successfully parsed 12-subqueue graphic package.");
+            }
+            catch (Exception parseEx)
+            {
+                Console.WriteLine($"[WARN][Facebook] Failed to parse graphic schedule JSON: {parseEx.Message}");
+            }
+        }
+
+        bool hasTomorrow = packages.Any(p => p.TerritoryId == "fb_tomorrow");
+
+        return new EditorialInput(
+            EditionDate: editionDate,
+            Packages: packages,
+            TomorrowForecastAvailable: hasTomorrow,
             GraphicPackage: graphicPackage
         );
     }

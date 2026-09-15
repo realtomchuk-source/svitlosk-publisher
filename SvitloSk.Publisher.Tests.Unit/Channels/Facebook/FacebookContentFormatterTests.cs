@@ -77,4 +77,91 @@ public class FacebookContentFormatterTests
         Assert.Contains("м. Старокостянтинів", post);
         Assert.DoesNotContain("<b>", post);
     }
+
+    [Fact]
+    public void FormatFacebookEmergencyPost_NoEmergencies_ReturnsNull()
+    {
+        var territories = new List<AggregatedTerritoryData>
+        {
+            new("starokostiantyniv", "Місто Старокостянтинів", Array.Empty<OutageRecord>(), new[] { new OutageRecord("м. Старокостянтинів", "ПЛАНОВІ", "09:00 - 17:00\nвул. Миру") })
+        };
+
+        string? result = FacebookContentFormatter.FormatFacebookEmergencyPost("2026-09-15", territories);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void FormatFacebookEmergencyPost_WithEmergencies_FormatsCityFirstAndDistricts()
+    {
+        var territories = new List<AggregatedTerritoryData>
+        {
+            new("rosolivetskyi", "Росоловецький старостинський округ", new[] { new OutageRecord("Росоловецький", "АВАРІЙНІ", "до 16:00\nвул. Центральна, 10") }, Array.Empty<OutageRecord>()),
+            new("starokostiantyniv", "Місто Старокостянтинів", new[] { new OutageRecord("м. Старокостянтинів", "АВАРІЙНІ", "до 14:00\nвул. Грушевського, 5") }, Array.Empty<OutageRecord>())
+        };
+
+        string? result = FacebookContentFormatter.FormatFacebookEmergencyPost("2026-09-15", territories, lastUpdatedUtc: new DateTime(2026, 9, 15, 11, 0, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(result);
+        Assert.Contains("🚨 АВАРІЙНІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
+        Assert.Contains("🏙️ МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ", result);
+        Assert.Contains("РОСОЛОВЕЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ", result);
+        Assert.Contains("Час оновлення: 14:00 (Київ)", result);
+        Assert.Contains("#аварійнівідключення", result);
+
+        // Verify Starokon appears BEFORE rural districts
+        int starokonIndex = result.IndexOf("🏙️ МІСТО СТАРОКОСТЯНТИНІВ");
+        int ruralIndex = result.IndexOf("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ");
+        Assert.True(starokonIndex < ruralIndex, "Starokostiantyniv must be prioritized before rural districts");
+    }
+
+    [Fact]
+    public void FormatFacebookPlannedPost_NoPlanned_ShowsStableText()
+    {
+        var territories = new List<AggregatedTerritoryData>();
+
+        string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
+
+        Assert.Contains("⚡ ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
+        Assert.Contains("планових знеструмлень у громаді не заплановано", result);
+        Assert.Contains("Електропостачання споживачів здійснюється у штатному режимі", result);
+    }
+
+    [Fact]
+    public void FormatFacebookPlannedPost_WithPlanned_FormatsCityFirst()
+    {
+        var territories = new List<AggregatedTerritoryData>
+        {
+            new("samchyky", "Самчиківський старостинський округ", Array.Empty<OutageRecord>(), new[] { new OutageRecord("Самчиківський", "ПЛАНОВІ", "09:00 - 17:00\nс. Самчики\nвул. Миру") }),
+            new("starokostiantyniv", "Місто Старокостянтинів", Array.Empty<OutageRecord>(), new[] { new OutageRecord("м. Старокостянтинів", "ПЛАНОВІ", "10:00 - 16:00\nвул. Острозького") })
+        };
+
+        string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
+
+        Assert.Contains("⚡ ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
+        Assert.Contains("🏙️ МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ", result);
+        Assert.Contains("САМЧИКІВСЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ", result);
+
+        int cityIdx = result.IndexOf("🏙️ МІСТО СТАРОКОСТЯНТИНІВ");
+        int ruralIdx = result.IndexOf("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ");
+        Assert.True(cityIdx < ruralIdx);
+    }
+
+    [Fact]
+    public void FormatFacebookTomorrowPost_WithTomorrowData_FormatsStructuredForecast()
+    {
+        var territories = new List<AggregatedTerritoryData>
+        {
+            new("starokostiantyniv", "Місто Старокостянтинів", Array.Empty<OutageRecord>(), new[] { new OutageRecord("м. Старокостянтинів", "ПЛАНОВІ", "08:00 - 12:00\nвул. Франка") })
+        };
+
+        string? result = FacebookContentFormatter.FormatFacebookTomorrowPost("2026-09-16", territories);
+
+        Assert.NotNull(result);
+        Assert.Contains("🔮 ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА — 16.09.2026", result);
+        Assert.Contains("🏙️ МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("Укренерго", result);
+        Assert.Contains("#прогноз", result);
+    }
 }

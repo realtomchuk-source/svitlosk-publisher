@@ -5,10 +5,12 @@ namespace SvitloSk.Publisher.Core.Engine;
 public interface IBannerGraphicAssembly
 {
     byte[] AssembleDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
 
     byte[] AssembleFacebookDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleFacebookEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleFacebookNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
 }
@@ -114,6 +116,83 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         // Date Line with Orange Accent Vertical Pill Bar (Unified 50px font)
         sb.AppendLine($"  <rect x=\"75\" y=\"226\" width=\"14\" height=\"58\" rx=\"7\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine($"  <text x=\"108\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+        
+        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
+
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 34px white text
+        double textWidth = MeasureArialTextWidth(territorialScope, 34) * 1.12;
+        double paddingX = 24.0;
+        double pillWidth = textWidth + 2 * paddingX;
+        double pillX = (canvasWidth - pillWidth) / 2.0;
+        double centerX = canvasWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{pillX:F1}\" y=\"350\" width=\"{pillWidth:F1}\" height=\"66\" rx=\"18\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{centerX:F1}\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+
+        // Bottom subtle border divider
+        sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine("</svg>");
+
+        return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    public byte[] AssembleEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада")
+    {
+        if (string.IsNullOrWhiteSpace(editionDate))
+            throw new ArgumentException("Edition date cannot be null or empty.", nameof(editionDate));
+
+        int canvasWidth = 1080;
+        int canvasHeight = 480;
+
+        string formattedDate = editionDate;
+        string dayOfWeekStr = "СЬОГОДНІ";
+        if (DateTime.TryParse(editionDate, out var parsedDate))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
+            formattedDate = parsedDate.ToString("dd.MM.yyyy");
+        }
+        else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
+            formattedDate = parsedExact.ToString("dd.MM.yyyy");
+        }
+        else
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(editionDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
+            {
+                dayOfWeekStr = GetUkrainianDayOfWeek(regexDate);
+                formattedDate = regexDate.ToString("dd.MM.yyyy");
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
+        sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
+
+        // Emergency Alert Decorative Arcs (Red / Amber tones)
+        sb.AppendLine("  <!-- Emergency Alert Decorative Arcs -->");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#FEE2E2\" stroke-width=\"40\" opacity=\"0.8\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#FFF1F2\" stroke=\"#FECACA\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
+
+        // Emergency Alert Bulb Accent
+        sb.AppendLine("  <!-- Outlined Emergency Red Bulb -->");
+        sb.AppendLine("  <g transform=\"translate(850, 115) scale(0.48)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine("  </g>");
+
+        // Typography Section: АВАРІЙНІ ЗНЕСТРУМЛЕННЯ
+        sb.AppendLine($"  <text x=\"75\" y=\"115\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#DC2626\">АВАРІЙНІ</text>");
+        sb.AppendLine($"  <text x=\"75\" y=\"195\" font-family=\"Arial, sans-serif\" font-size=\"72\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЗНЕСТРУМЛЕННЯ</text>");
+
+        // Date Line with Red Accent Vertical Pill Bar
+        sb.AppendLine($"  <rect x=\"75\" y=\"226\" width=\"14\" height=\"58\" rx=\"7\" fill=\"#EF4444\"/>");
+        sb.AppendLine($"  <text x=\"108\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#DC2626\">{EscapeXml(dayOfWeekStr)}</text>");
         
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
@@ -344,6 +423,83 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         // Date Line with Orange Accent Vertical Pill Bar
         sb.AppendLine($"  <rect x=\"85\" y=\"270\" width=\"16\" height=\"66\" rx=\"8\" fill=\"{GraphicAssembly.PoweredColor}\"/>");
         sb.AppendLine($"  <text x=\"120\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"{GraphicAssembly.PoweredColor}\">{EscapeXml(dayOfWeekStr)}</text>");
+
+        double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
+
+        // Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 38px white text
+        double fbTextWidth = MeasureArialTextWidth(territorialScope, 38) * 1.12;
+        double fbPaddingX = 28.0;
+        double fbPillWidth = fbTextWidth + 2 * fbPaddingX;
+        double fbPillX = (canvasWidth - fbPillWidth) / 2.0;
+        double fbCenterX = canvasWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{fbPillX:F1}\" y=\"418\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{fbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+
+        // Bottom subtle border divider
+        sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
+        sb.AppendLine("</svg>");
+
+        return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    public byte[] AssembleFacebookEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада")
+    {
+        if (string.IsNullOrWhiteSpace(editionDate))
+            throw new ArgumentException("Edition date cannot be null or empty.", nameof(editionDate));
+
+        int canvasWidth = 1200;
+        int canvasHeight = 630;
+
+        string formattedDate = editionDate;
+        string dayOfWeekStr = "СЬОГОДНІ";
+        if (DateTime.TryParse(editionDate, out var parsedDate))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
+            formattedDate = parsedDate.ToString("dd.MM.yyyy");
+        }
+        else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
+            formattedDate = parsedExact.ToString("dd.MM.yyyy");
+        }
+        else
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(editionDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
+            {
+                dayOfWeekStr = GetUkrainianDayOfWeek(regexDate);
+                formattedDate = regexDate.ToString("dd.MM.yyyy");
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
+        sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
+
+        // Emergency Alert Decorative Arcs (Red / Amber tones)
+        sb.AppendLine("  <!-- Background Emergency Alert Arcs -->");
+        sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"320\" fill=\"none\" stroke=\"#FEE2E2\" stroke-width=\"48\" opacity=\"0.8\"/>");
+        sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"250\" fill=\"#FFF1F2\" stroke=\"#FECACA\" stroke-width=\"2\"/>");
+        sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"210\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"7\" stroke-dasharray=\"400 480\" stroke-linecap=\"round\" transform=\"rotate(-45 1050 315)\"/>");
+
+        // Emergency Alert Bulb Accent
+        sb.AppendLine("  <!-- Outlined Emergency Red Bulb -->");
+        sb.AppendLine("  <g transform=\"translate(915, 160) scale(0.60)\">");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#EF4444\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine("  </g>");
+
+        // Typography Section: АВАРІЙНІ ЗНЕСТРУМЛЕННЯ
+        sb.AppendLine($"  <text x=\"85\" y=\"140\" font-family=\"Arial, sans-serif\" font-size=\"80\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#DC2626\">АВАРІЙНІ</text>");
+        sb.AppendLine($"  <text x=\"85\" y=\"230\" font-family=\"Arial, sans-serif\" font-size=\"80\" font-weight=\"900\" letter-spacing=\"1.5\" fill=\"#0F2942\">ЗНЕСТРУМЛЕННЯ</text>");
+
+        // Date Line with Red Accent Vertical Pill Bar
+        sb.AppendLine($"  <rect x=\"85\" y=\"270\" width=\"16\" height=\"66\" rx=\"8\" fill=\"#EF4444\"/>");
+        sb.AppendLine($"  <text x=\"120\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#DC2626\">{EscapeXml(dayOfWeekStr)}</text>");
 
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));

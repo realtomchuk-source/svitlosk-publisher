@@ -174,37 +174,44 @@ public class FacebookPipeline : IChannelPipeline
             {
                 FacebookDispatchResult updRes;
 
-                // Photo posts cannot have their image edited in Facebook Graph API -> Re-publish (Delete old + Create new)
-                if (decision.Type == PublicationType.Graphic || HasBanner(decision))
+                if (decision.Type == PublicationType.Graphic)
                 {
+                    // Graphic schedule photo must be replaced: delete old and create new
                     if (!string.IsNullOrEmpty(decision.ExternalMessageId))
                     {
                         await _facebookAdapter.DeletePostAsync(decision.ExternalMessageId, cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (decision.Type == PublicationType.Graphic)
+                    byte[]? imageBytes = null;
+                    if (decision.SvgBytes != null && decision.SvgBytes.Length > 0)
                     {
-                        byte[]? imageBytes = null;
-                        if (decision.SvgBytes != null && decision.SvgBytes.Length > 0)
-                        {
-                            imageBytes = _rasterizer.RasterizeSvgToPng(decision.SvgBytes, 1080, 1080);
-                        }
+                        imageBytes = _rasterizer.RasterizeSvgToPng(decision.SvgBytes, 1080, 1080);
+                    }
 
-                        string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
-                        updRes = await _facebookAdapter.PublishPostAsync(_pageId, caption, imageBytes, cancellationToken).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        string cleanText = FormatPostText(decision);
-                        byte[]? bannerBytes = ResolveFacebookBanner(decision);
-                        updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
-                    }
+                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
+                    updRes = await _facebookAdapter.PublishPostAsync(_pageId, caption, imageBytes, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
-                    // Pure text post can be edited in place
                     string cleanText = FormatPostText(decision);
-                    updRes = await _facebookAdapter.UpdatePostAsync(decision.ExternalMessageId ?? string.Empty, cleanText, cancellationToken).ConfigureAwait(false);
+
+                    if (!string.IsNullOrEmpty(decision.ExternalMessageId))
+                    {
+                        // In-place text update preserves user likes, comments, and shares
+                        updRes = await _facebookAdapter.UpdatePostAsync(decision.ExternalMessageId, cleanText, cancellationToken).ConfigureAwait(false);
+
+                        // If in-place update failed (e.g. post was deleted externally), recreate
+                        if (!updRes.IsSuccess)
+                        {
+                            byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                            updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                        updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 if (updRes.IsSuccess) totalSuccessful++;
@@ -237,6 +244,7 @@ public class FacebookPipeline : IChannelPipeline
     private static bool HasBanner(EditorialDecision decision)
     {
         return decision.GraphicBytes != null ||
+               decision.TerritoryIdentifier?.StartsWith("fb_") == true ||
                string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase);
     }
@@ -245,13 +253,26 @@ public class FacebookPipeline : IChannelPipeline
     {
         try
         {
-            if (string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase))
+            if (decision.GraphicBytes != null && decision.GraphicBytes.Length > 0)
+            {
+                return decision.GraphicBytes;
+            }
+
+            if (string.Equals(decision.TerritoryIdentifier, "fb_emergency", StringComparison.OrdinalIgnoreCase))
+            {
+                byte[] svg = _bannerAssembly.AssembleFacebookEmergencyHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+                return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
+            }
+
+            if (string.Equals(decision.TerritoryIdentifier, "fb_planned", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase))
             {
                 byte[] svg = _bannerAssembly.AssembleFacebookDayHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
             }
 
-            if (string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(decision.TerritoryIdentifier, "fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase))
             {
                 byte[] svg = _bannerAssembly.AssembleFacebookTomorrowHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
@@ -268,7 +289,8 @@ public class FacebookPipeline : IChannelPipeline
 
     private static string FormatPostText(EditorialDecision decision)
     {
-        if (string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase) ||
+        if (decision.TerritoryIdentifier?.StartsWith("fb_") == true ||
+            string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase) ||
             decision.TerritoryIdentifier?.StartsWith("tomorrow_") == true)
         {
             return FacebookContentFormatter.StripHtml(decision.TargetHash);

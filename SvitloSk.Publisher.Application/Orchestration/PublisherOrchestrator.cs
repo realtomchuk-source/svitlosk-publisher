@@ -133,12 +133,19 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     type = PublicationType.Technical;
                     isPersistent = false;
                 }
-                else if (pubRecord.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+                else if (pubRecord.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                         pubRecord.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Tomorrow;
                     isPersistent = false;
                 }
-                else if (pubRecord.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
+                else if (pubRecord.TerritoryId.Equals("fb_emergency", StringComparison.OrdinalIgnoreCase))
+                {
+                    type = PublicationType.Text;
+                    isPersistent = false;
+                }
+                else if (pubRecord.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) ||
+                         pubRecord.TerritoryId.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Text;
                     isPersistent = true;
@@ -196,6 +203,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 }
 
                 if (!rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) && 
+                    !rawPkg.TerritoryId.StartsWith("fb_", StringComparison.OrdinalIgnoreCase) &&
                     rawPkg.Content != null && (rawPkg.Content.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || (rawPkg.Content.Contains("ЗНЕСТРУМЛЕННЯ") && !rawPkg.Content.Contains("<b>"))))
                 {
                     var historicalTerritoryIds = new List<string>();
@@ -207,6 +215,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                                 !pub.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) &&
                                 !pub.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
                                 !pub.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
+                                !pub.TerritoryId.StartsWith("fb_", StringComparison.OrdinalIgnoreCase) &&
                                 pub.TransmissionState != "DELETED")
                             {
                                 historicalTerritoryIds.Add(pub.TerritoryId);
@@ -227,7 +236,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     {
                         if (rawPkg.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) || 
                             rawPkg.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) || 
-                            rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+                            rawPkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                            rawPkg.TerritoryId.StartsWith("fb_", StringComparison.OrdinalIgnoreCase))
                         {
                             transformedPackages.Add(rawPkg);
                         }
@@ -297,23 +307,25 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 if (updateDecision.DecisionResult == DecisionResult.Update)
                 {
                     int? msgId = null;
+                    string? extId = null;
                     if (registry != null)
                     {
                         var record = registry.Publications.FirstOrDefault(p => 
                             p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && 
                             p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase) &&
                             p.TransmissionState != "DELETED" &&
-                            p.TelegramMessageId.HasValue);
+                            (p.TelegramMessageId.HasValue || !string.IsNullOrEmpty(p.ExternalMessageId)));
                         msgId = record?.TelegramMessageId;
+                        extId = record?.ExternalMessageId;
                     }
-                    if (!msgId.HasValue)
+                    if (!msgId.HasValue && string.IsNullOrEmpty(extId))
                     {
                         var createFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Persistent, TerritoryIdentifier: pkg.TerritoryId, TargetHash: incomingHash), classification);
                         decisions.Add(createFallback with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
                     }
                     else
                     {
-                        decisions.Add(updateDecision with { TelegramMessageId = msgId, TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
+                        decisions.Add(updateDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
                     }
                 }
                 else
@@ -322,19 +334,26 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     if (removeDecision.DecisionResult == DecisionResult.Delete || removeDecision.DecisionResult == DecisionResult.Keep)
                     {
                         int? msgId = null;
+                        string? extId = null;
                         if (registry != null)
                         {
                             var record = registry.Publications.FirstOrDefault(p => p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase));
                             msgId = record?.TelegramMessageId;
+                            extId = record?.ExternalMessageId;
                         }
-                        decisions.Add(removeDecision with { TelegramMessageId = msgId, GraphicBytes = pkg.GraphicBytes });
+                        decisions.Add(removeDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, GraphicBytes = pkg.GraphicBytes });
                     }
                 }
             }
         }
 
-        var todayDecisions = decisions.Where(d => d.TerritoryIdentifier == null || !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
-        var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier != null && d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)).ToList();
+        var todayDecisions = decisions.Where(d => d.TerritoryIdentifier == null || 
+            (!d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
+             !d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
+
+        var tomorrowDecisions = decisions.Where(d => d.TerritoryIdentifier != null && 
+            (d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+             d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
 
         // 5. Evaluate Tomorrow Visibility
         var tomorrowVisibilityDecisions = new List<EditorialDecision>();
@@ -345,7 +364,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
         else if (registry != null)
         {
-            foreach (var oldTom in registry.Publications.Where(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)))
+            foreach (var oldTom in registry.Publications.Where(p => 
+                p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase)))
             {
                 if (oldTom.TransmissionState != "DELETED" && !string.IsNullOrEmpty(oldTom.ExternalMessageId))
                 {

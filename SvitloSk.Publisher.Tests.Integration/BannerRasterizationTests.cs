@@ -75,5 +75,23 @@ public class BannerRasterizationTests
         {
             File.WriteAllBytes(Path.Combine(artifactDir, "facebook_no_outages_preview.png"), fbNoOutagesPng);
         }
+
+        // 7. Telegram Emergency Header Banner (1080x480)
+        byte[] emergSvg = _assembly.AssembleEmergencyHeaderSvg("2026-09-15");
+        byte[] emergPng = _rasterizer.RasterizeSvgToPng(emergSvg, 1080, 480);
+        Assert.NotNull(emergPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "emergency_banner_preview.png"), emergPng);
+        }
+
+        // 8. Facebook Emergency Header Banner (1200x630)
+        byte[] fbEmergSvg = _assembly.AssembleFacebookEmergencyHeaderSvg("2026-09-15");
+        byte[] fbEmergPng = _rasterizer.RasterizeSvgToPng(fbEmergSvg, 1200, 630);
+        Assert.NotNull(fbEmergPng);
+        if (Directory.Exists(artifactDir))
+        {
+            File.WriteAllBytes(Path.Combine(artifactDir, "facebook_emergency_preview.png"), fbEmergPng);
+        }
     }
 }
