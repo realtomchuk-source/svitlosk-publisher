@@ -118,11 +118,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge (no icon, balanced horizontal padding)
-        double textWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double pillWidth = textWidth + 85; // 35px left padding, 50px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"348\" width=\"{pillWidth:F1}\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"110\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double textWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
+        double paddingX = 26.0;
+        double pillWidth = textWidth + 2 * paddingX;
+        double pillX = 75.0;
+        double centerX = pillX + pillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{pillX:F1}\" y=\"350\" width=\"{pillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{centerX:F1}\" y=\"392\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -182,11 +187,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + tomDayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge (no icon, balanced horizontal padding)
-        double tomTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double tomPillWidth = tomTextWidth + 85; // 35px left padding, 50px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"348\" width=\"{tomPillWidth:F1}\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"110\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double tomTextWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
+        double tomPaddingX = 26.0;
+        double tomPillWidth = tomTextWidth + 2 * tomPaddingX;
+        double tomPillX = 75.0;
+        double tomCenterX = tomPillX + tomPillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{tomPillX:F1}\" y=\"350\" width=\"{tomPillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{tomCenterX:F1}\" y=\"392\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -254,11 +264,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge (no icon, balanced horizontal padding)
-        double textWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double pillWidth = textWidth + 85; // 35px left padding, 50px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"338\" width=\"{pillWidth:F1}\" height=\"68\" rx=\"34\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"110\" y=\"384\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double textWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
+        double paddingX = 26.0;
+        double pillWidth = textWidth + 2 * paddingX;
+        double pillX = 75.0;
+        double centerX = pillX + pillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{pillX:F1}\" y=\"340\" width=\"{pillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{centerX:F1}\" y=\"382\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom Status Banner: ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ
         sb.AppendLine("  <!-- Bottom Summary Banner (Green, single centered line) -->");
@@ -333,11 +348,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge (no icon, balanced horizontal padding)
-        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double fbPillWidth = fbTextWidth + 95; // 40px left padding, 55px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"85\" y=\"420\" width=\"{fbPillWidth:F1}\" height=\"70\" rx=\"35\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"125\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
+        double fbPaddingX = 30.0;
+        double fbPillWidth = fbTextWidth + 2 * fbPaddingX;
+        double fbPillX = 85.0;
+        double fbCenterX = fbPillX + fbPillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{fbPillX:F1}\" y=\"420\" width=\"{fbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{fbCenterX:F1}\" y=\"465\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -396,11 +416,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + tomDayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge (no icon, balanced horizontal padding)
-        double tomFbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double tomFbPillWidth = tomFbTextWidth + 95; // 40px left padding, 55px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"85\" y=\"420\" width=\"{tomFbPillWidth:F1}\" height=\"70\" rx=\"35\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"125\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double tomFbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
+        double tomFbPaddingX = 30.0;
+        double tomFbPillWidth = tomFbTextWidth + 2 * tomFbPaddingX;
+        double tomFbPillX = 85.0;
+        double tomFbCenterX = tomFbPillX + tomFbPillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{tomFbPillX:F1}\" y=\"420\" width=\"{tomFbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{tomFbCenterX:F1}\" y=\"465\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -459,11 +484,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge (no icon, balanced horizontal padding)
-        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.05;
-        double fbPillWidth = fbTextWidth + 95; // 40px left padding, 55px right padding
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"85\" y=\"412\" width=\"{fbPillWidth:F1}\" height=\"70\" rx=\"35\" fill=\"#E8EFF6\"/>"));
-        sb.AppendLine($"  <text x=\"125\" y=\"458\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
+        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
+        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
+        double fbPaddingX = 30.0;
+        double fbPillWidth = fbTextWidth + 2 * fbPaddingX;
+        double fbPillX = 85.0;
+        double fbCenterX = fbPillX + fbPillWidth / 2.0;
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <rect x=\"{fbPillX:F1}\" y=\"412\" width=\"{fbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"  <text x=\"{fbCenterX:F1}\" y=\"457\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom Summary Banner (Green, single centered line)
         sb.AppendLine("  <!-- Bottom Summary Banner (Green) -->");
