@@ -406,7 +406,8 @@ public class Program
                         );
 
                         var fbWatch = Stopwatch.StartNew();
-                        var fbResult = await fbOrchestrator.RunOrchestrationAsync(fbRegistryPath, fbPageId, input, null, cts.Token).ConfigureAwait(false);
+                        var fbInput = await ingestionService.IngestFacebookEditorialInputAsync(httpClient, isDryRun, cts.Token);
+                        var fbResult = await fbOrchestrator.RunOrchestrationAsync(fbRegistryPath, fbPageId, fbInput, null, cts.Token).ConfigureAwait(false);
                         fbWatch.Stop();
 
                         int fbCreate = fbResult.Results.Count(r => r.DecisionResult == "Create");
