@@ -5,11 +5,11 @@ namespace SvitloSk.Publisher.Core.Engine;
 public interface IBannerGraphicAssembly
 {
     byte[] AssembleDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
-    byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Попередній графік відключень електроенергії");
+    byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
 
     byte[] AssembleFacebookDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
-    byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Попередній графік відключень електроенергії");
+    byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleFacebookNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
 }
 
@@ -122,7 +122,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    public byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Старокостянтинівська міська територіальна громада")
+    public byte[] AssembleTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада")
     {
         if (string.IsNullOrWhiteSpace(tomorrowDate))
             throw new ArgumentException("Tomorrow date cannot be null or empty.", nameof(tomorrowDate));
@@ -174,7 +174,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + tomDayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
         // Bottom Territory Scope Pill Badge with Location Pin Icon
-        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 1.25 + 110;
+        double tomBadgeTextWidth = MeasureArial28pxWidth(territorialScope) * 1.25 + 110;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"75\" y=\"346\" width=\"{tomBadgeTextWidth:F1}\" height=\"74\" rx=\"37\" fill=\"#E8EFF6\"/>"));
         
         // Location Pin Icon inside Pill Badge
@@ -184,7 +184,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"    <line x1=\"38\" y1=\"2\" x2=\"38\" y2=\"32\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
         sb.AppendLine("  </g>");
         
-        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(subtitle)}</text>");
+        sb.AppendLine($"  <text x=\"160\" y=\"396\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -356,7 +356,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    public byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string subtitle = "Старокостянтинівська міська територіальна громада")
+    public byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада")
     {
         if (string.IsNullOrWhiteSpace(tomorrowDate))
             throw new ArgumentException("Tomorrow date cannot be null or empty.", nameof(tomorrowDate));
@@ -407,7 +407,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + tomDayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
         // Scope Pill Badge
-        double tomBadgeTextWidth = MeasureArial28pxWidth(subtitle) * 1.35 + 125;
+        double tomBadgeTextWidth = MeasureArial28pxWidth(territorialScope) * 1.35 + 125;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <rect x=\"85\" y=\"416\" width=\"{tomBadgeTextWidth:F1}\" height=\"82\" rx=\"41\" fill=\"#E8EFF6\"/>"));
 
         sb.AppendLine("  <!-- Location Pin Icon -->");
@@ -416,7 +416,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"    <line x1=\"42\" y1=\"2\" x2=\"42\" y2=\"34\" stroke=\"#CBD5E1\" stroke-width=\"2\"/>");
         sb.AppendLine("  </g>");
 
-        sb.AppendLine($"  <text x=\"178\" y=\"470\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(subtitle)}</text>");
+        sb.AppendLine($"  <text x=\"178\" y=\"470\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" fill=\"#2B4B6F\">{EscapeXml(territorialScope)}</text>");
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");

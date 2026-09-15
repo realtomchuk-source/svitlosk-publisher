@@ -41,6 +41,7 @@ public class BannerGraphicAssemblyTests
         Assert.Contains("НА ЗАВТРА", svgText);
         Assert.Contains("СЕРЕДА", svgText);
         Assert.Contains("09.09.2026", svgText);
+        Assert.Contains("Старокостянтинівська міська територіальна громада", svgText);
     }
 
     [Fact]
@@ -107,6 +108,7 @@ public class BannerGraphicAssemblyTests
         Assert.Contains("15.09.2026", svgText);
         Assert.Contains("ПРОГНОЗ", svgText);
         Assert.Contains("НА ЗАВТРА", svgText);
+        Assert.Contains("Старокостянтинівська міська територіальна громада", svgText);
     }
 
     [Fact]
