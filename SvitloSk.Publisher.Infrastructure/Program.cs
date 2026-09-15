@@ -28,6 +28,7 @@ public class Program
         bool runDiagnostics = false;
         bool runTelegramCheck = false;
         bool runFacebookCheck = false;
+        bool runFacebookTestPost = false;
         bool runFeedCheck = false;
 
         foreach (var arg in args)
@@ -40,6 +41,7 @@ public class Program
             else if (arg.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase)) runDiagnostics = true;
             else if (arg.Equals("--telegram-check", StringComparison.OrdinalIgnoreCase)) runTelegramCheck = true;
             else if (arg.Equals("--facebook-check", StringComparison.OrdinalIgnoreCase)) runFacebookCheck = true;
+            else if (arg.Equals("--facebook-test-post", StringComparison.OrdinalIgnoreCase)) runFacebookTestPost = true;
             else if (arg.Equals("--feed-check", StringComparison.OrdinalIgnoreCase)) runFeedCheck = true;
         }
 
@@ -65,10 +67,14 @@ public class Program
             Console.WriteLine($"MODE: {(isDryRun ? "DRY-RUN" : "PRODUCTION")}");
 
             // 1. Environment & Configuration
-            string? botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
-            string? chatNameOrId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
-            string? discussionGroupId = Environment.GetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID");
-            string? registryPath = Environment.GetEnvironmentVariable("REGISTRY_PATH");
+            string? botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN")
+                ?? Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN", EnvironmentVariableTarget.User);
+            string? chatNameOrId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID")
+                ?? Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID", EnvironmentVariableTarget.User);
+            string? discussionGroupId = Environment.GetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID")
+                ?? Environment.GetEnvironmentVariable("TELEGRAM_DISCUSSION_GROUP_ID", EnvironmentVariableTarget.User);
+            string? registryPath = Environment.GetEnvironmentVariable("REGISTRY_PATH")
+                ?? Environment.GetEnvironmentVariable("REGISTRY_PATH", EnvironmentVariableTarget.User);
 
             if (isDryRun)
             {
@@ -77,7 +83,7 @@ public class Program
                 registryPath = Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_registry.json");
                 Console.WriteLine($"[DryRun] Isolated registry path: {registryPath}");
             }
-            else
+            else if (!runFacebookCheck && !runFacebookTestPost)
             {
                 if (string.IsNullOrWhiteSpace(botToken))
                 {
@@ -97,9 +103,12 @@ public class Program
             }
 
             // 1.1 Facebook Environment & Configuration
-            string? fbPageId = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ID");
-            string? fbToken = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ACCESS_TOKEN");
-            string? fbRegistryPath = Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH");
+            string? fbPageId = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ID")
+                ?? Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ID", EnvironmentVariableTarget.User);
+            string? fbToken = Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ACCESS_TOKEN")
+                ?? Environment.GetEnvironmentVariable("FACEBOOK_PAGE_ACCESS_TOKEN", EnvironmentVariableTarget.User);
+            string? fbRegistryPath = Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH")
+                ?? Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH", EnvironmentVariableTarget.User);
 
             if (isDryRun)
             {
@@ -203,6 +212,41 @@ public class Program
                 else
                 {
                     Console.Error.WriteLine($"[ERROR] Facebook page check failed: {chkResult.ErrorDescription}");
+                    return 1;
+                }
+            }
+
+            if (runFacebookTestPost)
+            {
+                if (string.IsNullOrWhiteSpace(fbToken) || string.IsNullOrWhiteSpace(fbPageId))
+                {
+                    Console.Error.WriteLine("[FATAL] Facebook test post requires FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN environment variables.");
+                    return 1;
+                }
+
+                Console.WriteLine("[INFO] Assembling Facebook Day Header banner (1200x630)...");
+                string todayDate = DateTime.Now.ToString("dd.MM.yyyy");
+                byte[] svgBytes = bannerAssembly.AssembleFacebookDayHeaderSvg(todayDate);
+                byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1200, 630);
+
+                string testText = "💡 ЖУРНАЛ ЗНЕСТРУМЛЕНЬ | СТАРОКОСТЯНТИНІВСЬКА МІСЬКА ТЕРИТОРІАЛЬНА ГРОМАДА\n\n" +
+                                  $"Тестове підключення автоматичного паблішера SvitloSk Journal ({todayDate}).\n" +
+                                  "Електропостачання та графіки публікуються в автоматичному режимі.";
+
+                Console.WriteLine($"[INFO] Publishing test photo post to Facebook Page '{fbPageId}' via Graph API...");
+                var fbClient = new FacebookGraphApiClient(httpClient, fbToken);
+                var postResult = await fbClient.PublishPostAsync(fbPageId, testText, pngBytes, cts.Token);
+
+                if (postResult.IsSuccess)
+                {
+                    Console.WriteLine($"[SUCCESS] Test post published successfully to Facebook Page!");
+                    Console.WriteLine($"[INFO] Post ID: {postResult.PostId}");
+                    Console.WriteLine($"[INFO] Check your page: https://www.facebook.com/{fbPageId}");
+                    return 0;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ERROR] Facebook test post failed: {postResult.ErrorDescription}");
                     return 1;
                 }
             }
