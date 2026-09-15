@@ -118,16 +118,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double textWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
-        double paddingX = 26.0;
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 34px white text
+        double textWidth = MeasureArialTextWidth(territorialScope, 34) * 1.12;
+        double paddingX = 24.0;
         double pillWidth = textWidth + 2 * paddingX;
-        double pillX = 75.0;
-        double centerX = pillX + pillWidth / 2.0;
+        double pillX = (canvasWidth - pillWidth) / 2.0;
+        double centerX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{pillX:F1}\" y=\"350\" width=\"{pillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{pillX:F1}\" y=\"350\" width=\"{pillWidth:F1}\" height=\"66\" rx=\"18\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{centerX:F1}\" y=\"392\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{centerX:F1}\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -162,17 +162,17 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Right-Side Background Aesthetic Circular Arcs (Tomorrow Distinct Palette: Slate/Dark Gray)
+        // Right-Side Background Aesthetic Circular Arcs (Tomorrow Distinct Palette: Soft Slate)
         sb.AppendLine("  <!-- Background Decorative Arcs -->");
         sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"40\" opacity=\"0.6\"/>");
         sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
-        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"#64748B\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
+        sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
 
-        // Right-Side Stylized Bulb Accent (Slate/Dark Gray #475569 for Tomorrow Forecast)
-        sb.AppendLine("  <!-- Outlined Dark Slate Gray Bulb matching forecast identity -->");
+        // Right-Side Stylized Bulb Accent (Soft Slate #94A3B8 for Tomorrow Forecast)
+        sb.AppendLine("  <!-- Outlined Soft Slate Gray Bulb matching forecast identity -->");
         sb.AppendLine("  <g transform=\"translate(850, 115) scale(0.48)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#475569\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#475569\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
         sb.AppendLine("  </g>");
 
         // Typography Section (Left-Aligned per Reference)
@@ -187,16 +187,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + tomDayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double tomTextWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
-        double tomPaddingX = 26.0;
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 34px white text
+        double tomTextWidth = MeasureArialTextWidth(territorialScope, 34) * 1.12;
+        double tomPaddingX = 24.0;
         double tomPillWidth = tomTextWidth + 2 * tomPaddingX;
-        double tomPillX = 75.0;
-        double tomCenterX = tomPillX + tomPillWidth / 2.0;
+        double tomPillX = (canvasWidth - tomPillWidth) / 2.0;
+        double tomCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{tomPillX:F1}\" y=\"350\" width=\"{tomPillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{tomPillX:F1}\" y=\"350\" width=\"{tomPillWidth:F1}\" height=\"66\" rx=\"18\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{tomCenterX:F1}\" y=\"392\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{tomCenterX:F1}\" y=\"394\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"479\" x2=\"{canvasWidth}\" y2=\"479\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -264,16 +264,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.85 + 24;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{108 + dayOffset:F1}\" y=\"274\" font-family=\"Arial, sans-serif\" font-size=\"50\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double textWidth = MeasureArialTextWidth(territorialScope, 29) * 1.12;
-        double paddingX = 26.0;
+        // Bottom Territory Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 34px white text
+        double textWidth = MeasureArialTextWidth(territorialScope, 34) * 1.12;
+        double paddingX = 24.0;
         double pillWidth = textWidth + 2 * paddingX;
-        double pillX = 75.0;
-        double centerX = pillX + pillWidth / 2.0;
+        double pillX = (canvasWidth - pillWidth) / 2.0;
+        double centerX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{pillX:F1}\" y=\"340\" width=\"{pillWidth:F1}\" height=\"62\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{pillX:F1}\" y=\"340\" width=\"{pillWidth:F1}\" height=\"66\" rx=\"18\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{centerX:F1}\" y=\"382\" font-family=\"Arial, sans-serif\" font-size=\"29\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{centerX:F1}\" y=\"384\" font-family=\"Arial, sans-serif\" font-size=\"34\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom Status Banner: ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ
         sb.AppendLine("  <!-- Bottom Summary Banner (Green, single centered line) -->");
@@ -348,16 +348,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
-        double fbPaddingX = 30.0;
+        // Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 38px white text
+        double fbTextWidth = MeasureArialTextWidth(territorialScope, 38) * 1.12;
+        double fbPaddingX = 28.0;
         double fbPillWidth = fbTextWidth + 2 * fbPaddingX;
-        double fbPillX = 85.0;
-        double fbCenterX = fbPillX + fbPillWidth / 2.0;
+        double fbPillX = (canvasWidth - fbPillWidth) / 2.0;
+        double fbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{fbPillX:F1}\" y=\"420\" width=\"{fbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{fbPillX:F1}\" y=\"418\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{fbCenterX:F1}\" y=\"465\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{fbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -392,17 +392,17 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Background Decorative Arcs (Tomorrow Slate Palette)
+        // Background Decorative Arcs (Tomorrow Soft Slate Palette)
         sb.AppendLine("  <!-- Background Decorative Arcs -->");
         sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"320\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"48\" opacity=\"0.6\"/>");
         sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"250\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
-        sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"210\" fill=\"none\" stroke=\"#64748B\" stroke-width=\"7\" stroke-dasharray=\"400 480\" stroke-linecap=\"round\" transform=\"rotate(-45 1050 315)\"/>");
+        sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"210\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"7\" stroke-dasharray=\"400 480\" stroke-linecap=\"round\" transform=\"rotate(-45 1050 315)\"/>");
 
         // Bulb Accent
-        sb.AppendLine("  <!-- Outlined Dark Slate Gray Bulb matching forecast identity -->");
+        sb.AppendLine("  <!-- Outlined Soft Slate Gray Bulb matching forecast identity -->");
         sb.AppendLine("  <g transform=\"translate(915, 160) scale(0.60)\">");
-        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#475569\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
-        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#475569\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
+        sb.AppendLine($"    <path d=\"M256 36C118.69 31.25 43.56 211.41 139.92 306.09C153.66 320.59 165.91 337.42 171.91 356H244.66V278.23C204.38 270.82 189.03 233.61 193.14 195.47C179.44 195.42 179.44 174.57 193.14 174.52H214.09V143.09C214.09 137.3 218.77 132.61 224.57 132.61C230.37 132.61 235.05 137.29 235.05 143.09V174.52H276.95V143.09C276.95 137.3 281.63 132.61 287.43 132.61C293.23 132.61 297.91 137.29 297.91 143.09V174.52H318.86C332.56 174.57 332.56 195.42 318.86 195.47C322.98 233.61 307.59 270.84 267.34 278.23V356H340.09C346.17 337.42 358.34 320.58 372.09 306.08C468.46 211.41 393.29 31.22 256.01 36H256Z\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
         sb.AppendLine("  </g>");
 
         // Typography Section
@@ -416,16 +416,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double tomDayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + tomDayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double tomFbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
-        double tomFbPaddingX = 30.0;
+        // Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 38px white text
+        double tomFbTextWidth = MeasureArialTextWidth(territorialScope, 38) * 1.12;
+        double tomFbPaddingX = 28.0;
         double tomFbPillWidth = tomFbTextWidth + 2 * tomFbPaddingX;
-        double tomFbPillX = 85.0;
-        double tomFbCenterX = tomFbPillX + tomFbPillWidth / 2.0;
+        double tomFbPillX = (canvasWidth - tomFbPillWidth) / 2.0;
+        double tomFbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{tomFbPillX:F1}\" y=\"420\" width=\"{tomFbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{tomFbPillX:F1}\" y=\"418\" width=\"{tomFbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{tomFbCenterX:F1}\" y=\"465\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{tomFbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -484,16 +484,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double dayOffset = MeasureArial28pxWidth(dayOfWeekStr) * 1.95 + 28;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  <text x=\"{120 + dayOffset:F1}\" y=\"324\" font-family=\"Arial, sans-serif\" font-size=\"54\" font-weight=\"900\" fill=\"#0F2942\">{EscapeXml(formattedDate)}</text>"));
 
-        // Scope Pill Badge: Dark Navy #0F2942 with centered white text
-        double fbTextWidth = MeasureArialTextWidth(territorialScope, 32) * 1.12;
-        double fbPaddingX = 30.0;
+        // Scope Pill Badge: Dark Navy #0F2942 centered relative to banner with larger 38px white text
+        double fbTextWidth = MeasureArialTextWidth(territorialScope, 38) * 1.12;
+        double fbPaddingX = 28.0;
         double fbPillWidth = fbTextWidth + 2 * fbPaddingX;
-        double fbPillX = 85.0;
-        double fbCenterX = fbPillX + fbPillWidth / 2.0;
+        double fbPillX = (canvasWidth - fbPillWidth) / 2.0;
+        double fbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{fbPillX:F1}\" y=\"412\" width=\"{fbPillWidth:F1}\" height=\"66\" rx=\"22\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{fbPillX:F1}\" y=\"410\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{fbCenterX:F1}\" y=\"457\" font-family=\"Arial, sans-serif\" font-size=\"32\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{fbCenterX:F1}\" y=\"458\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom Summary Banner (Green, single centered line)
         sb.AppendLine("  <!-- Bottom Summary Banner (Green) -->");
