@@ -106,7 +106,7 @@ public class EditorialContentTransformer
 
     public string RenderSystemStatus()
     {
-        return $"Останнє оновлення журналу: {DateTime.UtcNow.AddHours(3):HH:mm}\nСтан моніторингу: активний";
+        return $"<b>Останнє оновлення журналу:</b> {DateTime.UtcNow.AddHours(3):HH:mm}\n<b>Стан моніторингу:</b> активний";
     }
 
     public string RenderAggregatedTerritoryPost(AggregatedTerritoryData data, bool isTomorrow = false, string? tomorrowDate = null)
@@ -419,12 +419,38 @@ public class EditorialContentTransformer
     {
         var packages = new List<TransformedPackage>();
 
-        // Extract historical settlements if any outages were already published today (Option 1: Chronicle of the day)
+        // Extract active territory IDs currently in feed
+        var activeTerritoryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (parsedRecords != null)
+        {
+            foreach (var r in parsedRecords)
+            {
+                if (!string.IsNullOrWhiteSpace(r.TerritoryName))
+                {
+                    try
+                    {
+                        activeTerritoryIds.Add(TerritoryRegistry.MapRawTerritoryName(r.TerritoryName));
+                    }
+                    catch
+                    {
+                        activeTerritoryIds.Add(r.TerritoryName);
+                    }
+                }
+            }
+        }
+
+        // Extract historical settlements for finished outages (Option 1: Chronicle of the day)
         var historicalSettlements = new List<string>();
         if (historicalTerritoryIds != null)
         {
             foreach (var tid in historicalTerritoryIds)
             {
+                // If territory is still active in current feed, skip it to let parsedRecords be authoritative
+                if (activeTerritoryIds.Contains(tid))
+                {
+                    continue;
+                }
+
                 var canon = TerritoryRegistry.Territories.FirstOrDefault(t => t.TerritoryId.Equals(tid, StringComparison.OrdinalIgnoreCase));
                 if (canon != null)
                 {
@@ -472,20 +498,20 @@ public class EditorialContentTransformer
             ? TerritoryAggregator.CalculateSummaryStats(parsedRecords)
             : new JournalSummaryStats(0, Array.Empty<string>(), Array.Empty<string>());
 
-        // Merge historical settlements into cumulative stats
-        var combinedEmergencySettlements = new List<string>(stats.EmergencySettlements);
+        // Merge finished historical settlements into cumulative planned settlements
+        var combinedPlannedSettlements = new List<string>(stats.PlannedSettlements);
         foreach (var hs in historicalSettlements)
         {
-            if (!combinedEmergencySettlements.Contains(hs) && !stats.PlannedSettlements.Contains(hs))
+            if (!combinedPlannedSettlements.Contains(hs) && !stats.EmergencySettlements.Contains(hs))
             {
-                combinedEmergencySettlements.Add(hs);
+                combinedPlannedSettlements.Add(hs);
             }
         }
 
         var cumulativeStats = new JournalSummaryStats(
-            Math.Max(stats.TotalTerritories, combinedEmergencySettlements.Count + stats.PlannedSettlements.Count),
-            stats.PlannedSettlements,
-            combinedEmergencySettlements
+            Math.Max(stats.TotalTerritories, combinedPlannedSettlements.Count + stats.EmergencySettlements.Count),
+            combinedPlannedSettlements,
+            stats.EmergencySettlements
         );
 
         string headerContentText = RenderJournalHeader(dateLabel, cumulativeStats);
