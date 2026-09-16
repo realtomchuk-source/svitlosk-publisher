@@ -144,7 +144,7 @@ public class FacebookGraphApiClient : IFacebookAdapter
             using var response = await _httpClient.DeleteAsync(url, cancellationToken).ConfigureAwait(false);
             string responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-            return ParseResponse(response, responseJson, isCreate: false, targetPostId: postId);
+            return ParseResponse(response, responseJson, isCreate: false, isDelete: true, targetPostId: postId);
         }
         catch (OperationCanceledException)
         {
@@ -191,6 +191,7 @@ public class FacebookGraphApiClient : IFacebookAdapter
         HttpResponseMessage response,
         string responseJson,
         bool isCreate,
+        bool isDelete = false,
         string? targetPostId = null)
     {
         if (response.IsSuccessStatusCode)
@@ -241,10 +242,10 @@ public class FacebookGraphApiClient : IFacebookAdapter
             }
         }
 
-        return ParseError(responseJson);
+        return ParseError(responseJson, isDelete, targetPostId);
     }
 
-    private static FacebookDispatchResult ParseError(string responseJson)
+    private static FacebookDispatchResult ParseError(string responseJson, bool isDelete = false, string? targetPostId = null)
     {
         try
         {
@@ -254,6 +255,15 @@ public class FacebookGraphApiClient : IFacebookAdapter
                 string message = err.TryGetProperty("message", out var m) ? m.GetString() ?? "Unknown error" : "Unknown error";
                 int code = err.TryGetProperty("code", out var c) ? c.GetInt32() : 0;
                 int subcode = err.TryGetProperty("error_subcode", out var sc) ? sc.GetInt32() : 0;
+
+                // Idempotent delete: if object doesn't exist or cannot be loaded, it is already deleted
+                if (isDelete && (code is 100 or 803 or 200) && (subcode == 33 || message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) || message.Contains("Unsupported delete request", StringComparison.OrdinalIgnoreCase) || message.Contains("cannot be loaded", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return new FacebookDispatchResult(
+                        IsSuccess: true,
+                        PostId: targetPostId
+                    );
+                }
 
                 // Transient / rate-limit codes in Meta Graph API: 4, 17, 32, 341, 613
                 bool isRetryable = code is 4 or 17 or 32 or 341 or 613;

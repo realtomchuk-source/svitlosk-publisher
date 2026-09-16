@@ -342,6 +342,10 @@ public class Program
                 else
                 {
                     Console.Error.WriteLine($"[ERROR][Facebook] Sync failed: {fbResult.FatalErrorDescription}");
+                    foreach (var res in fbResult.Results.Where(r => !r.IsSuccess))
+                    {
+                        Console.Error.WriteLine($"[ERROR][Facebook] Item '{res.TerritoryIdentifier}' ({res.DecisionResult}) failed: {res.ErrorDescription}");
+                    }
                     return 1;
                 }
             }

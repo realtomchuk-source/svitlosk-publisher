@@ -133,6 +133,32 @@ public static class FacebookContentFormatter
         return sb.ToString().TrimEnd();
     }
 
+    public static string FormatOutageTimeRange(string timePart)
+    {
+        if (string.IsNullOrWhiteSpace(timePart)) return string.Empty;
+
+        // Matches "з 09:00 до 20:00", "09:00 - 20:00", "14:39 – 17:39"
+        var match = Regex.Match(timePart, @"(?:з\s*)?(\d{1,2}:\d{2})\s*(?:по|до|-|–)\s*(\d{1,2}:\d{2})", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            return $"{match.Groups[1].Value}–{match.Groups[2].Value}";
+        }
+
+        var doMatch = Regex.Match(timePart, @"^(?:до|по)\s*(\d{1,2}:\d{2})", RegexOptions.IgnoreCase);
+        if (doMatch.Success)
+        {
+            return $"до {doMatch.Groups[1].Value}";
+        }
+
+        var zMatch = Regex.Match(timePart, @"^з\s*(\d{1,2}:\d{2})", RegexOptions.IgnoreCase);
+        if (zMatch.Success)
+        {
+            return $"з {zMatch.Groups[1].Value}";
+        }
+
+        return timePart.Trim();
+    }
+
     public static string? FormatFacebookEmergencyPost(
         string editionDate,
         IReadOnlyList<AggregatedTerritoryData> territories,
@@ -148,27 +174,22 @@ public static class FacebookContentFormatter
             return null;
         }
 
-        transformer ??= new EditorialContentTransformer();
         string formattedDate = EditorialContentTransformer.FormatDate(editionDate);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"🚨 АВАРІЙНІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
-        sb.AppendLine("📍 Старокостянтинівська міська територіальна громада");
+        sb.AppendLine($"АВАРІЙНІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
         sb.AppendLine();
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sb.AppendLine("Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         // 1. City of Starokostiantyniv first (top priority)
         var city = emergencyTerritories.FirstOrDefault(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase));
         if (city != null)
         {
-            sb.AppendLine("🏙️ МІСТО СТАРОКОСТЯНТИНІВ");
-            var cityOnly = city with { PlannedRecords = Array.Empty<OutageRecord>() };
-            string cityHtml = transformer.RenderAggregatedTerritoryPost(cityOnly);
-            string cityClean = CleanBodyWithoutTitle(cityHtml, city.CanonicalName);
-            if (!string.IsNullOrWhiteSpace(cityClean))
+            string cityText = RenderCitySection(city.EmergencyRecords);
+            if (!string.IsNullOrWhiteSpace(cityText))
             {
-                sb.AppendLine(cityClean);
+                sb.AppendLine(cityText);
                 sb.AppendLine();
             }
         }
@@ -181,37 +202,37 @@ public static class FacebookContentFormatter
 
         if (ruralDistricts.Count > 0)
         {
-            sb.AppendLine("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ");
-            sb.AppendLine();
-
+            var ruralBlocks = new List<string>();
             foreach (var district in ruralDistricts)
             {
-                sb.AppendLine($"📍 {district.CanonicalName.ToUpperInvariant()}");
-                var distOnly = district with { PlannedRecords = Array.Empty<OutageRecord>() };
-                string distHtml = transformer.RenderAggregatedTerritoryPost(distOnly);
-                string distClean = CleanBodyWithoutTitle(distHtml, district.CanonicalName);
-                if (!string.IsNullOrWhiteSpace(distClean))
+                string distText = RenderDistrictSection(district, isEmergency: true);
+                if (!string.IsNullOrWhiteSpace(distText))
                 {
-                    sb.AppendLine(distClean);
+                    ruralBlocks.Add(distText);
+                }
+            }
+
+            if (ruralBlocks.Count > 0)
+            {
+                sb.AppendLine("СТАРОСТИНСЬКІ ОКРУГИ");
+                sb.AppendLine();
+                foreach (var block in ruralBlocks)
+                {
+                    sb.AppendLine(block);
                     sb.AppendLine();
                 }
             }
         }
 
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        sb.AppendLine("ℹ️ ТЕХНІЧНА ІНФОРМАЦІЯ:");
-        sb.AppendLine($"• Джерело даних: АТ «Хмельницькобленерго»");
-        if (lastUpdatedUtc.HasValue)
-        {
-            var localTime = lastUpdatedUtc.Value.AddHours(3);
-            sb.AppendLine($"• Час оновлення: {localTime:HH:mm} (Київ)");
-        }
-        sb.AppendLine($"• Моніторинг: SvitloSk Автоматичний диспетчер");
-        sb.AppendLine($"• Оперативні сповіщення у Telegram: https://t.me/svitlosk");
+        // Technical footer
+        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        sb.AppendLine("Технічна інформація: ");
+        sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
+        sb.AppendLine("Стан моніторингу: активний  ");
         sb.AppendLine();
-        sb.AppendLine("#аварійнівідключення #старокостянтинів #громада #хмельницькобленерго #svitlosk");
+        sb.AppendLine("#аварійнівідключення #відключення #Старокостянтинів #громада #svitlosk");
 
-        return sb.ToString().TrimEnd();
+        return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
 
     public static string FormatFacebookPlannedPost(
@@ -220,14 +241,12 @@ public static class FacebookContentFormatter
         EditorialContentTransformer? transformer = null,
         DateTime? lastUpdatedUtc = null)
     {
-        transformer ??= new EditorialContentTransformer();
         string formattedDate = EditorialContentTransformer.FormatDate(editionDate);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"⚡ ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
-        sb.AppendLine("📍 Старокостянтинівська міська територіальна громада");
+        sb.AppendLine($"ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
         sb.AppendLine();
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sb.AppendLine("Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         var plannedTerritories = territories
@@ -246,13 +265,10 @@ public static class FacebookContentFormatter
             var city = plannedTerritories.FirstOrDefault(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase));
             if (city != null)
             {
-                sb.AppendLine("🏙️ МІСТО СТАРОКОСТЯНТИНІВ");
-                var cityOnly = city with { EmergencyRecords = Array.Empty<OutageRecord>() };
-                string cityHtml = transformer.RenderAggregatedTerritoryPost(cityOnly);
-                string cityClean = CleanBodyWithoutTitle(cityHtml, city.CanonicalName);
-                if (!string.IsNullOrWhiteSpace(cityClean))
+                string cityText = RenderCitySection(city.PlannedRecords);
+                if (!string.IsNullOrWhiteSpace(cityText))
                 {
-                    sb.AppendLine(cityClean);
+                    sb.AppendLine(cityText);
                     sb.AppendLine();
                 }
             }
@@ -265,37 +281,38 @@ public static class FacebookContentFormatter
 
             if (ruralDistricts.Count > 0)
             {
-                sb.AppendLine("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ");
-                sb.AppendLine();
-
+                var ruralBlocks = new List<string>();
                 foreach (var district in ruralDistricts)
                 {
-                    sb.AppendLine($"📍 {district.CanonicalName.ToUpperInvariant()}");
-                    var distOnly = district with { EmergencyRecords = Array.Empty<OutageRecord>() };
-                    string distHtml = transformer.RenderAggregatedTerritoryPost(distOnly);
-                    string distClean = CleanBodyWithoutTitle(distHtml, district.CanonicalName);
-                    if (!string.IsNullOrWhiteSpace(distClean))
+                    string distText = RenderDistrictSection(district, isEmergency: false);
+                    if (!string.IsNullOrWhiteSpace(distText))
                     {
-                        sb.AppendLine(distClean);
+                        ruralBlocks.Add(distText);
+                    }
+                }
+
+                if (ruralBlocks.Count > 0)
+                {
+                    sb.AppendLine("СТАРОСТИНСЬКІ ОКРУГИ");
+                    sb.AppendLine();
+                    foreach (var block in ruralBlocks)
+                    {
+                        sb.AppendLine(block);
                         sb.AppendLine();
                     }
                 }
             }
         }
 
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        sb.AppendLine("ℹ️ ТЕХНІЧНА ІНФОРМАЦІЯ:");
-        sb.AppendLine($"• Джерело даних: АТ «Хмельницькобленерго»");
-        if (lastUpdatedUtc.HasValue)
-        {
-            var localTime = lastUpdatedUtc.Value.AddHours(3);
-            sb.AppendLine($"• Час оновлення: {localTime:HH:mm} (Київ)");
-        }
-        sb.AppendLine($"• Оперативні сповіщення у Telegram: https://t.me/svitlosk");
+        // Technical footer
+        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        sb.AppendLine("Технічна інформація: ");
+        sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
+        sb.AppendLine("Стан моніторингу: активний  ");
         sb.AppendLine();
-        sb.AppendLine("#відключення #плановівідключення #старокостянтинів #громада #svitlosk");
+        sb.AppendLine("#відключення #плановівідключення #Старокостянтинів #громада #svitlosk");
 
-        return sb.ToString().TrimEnd();
+        return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
 
     public static string? FormatFacebookTomorrowPost(
@@ -315,14 +332,13 @@ public static class FacebookContentFormatter
             return null;
         }
 
-        transformer ??= new EditorialContentTransformer();
         string formattedDate = EditorialContentTransformer.FormatDate(tomorrowDate);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"🔮 ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА — {formattedDate}");
-        sb.AppendLine("📍 Старокостянтинівська міська територіальна громада");
+        sb.AppendLine("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА");
+        sb.AppendLine(formattedDate);
         sb.AppendLine();
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sb.AppendLine("Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         // 1. City first
@@ -330,12 +346,14 @@ public static class FacebookContentFormatter
             ((t.PlannedRecords != null && t.PlannedRecords.Count > 0) || (t.EmergencyRecords != null && t.EmergencyRecords.Count > 0)));
         if (city != null)
         {
-            sb.AppendLine("🏙️ МІСТО СТАРОКОСТЯНТИНІВ");
-            string cityHtml = transformer.RenderAggregatedTerritoryPost(city, isTomorrow: true, tomorrowDate: tomorrowDate);
-            string cityClean = CleanBodyWithoutTitle(cityHtml, city.CanonicalName);
-            if (!string.IsNullOrWhiteSpace(cityClean))
+            var combinedRecords = (city.PlannedRecords ?? Array.Empty<OutageRecord>())
+                .Concat(city.EmergencyRecords ?? Array.Empty<OutageRecord>())
+                .ToList();
+
+            string cityText = RenderCitySection(combinedRecords);
+            if (!string.IsNullOrWhiteSpace(cityText))
             {
-                sb.AppendLine(cityClean);
+                sb.AppendLine(cityText);
                 sb.AppendLine();
             }
         }
@@ -349,72 +367,393 @@ public static class FacebookContentFormatter
 
         if (ruralDistricts.Count > 0)
         {
-            sb.AppendLine("🌾 СТАРОСТИНСЬКІ ОКРУГИ ГРОМАДИ");
-            sb.AppendLine();
-
+            var ruralBlocks = new List<string>();
             foreach (var district in ruralDistricts)
             {
-                sb.AppendLine($"📍 {district.CanonicalName.ToUpperInvariant()}");
-                string distHtml = transformer.RenderAggregatedTerritoryPost(district, isTomorrow: true, tomorrowDate: tomorrowDate);
-                string distClean = CleanBodyWithoutTitle(distHtml, district.CanonicalName);
-                if (!string.IsNullOrWhiteSpace(distClean))
+                string distText = RenderDistrictSection(district, isEmergency: false);
+                if (!string.IsNullOrWhiteSpace(distText))
                 {
-                    sb.AppendLine(distClean);
+                    ruralBlocks.Add(distText);
+                }
+            }
+
+            if (ruralBlocks.Count > 0)
+            {
+                sb.AppendLine("СТАРОСТИНСЬКІ ОКРУГИ");
+                sb.AppendLine();
+                foreach (var block in ruralBlocks)
+                {
+                    sb.AppendLine(block);
                     sb.AppendLine();
                 }
             }
         }
 
-        sb.AppendLine("⚠️ Зверніть увагу: графік та обсяги відключень можуть бути скориговані відповідно до поточних розпоряджень НЕК «Укренерго».");
+        sb.AppendLine("Інформація може змінюватися відповідно до поточних розпоряджень НЕК «Укренерго».");
         sb.AppendLine();
-        sb.AppendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        sb.AppendLine("ℹ️ ТЕХНІЧНА ІНФОРМАЦІЯ:");
-        sb.AppendLine($"• Джерело даних: АТ «Хмельницькобленерго» / НЕК «Укренерго»");
-        if (lastUpdatedUtc.HasValue)
+
+        // Technical footer
+        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        sb.AppendLine("Технічна інформація: ");
+        sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
+        sb.AppendLine("Стан моніторингу: активний  ");
+        sb.AppendLine();
+        sb.AppendLine("#прогноз #відключення #Старокостянтинів #громада #svitlosk");
+
+        return sb.ToString().TrimEnd().Replace("\r\n", "\n");
+    }
+
+    private static string RenderCitySection(IReadOnlyList<OutageRecord> records)
+    {
+        var blocks = ParseFacebookBlocks(records, isCity: true, canonicalName: "Місто Старокостянтинів");
+        if (blocks.Count == 0 || !blocks.Any(b => b.Streets.Count > 0))
         {
-            var localTime = lastUpdatedUtc.Value.AddHours(3);
-            sb.AppendLine($"• Час оновлення: {localTime:HH:mm} (Київ)");
+            return string.Empty;
         }
-        sb.AppendLine($"• Оперативні сповіщення у Telegram: https://t.me/svitlosk");
-        sb.AppendLine();
-        sb.AppendLine("#прогноз #відключення #старокостянтинів #громада #svitlosk");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("МІСТО СТАРОКОСТЯНТИНІВ");
+
+        var distinctIntervals = blocks
+            .Select(b => b.TimeInterval)
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        bool hasCommonInterval = distinctIntervals.Count == 1;
+
+        if (hasCommonInterval)
+        {
+            sb.AppendLine(distinctIntervals[0]);
+            sb.AppendLine();
+
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var b = blocks[i];
+                if (b.Streets.Count == 0) continue;
+
+                if (!string.IsNullOrEmpty(b.Subqueue))
+                {
+                    sb.AppendLine($"Черга {b.Subqueue}");
+                }
+
+                foreach (var st in b.Streets)
+                {
+                    sb.AppendLine($"• {st}");
+                }
+
+                if (i < blocks.Count - 1 && !string.IsNullOrEmpty(b.Subqueue))
+                {
+                    sb.AppendLine();
+                }
+            }
+        }
+        else
+        {
+            sb.AppendLine();
+
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var b = blocks[i];
+                if (b.Streets.Count == 0) continue;
+
+                string header = !string.IsNullOrEmpty(b.Subqueue) && !string.IsNullOrEmpty(b.TimeInterval)
+                    ? $"{b.TimeInterval} (Черга {b.Subqueue})"
+                    : !string.IsNullOrEmpty(b.Subqueue)
+                        ? $"Черга {b.Subqueue}"
+                        : b.TimeInterval;
+
+                if (!string.IsNullOrEmpty(header))
+                {
+                    sb.AppendLine(header);
+                }
+
+                foreach (var st in b.Streets)
+                {
+                    sb.AppendLine($"• {st}");
+                }
+
+                if (i < blocks.Count - 1)
+                {
+                    sb.AppendLine();
+                }
+            }
+        }
 
         return sb.ToString().TrimEnd();
     }
 
-    private static string CleanBodyWithoutTitle(string html, string canonicalName)
+    private static string RenderDistrictSection(AggregatedTerritoryData district, bool isEmergency)
     {
-        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
-        string clean = StripHtml(html);
+        var records = isEmergency
+            ? district.EmergencyRecords
+            : (district.PlannedRecords != null && district.PlannedRecords.Count > 0 ? district.PlannedRecords : district.EmergencyRecords);
 
-        var lines = clean.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        var resultLines = new List<string>();
-        bool skippedTitle = false;
+        if (records == null || records.Count == 0) return string.Empty;
 
-        foreach (var rawLine in lines)
+        var blocks = ParseFacebookBlocks(records, isCity: false, canonicalName: district.CanonicalName);
+        if (blocks.Count == 0 || !blocks.Any(b => b.Streets.Count > 0))
         {
-            string trimmed = rawLine.Trim();
-            if (!skippedTitle && (trimmed.Equals(canonicalName.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                  trimmed.Equals($"Місто {canonicalName}".Trim(), StringComparison.OrdinalIgnoreCase)))
-            {
-                skippedTitle = true;
-                continue;
-            }
+            return string.Empty;
+        }
 
-            if (trimmed.StartsWith("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+        var sb = new StringBuilder();
+        sb.AppendLine(district.CanonicalName.ToUpperInvariant());
+
+        var distinctIntervals = blocks
+            .Select(b => b.TimeInterval)
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        bool hasCommonInterval = distinctIntervals.Count == 1;
+
+        if (hasCommonInterval)
+        {
+            sb.AppendLine(distinctIntervals[0]);
+            sb.AppendLine();
+
+            for (int i = 0; i < blocks.Count; i++)
             {
-                resultLines.Add($"🚨 {trimmed}");
+                var b = blocks[i];
+                if (b.Streets.Count == 0) continue;
+
+                if (!string.IsNullOrEmpty(b.Settlement))
+                {
+                    sb.AppendLine(b.Settlement);
+                }
+
+                foreach (var st in b.Streets)
+                {
+                    sb.AppendLine($"• {st}");
+                }
+
+                if (i < blocks.Count - 1)
+                {
+                    sb.AppendLine();
+                }
             }
-            else if (trimmed.StartsWith("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+        }
+        else
+        {
+            sb.AppendLine();
+
+            for (int i = 0; i < blocks.Count; i++)
             {
-                resultLines.Add($"📋 {trimmed}");
-            }
-            else
-            {
-                resultLines.Add(rawLine);
+                var b = blocks[i];
+                if (b.Streets.Count == 0) continue;
+
+                if (!string.IsNullOrEmpty(b.Settlement))
+                {
+                    string settHeader = !string.IsNullOrEmpty(b.TimeInterval)
+                        ? $"{b.Settlement} ({b.TimeInterval})"
+                        : b.Settlement;
+                    sb.AppendLine(settHeader);
+                }
+                else if (!string.IsNullOrEmpty(b.TimeInterval))
+                {
+                    sb.AppendLine(b.TimeInterval);
+                }
+
+                foreach (var st in b.Streets)
+                {
+                    sb.AppendLine($"• {st}");
+                }
+
+                if (i < blocks.Count - 1)
+                {
+                    sb.AppendLine();
+                }
             }
         }
 
-        return string.Join("\n", resultLines).Trim();
+        return sb.ToString().TrimEnd();
+    }
+
+    private class FacebookBlock
+    {
+        public string Settlement { get; set; } = string.Empty;
+        public string TimeInterval { get; set; } = string.Empty;
+        public string? Subqueue { get; set; }
+        public List<string> Streets { get; } = new();
+    }
+
+    private static List<FacebookBlock> ParseFacebookBlocks(IReadOnlyList<OutageRecord> records, bool isCity, string canonicalName)
+    {
+        var blocks = new List<FacebookBlock>();
+        FacebookBlock? currentBlock = null;
+
+        foreach (var rec in records)
+        {
+            if (string.IsNullOrWhiteSpace(rec.Details)) continue;
+            string details = rec.Details.Replace("\r\n", "\n").Replace("\r", "\n");
+            var lines = details.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var rawLine in lines)
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrEmpty(line)) continue;
+                if (line.Contains("не зафіксовано", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("не передбачено", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("не заплановано", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // Skip pure section headers if passed in Details
+                if (line.StartsWith("---") || line.StartsWith("===") || line.StartsWith("КІНЕЦЬ") ||
+                    line.StartsWith("Кількість") || line.StartsWith("ДАНІ") || line.StartsWith("Дата:") ||
+                    line.StartsWith("Джерело:") || line.StartsWith("Останнє") || line.StartsWith("Перша") ||
+                    line.StartsWith("Статус:") || line.StartsWith("Хеш") || line.StartsWith("Історія"))
+                {
+                    continue;
+                }
+
+                // 1. Settlement with interval e.g. "м. Старокостянтинів | з 09:00 до 20:00" or "с. Зеленці | з 09:00 до 17:00"
+                var settPipeMatch = Regex.Match(line, @"^((?:с\.|м\.|селище)\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s*\|\s*(.*)$", RegexOptions.IgnoreCase);
+                if (settPipeMatch.Success)
+                {
+                    string sett = settPipeMatch.Groups[1].Value.Trim();
+                    string timePart = settPipeMatch.Groups[2].Value.Trim();
+                    string interval = FormatOutageTimeRange(timePart);
+
+                    currentBlock = new FacebookBlock
+                    {
+                        Settlement = isCity ? string.Empty : sett,
+                        TimeInterval = interval
+                    };
+                    blocks.Add(currentBlock);
+                    continue;
+                }
+
+                // 2. Standalone settlement e.g. "с. Самчики" or "с. Зеленці"
+                var standAloneSettMatch = Regex.Match(line, @"^(?:с\.|селище)\s+[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+(?:\s+[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)?$", RegexOptions.IgnoreCase);
+                if (standAloneSettMatch.Success && !line.Contains("вул.", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (currentBlock != null && string.IsNullOrEmpty(currentBlock.Settlement) && currentBlock.Streets.Count == 0)
+                    {
+                        currentBlock.Settlement = line;
+                    }
+                    else
+                    {
+                        currentBlock = new FacebookBlock { Settlement = line };
+                        blocks.Add(currentBlock);
+                    }
+                    continue;
+                }
+
+                // 3. Pure time line e.g. "09:00 - 17:00" or "з 08:00 по 12:00 1 черга" or "до 16:00"
+                var timeLineMatch = Regex.Match(line, @"^(?:з\s*)?(\d{1,2}:\d{2})\s*(?:по|до|-|–)\s*(\d{1,2}:\d{2})(?:\s+(.*))?$", RegexOptions.IgnoreCase);
+                if (timeLineMatch.Success && !line.Contains("вул.", StringComparison.OrdinalIgnoreCase))
+                {
+                    string interval = $"{timeLineMatch.Groups[1].Value}–{timeLineMatch.Groups[2].Value}";
+                    string remainder = timeLineMatch.Groups[3].Value.Trim();
+                    string? q = null;
+                    var qm = Regex.Match(remainder, @"(\d+(\.\d+)?)\s*черг[аи]", RegexOptions.IgnoreCase);
+                    if (qm.Success) q = qm.Groups[1].Value;
+
+                    if (currentBlock != null && string.IsNullOrEmpty(currentBlock.TimeInterval) && currentBlock.Streets.Count == 0)
+                    {
+                        currentBlock.TimeInterval = interval;
+                        if (q != null) currentBlock.Subqueue = q;
+                    }
+                    else
+                    {
+                        currentBlock = new FacebookBlock { TimeInterval = interval, Subqueue = q };
+                        blocks.Add(currentBlock);
+                    }
+                    continue;
+                }
+
+                var doLineMatch = Regex.Match(line, @"^(?:до|по)\s*(\d{1,2}:\d{2})(?:\s+(.*))?$", RegexOptions.IgnoreCase);
+                if (doLineMatch.Success && !line.Contains("вул.", StringComparison.OrdinalIgnoreCase))
+                {
+                    string interval = $"до {doLineMatch.Groups[1].Value}";
+                    if (currentBlock != null && string.IsNullOrEmpty(currentBlock.TimeInterval) && currentBlock.Streets.Count == 0)
+                    {
+                        currentBlock.TimeInterval = interval;
+                    }
+                    else
+                    {
+                        currentBlock = new FacebookBlock { TimeInterval = interval };
+                        blocks.Add(currentBlock);
+                    }
+                    continue;
+                }
+
+                // 4. Subqueue header e.g. "Черга 1.1" or "1 черга"
+                var queueMatch = Regex.Match(line, @"^(?:Черга|Підчерга)\s*(\d+(\.\d+)?)", RegexOptions.IgnoreCase);
+                if (queueMatch.Success)
+                {
+                    string q = queueMatch.Groups[1].Value;
+                    if (currentBlock != null && string.IsNullOrEmpty(currentBlock.Subqueue) && currentBlock.Streets.Count == 0)
+                    {
+                        currentBlock.Subqueue = q;
+                    }
+                    else
+                    {
+                        currentBlock = new FacebookBlock { Subqueue = q };
+                        blocks.Add(currentBlock);
+                    }
+                    continue;
+                }
+
+                // 5. Line with embedded time e.g. "вул. Миру... Час: 10:00 - 14:00. Причина: ..."
+                string addressCandidate = line;
+                var inlineTime = Regex.Match(addressCandidate, @"Час:\s*(?:з\s*)?(\d{1,2}:\d{2})\s*(?:по|до|-|–)\s*(\d{1,2}:\d{2})", RegexOptions.IgnoreCase);
+                if (inlineTime.Success)
+                {
+                    string interval = $"{inlineTime.Groups[1].Value}–{inlineTime.Groups[2].Value}";
+                    if (currentBlock == null)
+                    {
+                        currentBlock = new FacebookBlock { TimeInterval = interval };
+                        blocks.Add(currentBlock);
+                    }
+                    else if (string.IsNullOrEmpty(currentBlock.TimeInterval))
+                    {
+                        currentBlock.TimeInterval = interval;
+                    }
+                    addressCandidate = addressCandidate.Replace(inlineTime.Value, "").Trim();
+                }
+
+                // Remove "Причина: ..."
+                addressCandidate = Regex.Replace(addressCandidate, @"Причина:.*$", "", RegexOptions.IgnoreCase).Trim();
+                // Clean queues inside address text
+                addressCandidate = Regex.Replace(addressCandidate, @"[⚡📋]?\s*черг[аи]\s*:\s*\d+(\.\d+)?", "", RegexOptions.IgnoreCase);
+                addressCandidate = Regex.Replace(addressCandidate, @"\d+(\.\d+)?\s*черг[аи]", "", RegexOptions.IgnoreCase);
+
+                if (string.IsNullOrWhiteSpace(addressCandidate)) continue;
+
+                string formattedAddr = FormatAddressLine(addressCandidate);
+                string compacted = TerritoryAggregator.CompactHouseNumbers(formattedAddr);
+                if (!string.IsNullOrWhiteSpace(compacted))
+                {
+                    if (currentBlock == null)
+                    {
+                        currentBlock = new FacebookBlock();
+                        blocks.Add(currentBlock);
+                    }
+                    currentBlock.Streets.Add(compacted);
+                }
+            }
+        }
+
+        return blocks;
+    }
+
+    private static string FormatAddressLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return string.Empty;
+        string clean = StripHtml(line);
+        // Remove leading bullets/dashes
+        clean = Regex.Replace(clean, @"^[•\-\*\s]+", "").Trim();
+        // Format "вул. Назва: буд." -> "вул. Назва, буд."
+        clean = Regex.Replace(clean, @":(?!\d{2})", ",");
+        clean = Regex.Replace(clean, @"(вул\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s+(\d+)", "$1, $2");
+        clean = Regex.Replace(clean, @"(пров\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s+(\d+)", "$1, $2");
+        clean = Regex.Replace(clean, @"(с\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\s-]+?)\s+(вул\.)", "$1, $2");
+        clean = Regex.Replace(clean, @",\s*,", ",");
+        clean = Regex.Replace(clean, @"\s+", " ");
+        return clean.Trim(' ', ',').Trim();
     }
 }
