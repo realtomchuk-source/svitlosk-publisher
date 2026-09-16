@@ -498,12 +498,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         // 7. Dispatch via IChannelPipeline
         BatchDispatchResult dispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
 
-        if (!dispatchResult.IsSuccess)
-        {
-            return dispatchResult;
-        }
-
-        // 8. Update Registry Model
+        // 8. Update Registry Model (process all successful dispatch items to avoid orphaned posts)
         var updatedPublications = new List<RegistryPublicationRecord>();
         var graphicRegistryUpdates = new List<RegistryPublicationRecord>();
 
@@ -627,8 +622,25 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         );
 
         // 9. Save Atomically & Push
-        await _registryStore.SaveAsync(registryPath, newRegistry, cancellationToken).ConfigureAwait(false);
-        await _gitTransport.CommitAndPushAsync(registryPath, $"Sync run for edition {todayEdition.EditionDate}", cancellationToken).ConfigureAwait(false);
+        if (dispatchResult.IsSuccess)
+        {
+            await _registryStore.SaveAsync(registryPath, newRegistry, cancellationToken).ConfigureAwait(false);
+            await _gitTransport.CommitAndPushAsync(registryPath, $"Sync run for edition {todayEdition.EditionDate}", cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            // If batch encountered errors, but some items were created/updated/deleted,
+            // persist the successful items into registry so their IDs are not orphaned on subsequent runs.
+            bool hasMutations = dispatchResult.Results.Any(r => r.IsSuccess && (
+                r.DecisionResult == DecisionResult.Create.ToString() || 
+                r.DecisionResult == DecisionResult.Update.ToString() || 
+                r.DecisionResult == DecisionResult.Delete.ToString()));
+
+            if (hasMutations)
+            {
+                await _registryStore.SaveAsync(registryPath, newRegistry, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         return dispatchResult;
     }

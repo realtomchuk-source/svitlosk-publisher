@@ -160,6 +160,56 @@ public class FacebookGraphApiClient : IFacebookAdapter
         }
     }
 
+    public async Task<IReadOnlyList<FacebookPostSummary>> GetRecentPostsAsync(
+        string pageId,
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(pageId))
+            throw new ArgumentException("Page ID cannot be null or empty.", nameof(pageId));
+
+        var posts = new List<FacebookPostSummary>();
+        try
+        {
+            string url = $"https://graph.facebook.com/{_apiVersion}/{pageId}/posts?fields=id,message,created_time&limit={limit}&access_token={Uri.EscapeDataString(_pageAccessToken)}";
+            using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return posts;
+            }
+
+            string responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(responseJson);
+            if (doc.RootElement.TryGetProperty("data", out var dataArray) && dataArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in dataArray.EnumerateArray())
+                {
+                    string? id = item.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+
+                    string? message = item.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : null;
+                    DateTimeOffset? createdTime = null;
+                    if (item.TryGetProperty("created_time", out var timeProp) && DateTimeOffset.TryParse(timeProp.GetString(), out var parsedTime))
+                    {
+                        createdTime = parsedTime;
+                    }
+
+                    posts.Add(new FacebookPostSummary(id, message, createdTime));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARNING][FacebookGraphApiClient] GetRecentPostsAsync failed gracefully: {ex.Message}");
+        }
+
+        return posts;
+    }
+
     public async Task<FacebookDispatchResult> CheckPageAccessAsync(
         string pageId,
         CancellationToken cancellationToken = default)

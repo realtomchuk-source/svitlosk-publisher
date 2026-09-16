@@ -46,4 +46,13 @@ public class FacebookDryRunAdapter : IFacebookAdapter
             PostId: postId
         ));
     }
+
+    public Task<IReadOnlyList<FacebookPostSummary>> GetRecentPostsAsync(
+        string pageId,
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[DRY-RUN][Facebook] GetRecentPosts -> Page: '{pageId}', Limit: {limit}");
+        return Task.FromResult<IReadOnlyList<FacebookPostSummary>>(Array.Empty<FacebookPostSummary>());
+    }
 }

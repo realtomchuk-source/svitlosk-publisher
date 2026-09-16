@@ -31,11 +31,19 @@ public class FacebookPipelineTests
             return Task.FromResult(new FacebookDispatchResult(true, PostId: "new_graphic_id"));
         }
 
+        public int UpdateCount { get; private set; }
+        public string? LastUpdatedPostId { get; private set; }
+        public string? LastUpdatedText { get; private set; }
+        public List<FacebookPostSummary> RecentPosts { get; set; } = new();
+
         public Task<FacebookDispatchResult> UpdatePostAsync(
             string postId,
             string text,
             CancellationToken cancellationToken = default)
         {
+            UpdateCount++;
+            LastUpdatedPostId = postId;
+            LastUpdatedText = text;
             return Task.FromResult(new FacebookDispatchResult(true, PostId: postId));
         }
 
@@ -46,6 +54,14 @@ public class FacebookPipelineTests
             DeleteCount++;
             LastDeletedPostId = postId;
             return Task.FromResult(new FacebookDispatchResult(true, PostId: postId));
+        }
+
+        public Task<IReadOnlyList<FacebookPostSummary>> GetRecentPostsAsync(
+            string pageId,
+            int limit = 10,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<FacebookPostSummary>>(RecentPosts);
         }
     }
 
@@ -135,6 +151,67 @@ public class FacebookPipelineTests
         Assert.Equal(1, testAdapter.DeleteCount);
         Assert.Equal("old_graphic_id", testAdapter.LastDeletedPostId);
         Assert.Equal(1, testAdapter.PublishCount);
+        Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_PreFlightReconciliation_AdoptsExistingPostAndUpdates_InsteadOfPublishing()
+    {
+        var testAdapter = new TestFacebookAdapter();
+        testAdapter.RecentPosts.Add(new FacebookPostSummary(
+            Id: "page_123_existing_planned",
+            Message: "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 16.09.2026\n\nСтарокостянтинівська міська територіальна громада\n• вул. Миру"
+        ));
+
+        var pipeline = new FacebookPipeline(testAdapter, "page_123");
+
+        var createDecision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Persistent,
+            Guid.NewGuid(),
+            "fb_planned",
+            TargetHash: "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 16.09.2026\n\nСтарокостянтинівська міська територіальна громада\n• вул. Миру (09:00–17:00)",
+            ScheduleDate: "16.09.2026",
+            Type: PublicationType.Text
+        );
+
+        var result = await pipeline.DispatchAsync(new[] { createDecision });
+
+        Assert.True(result.IsSuccess);
+        // Pre-flight check should adopt the existing post and call Update, NOT Publish!
+        Assert.Equal(0, testAdapter.PublishCount);
+        Assert.Equal(1, testAdapter.UpdateCount);
+        Assert.Equal("page_123_existing_planned", testAdapter.LastUpdatedPostId);
+        Assert.Equal("page_123_existing_planned", result.Results[0].ExternalMessageId);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_PreFlightReconciliation_PublishesNormally_WhenNoMatchingPostExists()
+    {
+        var testAdapter = new TestFacebookAdapter();
+        testAdapter.RecentPosts.Add(new FacebookPostSummary(
+            Id: "page_123_yesterday_post",
+            Message: "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026\n\nВчорашній пост"
+        ));
+
+        var pipeline = new FacebookPipeline(testAdapter, "page_123");
+
+        var createDecision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Persistent,
+            Guid.NewGuid(),
+            "fb_planned",
+            TargetHash: "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 16.09.2026\n\nСьогоднішній пост",
+            ScheduleDate: "16.09.2026",
+            Type: PublicationType.Text
+        );
+
+        var result = await pipeline.DispatchAsync(new[] { createDecision });
+
+        Assert.True(result.IsSuccess);
+        // Does not match 15.09.2026, so publishes brand new post
+        Assert.Equal(1, testAdapter.PublishCount);
+        Assert.Equal(0, testAdapter.UpdateCount);
         Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
     }
 }

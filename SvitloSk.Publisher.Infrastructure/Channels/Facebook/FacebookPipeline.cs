@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
@@ -58,6 +59,25 @@ public class FacebookPipeline : IChannelPipeline
         var results = new List<DispatchResultRecord>();
         int totalProcessed = 0;
         int totalSuccessful = 0;
+
+        IReadOnlyList<FacebookPostSummary>? recentPagePosts = null;
+        var reconciledPostIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        bool hasCreateOrUnlinkedDecisions = decisions.Any(d =>
+            !string.Equals(d.TerritoryIdentifier, "system_status", StringComparison.OrdinalIgnoreCase) &&
+            (d.DecisionResult == DecisionResult.Create || (d.DecisionResult == DecisionResult.Update && string.IsNullOrEmpty(d.ExternalMessageId))));
+
+        if (hasCreateOrUnlinkedDecisions)
+        {
+            try
+            {
+                recentPagePosts = await _facebookAdapter.GetRecentPostsAsync(_pageId, limit: 10, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARNING][FacebookPipeline] Pre-flight feed check failed gracefully: {ex.Message}");
+            }
+        }
 
         foreach (var decision in decisions)
         {
@@ -150,9 +170,26 @@ public class FacebookPipeline : IChannelPipeline
                 else
                 {
                     string cleanText = FormatPostText(decision);
-                    byte[]? bannerBytes = ResolveFacebookBanner(decision);
 
-                    pubRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                    // Pre-flight feed reconciliation: check if matching post already exists on page
+                    var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, cleanText);
+                    if (existingPost != null)
+                    {
+                        Console.WriteLine($"[FacebookPipeline] Pre-flight reconciliation: found existing post '{existingPost.Id}' for '{decision.TerritoryIdentifier}'. Updating in-place instead of creating duplicate.");
+                        reconciledPostIds.Add(existingPost.Id);
+
+                        pubRes = await _facebookAdapter.UpdatePostAsync(existingPost.Id, cleanText, cancellationToken).ConfigureAwait(false);
+                        if (!pubRes.IsSuccess)
+                        {
+                            byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                            pubRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                        pubRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 if (pubRes.IsSuccess) totalSuccessful++;
@@ -209,8 +246,24 @@ public class FacebookPipeline : IChannelPipeline
                     }
                     else
                     {
-                        byte[]? bannerBytes = ResolveFacebookBanner(decision);
-                        updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                        // Fallback reconciliation check against recent page posts before publishing
+                        var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, cleanText);
+                        if (existingPost != null)
+                        {
+                            Console.WriteLine($"[FacebookPipeline] Reconciling unlinked update with existing post '{existingPost.Id}' for '{decision.TerritoryIdentifier}'.");
+                            reconciledPostIds.Add(existingPost.Id);
+                            updRes = await _facebookAdapter.UpdatePostAsync(existingPost.Id, cleanText, cancellationToken).ConfigureAwait(false);
+                            if (!updRes.IsSuccess)
+                            {
+                                byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                                updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                        else
+                        {
+                            byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                            updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                        }
                     }
                 }
 
@@ -297,5 +350,65 @@ public class FacebookPipeline : IChannelPipeline
         }
 
         return FacebookContentFormatter.FormatTerritoryPost(decision.TargetHash);
+    }
+
+    internal static FacebookPostSummary? FindMatchingPost(
+        IReadOnlyList<FacebookPostSummary>? recentPosts,
+        ISet<string>? alreadyReconciledIds,
+        EditorialDecision decision,
+        string? postText)
+    {
+        if (recentPosts == null || recentPosts.Count == 0)
+            return null;
+
+        string territory = decision.TerritoryIdentifier ?? string.Empty;
+        string? targetDate = decision.ScheduleDate;
+
+        foreach (var post in recentPosts)
+        {
+            if (string.IsNullOrWhiteSpace(post.Message)) continue;
+            if (alreadyReconciledIds != null && alreadyReconciledIds.Contains(post.Id)) continue;
+
+            // 1. Direct first-line match if postText is provided
+            if (!string.IsNullOrWhiteSpace(postText))
+            {
+                var firstLine = postText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+                if (!string.IsNullOrWhiteSpace(firstLine) && post.Message.Contains(firstLine, StringComparison.OrdinalIgnoreCase))
+                {
+                    return post;
+                }
+            }
+
+            // 2. Semantic matching by territory type and date
+            if (territory.Equals("fb_planned", StringComparison.OrdinalIgnoreCase) ||
+                territory.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
+            {
+                if (post.Message.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return post;
+                }
+            }
+            else if (territory.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                     territory.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+            {
+                if (post.Message.Contains("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return post;
+                }
+            }
+            else if (territory.Equals("fb_emergency", StringComparison.OrdinalIgnoreCase) ||
+                     territory.StartsWith("emergency", StringComparison.OrdinalIgnoreCase))
+            {
+                if (post.Message.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return post;
+                }
+            }
+        }
+
+        return null;
     }
 }

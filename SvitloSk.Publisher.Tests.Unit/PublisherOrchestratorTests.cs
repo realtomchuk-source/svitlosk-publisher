@@ -948,6 +948,89 @@ public class PublisherOrchestratorTests : IDisposable
         // We verify that the sent text contains с. Росолівці
         Assert.Contains(fakeTelegramAdapter.SentTexts, t => t.Contains("с. Росолівці"));
     }
+
+    private class PartialFailurePipeline : IChannelPipeline
+    {
+        public string ChannelName => "TestPartial";
+
+        public Task<BatchDispatchResult> DispatchAsync(
+            IReadOnlyList<EditorialDecision> decisions,
+            CancellationToken cancellationToken = default)
+        {
+            var records = new List<DispatchResultRecord>();
+            bool isFirst = true;
+            foreach (var d in decisions)
+            {
+                if (isFirst)
+                {
+                    records.Add(new DispatchResultRecord(
+                        d.PublicationId,
+                        d.TerritoryIdentifier,
+                        "Create",
+                        isSuccess: true,
+                        externalMessageId: "created_id_123",
+                        errorDescription: null,
+                        publicationType: d.Type.ToString()
+                    ));
+                    isFirst = false;
+                }
+                else
+                {
+                    records.Add(new DispatchResultRecord(
+                        d.PublicationId,
+                        d.TerritoryIdentifier,
+                        "Create",
+                        isSuccess: false,
+                        externalMessageId: null,
+                        errorDescription: "Simulated error on 2nd item",
+                        publicationType: d.Type.ToString()
+                    ));
+                }
+            }
+
+            return Task.FromResult(new BatchDispatchResult(
+                IsSuccess: false,
+                TotalProcessed: decisions.Count,
+                TotalSuccessful: 1,
+                FatalErrorDescription: "Batch partially failed",
+                Results: records
+            ));
+        }
+    }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_SavesRegistryOnPartialBatchFailure_ToPreventOrphans()
+    {
+        var store = new FakeRegistryStore();
+        var git = new FakeGitTransport();
+        var calculator = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var parser = new OutageFeedParser();
+        var transformer = new EditorialContentTransformer();
+        var partialDispatcher = new PartialFailurePipeline();
+
+        var orchestrator = new PublisherOrchestrator(store, git, calculator, decisionEngine, partialDispatcher, parser, transformer);
+
+        var rawPkg = new InputTerritoryPackage(
+            "starokostiantyniv",
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 16.09.2026\n[Місто Старокостянтинів]\nз 08:00 по 12:00\nвул. Миру 14",
+            null,
+            true);
+
+        var input = new EditorialInput(
+            EditionDate: "2026-09-16",
+            Packages: new List<InputTerritoryPackage> { rawPkg }
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "chat_1", input);
+
+        // Batch result reports failure
+        Assert.False(result.IsSuccess);
+
+        // BUT the registry was saved with the successful creation to prevent orphaned posts!
+        Assert.NotNull(store.CurrentModel);
+        Assert.Contains(store.CurrentModel.Publications, p => p.ExternalMessageId == "created_id_123" && p.TransmissionState == "SENT");
+    }
 }
 
 public class GraphicAssemblyTests

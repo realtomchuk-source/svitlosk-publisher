@@ -1,4 +1,6 @@
-﻿using System.Threading;
+using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.Facebook;
@@ -8,6 +10,12 @@ public record FacebookDispatchResult(
     string? PostId = null,
     string? ErrorDescription = null,
     bool IsRetryable = false
+);
+
+public record FacebookPostSummary(
+    string Id,
+    string? Message = null,
+    DateTimeOffset? CreatedTime = null
 );
 
 /// <summary>
@@ -29,5 +37,10 @@ public interface IFacebookAdapter
 
     Task<FacebookDispatchResult> DeletePostAsync(
         string postId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<FacebookPostSummary>> GetRecentPostsAsync(
+        string pageId,
+        int limit = 10,
         CancellationToken cancellationToken = default);
 }
