@@ -262,7 +262,8 @@ public static class FacebookContentFormatter
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — {dayOfWeekUpper} {formattedDate}");
+        sb.AppendLine("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ");
+        sb.AppendLine($"{formattedDate} {dayOfWeekUpper}");
         sb.AppendLine("Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
@@ -272,28 +273,15 @@ public static class FacebookContentFormatter
         var plannedSettlements = TerritoryAggregator.ExtractSettlements(allPlannedRecords);
         var emergencySettlements = TerritoryAggregator.ExtractSettlements(allEmergencyRecords);
 
-        if (plannedSettlements.Count > 0)
-        {
-            sb.AppendLine("Планові знеструмлення:");
-            sb.AppendLine(string.Join(", ", plannedSettlements));
-        }
-        else
-        {
-            sb.AppendLine("Планові знеструмлення: відсутні");
-        }
+        string plannedLine = plannedSettlements.Count > 0
+            ? $"Планові знеструмлення: {string.Join(", ", plannedSettlements)}"
+            : "Планові знеструмлення: відсутні";
+        string emergencyLine = emergencySettlements.Count > 0
+            ? $"Аварійні знеструмлення: {string.Join(", ", emergencySettlements)}"
+            : "Аварійні знеструмлення: відсутні";
 
-        sb.AppendLine();
-
-        if (emergencySettlements.Count > 0)
-        {
-            sb.AppendLine("Аварійні знеструмлення:");
-            sb.AppendLine(string.Join(", ", emergencySettlements));
-        }
-        else
-        {
-            sb.AppendLine("Аварійні знеструмлення: відсутні");
-        }
-
+        sb.AppendLine(plannedLine);
+        sb.AppendLine(emergencyLine);
         sb.AppendLine();
 
         var plannedTerritories = territories

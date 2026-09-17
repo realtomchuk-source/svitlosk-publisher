@@ -286,7 +286,8 @@ public class FeedIngestionService
         }
 
         var packages = new List<InputTerritoryPackage>();
-        var todayRecords = _parser.Parse(todayFeedContent);
+        var rawTodayRecords = _parser.Parse(todayFeedContent);
+        var todayRecords = await GetCumulativeTodayRecordsAsync(httpClient, editionDate, rawTodayRecords, isDryRun, cancellationToken).ConfigureAwait(false);
         var todayAggregated = TerritoryAggregator.AggregateByTerritory(todayRecords);
 
         // 1. Emergency post (Created ONLY if emergency records exist)
@@ -390,5 +391,135 @@ public class FeedIngestionService
             TomorrowForecastAvailable: hasTomorrow,
             GraphicPackage: graphicPackage
         );
+    }
+
+    private async Task<IReadOnlyList<OutageRecord>> GetCumulativeTodayRecordsAsync(
+        HttpClient httpClient,
+        string editionDate,
+        IReadOnlyList<OutageRecord> currentRecords,
+        bool isDryRun,
+        CancellationToken cancellationToken)
+    {
+        string cacheDir = Path.Combine("local", "registry");
+        if (!Directory.Exists(cacheDir))
+        {
+            Directory.CreateDirectory(cacheDir);
+        }
+
+        string cacheFile = Path.Combine(cacheDir, $"facebook_daily_outages_{editionDate}.json");
+        var cumulativeRecords = new List<OutageRecord>();
+
+        // 1. Try to load from existing daily cache file
+        if (File.Exists(cacheFile))
+        {
+            try
+            {
+                string json = await File.ReadAllTextAsync(cacheFile, cancellationToken).ConfigureAwait(false);
+                var loaded = System.Text.Json.JsonSerializer.Deserialize<List<OutageRecord>>(json);
+                if (loaded != null && loaded.Count > 0)
+                {
+                    cumulativeRecords.AddRange(loaded);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN][Facebook] Failed to read daily outage cache ({cacheFile}): {ex.Message}");
+            }
+        }
+
+        // 2. If cumulative records has no prior records or only 1 territory and we are online,
+        // query GitHub commits on today.txt for the current editionDate to recover any earlier outages today.
+        if (!isDryRun && cumulativeRecords.Count <= 1)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/realtomchuk-source/OutagesSk/commits?path=data/tg_posts/today.txt&per_page=10");
+                req.Headers.Add("User-Agent", "SvitloSkPublisher");
+                var resp = await httpClient.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
+                {
+                    string commitsJson = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    using var doc = System.Text.Json.JsonDocument.Parse(commitsJson);
+                    foreach (var elem in doc.RootElement.EnumerateArray())
+                    {
+                        string? commitDate = elem.GetProperty("commit").GetProperty("committer").GetProperty("date").GetString();
+                        string? sha = elem.GetProperty("sha").GetString();
+                        if (!string.IsNullOrEmpty(sha) && commitDate != null && commitDate.StartsWith(editionDate))
+                        {
+                            try
+                            {
+                                string rawUrl = $"https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/{sha}/data/tg_posts/today.txt";
+                                string historicalFeed = await httpClient.GetStringAsync(rawUrl, cancellationToken).ConfigureAwait(false);
+                                if (!string.IsNullOrWhiteSpace(historicalFeed))
+                                {
+                                    var histRecords = _parser.Parse(historicalFeed);
+                                    cumulativeRecords = MergeRecords(cumulativeRecords, histRecords);
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore failure on individual commit raw download
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[INFO][Facebook] GitHub commit check bypassed: {ex.Message}");
+            }
+        }
+
+        // 3. Merge current incoming records
+        cumulativeRecords = MergeRecords(cumulativeRecords, currentRecords);
+
+        // 4. Save merged records back to cache file
+        try
+        {
+            string outJson = System.Text.Json.JsonSerializer.Serialize(cumulativeRecords, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(cacheFile, outJson, cancellationToken).ConfigureAwait(false);
+
+            // Clean up older cache files
+            foreach (var f in Directory.GetFiles(cacheDir, "facebook_daily_outages_*.json"))
+            {
+                string fn = Path.GetFileName(f);
+                if (!fn.Contains(editionDate) && File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-2))
+                {
+                    try { File.Delete(f); } catch { }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARN][Facebook] Failed to write daily outage cache: {ex.Message}");
+        }
+
+        return cumulativeRecords;
+    }
+
+    private static List<OutageRecord> MergeRecords(IEnumerable<OutageRecord> existing, IEnumerable<OutageRecord> incoming)
+    {
+        var merged = new List<OutageRecord>(existing);
+
+        foreach (var inc in incoming)
+        {
+            if (string.IsNullOrWhiteSpace(inc.TerritoryName) || string.IsNullOrWhiteSpace(inc.Details))
+                continue;
+            if (inc.Details.Contains("не зафіксовано", StringComparison.OrdinalIgnoreCase) ||
+                inc.Details.Contains("не заплановано", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            bool alreadyExists = merged.Any(e =>
+                string.Equals(e.TerritoryName, inc.TerritoryName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(e.OutageType, inc.OutageType, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(e.Details.Trim(), inc.Details.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (!alreadyExists)
+            {
+                merged.Add(inc);
+            }
+        }
+
+        return merged;
     }
 }

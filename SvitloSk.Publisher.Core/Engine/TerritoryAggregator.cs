@@ -105,12 +105,13 @@ public class TerritoryAggregator
             if (string.IsNullOrWhiteSpace(record.Details)) continue;
 
             // 1. Scan for explicit settlement mentions in Details e.g. "с. Мацевичі", "с. Великі Мацевичі", "м. Старокостянтинів"
-            var matches = Regex.Matches(record.Details, @"\b(с\.\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+(?:\s+[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)?|м\.\s*Старокостянтинів|селище\s*[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)\b");
+            var matches = Regex.Matches(record.Details, @"\b(с\.[ \t]*[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+(?:[ \t]+(?!вул|пров|буд|час)[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)?|м\.[ \t]*Старокостянтинів|селище[ \t]+[А-Яа-яA-Za-zіІїЇєЄґҐ'\-]+)\b");
             bool foundExplicit = false;
             foreach (Match m in matches)
             {
                 string raw = m.Value.Trim();
-                // Clean up trailing punctuation if any
+                // Clean up trailing punctuation or accidental street prefixes if any
+                raw = Regex.Replace(raw, @"[ \t]+(?:вул|пров|буд)\.?$", "", RegexOptions.IgnoreCase);
                 raw = Regex.Replace(raw, @"\s+", " ").Trim();
                 if (!string.IsNullOrWhiteSpace(raw) && !raw.Equals("с.", StringComparison.OrdinalIgnoreCase))
                 {

@@ -139,7 +139,7 @@ public class FacebookContentFormatterTests
 
         string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
 
-        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — ВІВТОРОК 15.09.2026", result);
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n15.09.2026 ВІВТОРОК", result);
         Assert.Contains("Планові знеструмлення: відсутні", result);
         Assert.Contains("Аварійні знеструмлення: відсутні", result);
         Assert.Contains("планових знеструмлень у громаді не заплановано", result);
@@ -161,9 +161,8 @@ public class FacebookContentFormatterTests
 
         string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
 
-        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — ВІВТОРОК 15.09.2026", result);
-        Assert.Contains("Планові знеструмлення:\nм. Старокостянтинів, с. Самчики", result);
-        Assert.Contains("Аварійні знеструмлення: відсутні", result);
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n15.09.2026 ВІВТОРОК", result);
+        Assert.Contains("Планові знеструмлення: м. Старокостянтинів, с. Самчики\nАварійні знеструмлення: відсутні", result);
         Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", result);
         Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("10:00–16:00", result);
