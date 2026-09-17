@@ -144,11 +144,15 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     type = PublicationType.Text;
                     isPersistent = false;
                 }
-                else if (pubRecord.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase) ||
-                         pubRecord.TerritoryId.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
+                else if (pubRecord.TerritoryId.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Text;
                     isPersistent = true;
+                }
+                else if (pubRecord.TerritoryId.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
+                {
+                    type = PublicationType.Text;
+                    isPersistent = false;
                 }
                 else if (pubRecord.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
                 {
@@ -295,11 +299,21 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
             var validity = _decisionEngine.EvaluatePublicationValidity(pkg.TerritoryId, incomingHash, existing);
 
+            string scheduleDate = input.EditionDate;
+            if (pkg.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                pkg.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))
+            {
+                if (DateTime.TryParse(input.EditionDate, out var parsedDate))
+                {
+                    scheduleDate = parsedDate.AddDays(1).ToString("yyyy-MM-dd");
+                }
+            }
+
             var classification = pkg.IsPersistent ? PublicationClassification.Persistent : PublicationClassification.Ephemeral;
             var createDecision = _decisionEngine.EvaluatePublicationCreation(validity, classification);
             if (createDecision.DecisionResult == DecisionResult.Create)
             {
-                decisions.Add(createDecision with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
+                decisions.Add(createDecision with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes, ScheduleDate = scheduleDate });
             }
             else
             {
@@ -321,11 +335,11 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     if (!msgId.HasValue && string.IsNullOrEmpty(extId))
                     {
                         var createFallback = _decisionEngine.EvaluatePublicationCreation(new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Persistent, TerritoryIdentifier: pkg.TerritoryId, TargetHash: incomingHash), classification);
-                        decisions.Add(createFallback with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
+                        decisions.Add(createFallback with { TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes, ScheduleDate = scheduleDate });
                     }
                     else
                     {
-                        decisions.Add(updateDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes });
+                        decisions.Add(updateDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, TargetHash = pkg.Content, GraphicBytes = pkg.GraphicBytes, ScheduleDate = scheduleDate });
                     }
                 }
                 else
@@ -341,7 +355,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             msgId = record?.TelegramMessageId;
                             extId = record?.ExternalMessageId;
                         }
-                        decisions.Add(removeDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, GraphicBytes = pkg.GraphicBytes });
+                        decisions.Add(removeDecision with { TelegramMessageId = msgId, ExternalMessageId = extId, GraphicBytes = pkg.GraphicBytes, ScheduleDate = scheduleDate });
                     }
                 }
             }

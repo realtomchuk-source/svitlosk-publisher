@@ -214,4 +214,68 @@ public class FacebookPipelineTests
         Assert.Equal(0, testAdapter.UpdateCount);
         Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
     }
+
+    [Fact]
+    public void FindMatchingPost_RejectsPost_WhenDateDiffers()
+    {
+        var recentPosts = new List<FacebookPostSummary>
+        {
+            new("post_yesterday", "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 16.09.2026\n\nСтарокостянтинів")
+        };
+
+        var decision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Ephemeral,
+            Guid.NewGuid(),
+            "fb_planned",
+            ScheduleDate: "2026-09-17"
+        );
+
+        var match = FacebookPipeline.FindMatchingPost(recentPosts, null, decision, "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 17.09.2026\n\nСтарокостянтинів");
+
+        Assert.Null(match);
+    }
+
+    [Fact]
+    public void FindMatchingPost_Matches_WhenDateInIsoMatchesDdMmYyyyInPost()
+    {
+        var recentPosts = new List<FacebookPostSummary>
+        {
+            new("post_today", "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 17.09.2026\n\nСтарокостянтинів")
+        };
+
+        var decision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Ephemeral,
+            Guid.NewGuid(),
+            "fb_planned",
+            ScheduleDate: "2026-09-17"
+        );
+
+        var match = FacebookPipeline.FindMatchingPost(recentPosts, null, decision, "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 17.09.2026\n\nСтарокостянтинів");
+
+        Assert.NotNull(match);
+        Assert.Equal("post_today", match.Id);
+    }
+
+    [Fact]
+    public void FindMatchingPost_ReturnsNull_WhenNoDatePresent()
+    {
+        var recentPosts = new List<FacebookPostSummary>
+        {
+            new("post_1", "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ\n\nТекст без дати")
+        };
+
+        var decision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Ephemeral,
+            Guid.NewGuid(),
+            "fb_planned",
+            ScheduleDate: null
+        );
+
+        var match = FacebookPipeline.FindMatchingPost(recentPosts, null, decision, "ПЛАНОВІ ЗНЕСТРУМЛЕННЯ\n\nТекст без дати");
+
+        Assert.Null(match);
+    }
 }

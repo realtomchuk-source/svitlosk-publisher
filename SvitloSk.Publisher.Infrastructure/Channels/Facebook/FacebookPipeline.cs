@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Interfaces;
@@ -352,7 +353,7 @@ public class FacebookPipeline : IChannelPipeline
         return FacebookContentFormatter.FormatTerritoryPost(decision.TargetHash);
     }
 
-    internal static FacebookPostSummary? FindMatchingPost(
+    public static FacebookPostSummary? FindMatchingPost(
         IReadOnlyList<FacebookPostSummary>? recentPosts,
         ISet<string>? alreadyReconciledIds,
         EditorialDecision decision,
@@ -362,29 +363,47 @@ public class FacebookPipeline : IChannelPipeline
             return null;
 
         string territory = decision.TerritoryIdentifier ?? string.Empty;
-        string? targetDate = decision.ScheduleDate;
+
+        // Resolve target date candidates:
+        // 1. From decision.ScheduleDate (both yyyy-MM-dd and formatted dd.MM.yyyy)
+        // 2. Extracted from postText if present
+        var targetDateFormats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(decision.ScheduleDate))
+        {
+            targetDateFormats.Add(decision.ScheduleDate);
+            string formatted = EditorialContentTransformer.FormatDate(decision.ScheduleDate);
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                targetDateFormats.Add(formatted);
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(postText))
+        {
+            var dateMatch = Regex.Match(postText, @"\b(\d{2}\.\d{2}\.\d{4})\b");
+            if (dateMatch.Success)
+            {
+                targetDateFormats.Add(dateMatch.Value);
+            }
+        }
+
+        // If no target date can be identified, do not match any existing post to prevent cross-day mismatches
+        if (targetDateFormats.Count == 0)
+            return null;
 
         foreach (var post in recentPosts)
         {
             if (string.IsNullOrWhiteSpace(post.Message)) continue;
             if (alreadyReconciledIds != null && alreadyReconciledIds.Contains(post.Id)) continue;
 
-            // 1. Direct first-line match if postText is provided
-            if (!string.IsNullOrWhiteSpace(postText))
-            {
-                var firstLine = postText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
-                if (!string.IsNullOrWhiteSpace(firstLine) && post.Message.Contains(firstLine, StringComparison.OrdinalIgnoreCase))
-                {
-                    return post;
-                }
-            }
+            // Strict date requirement: existing post MUST explicitly contain the target date
+            bool containsTargetDate = targetDateFormats.Any(d => post.Message.Contains(d, StringComparison.OrdinalIgnoreCase));
+            if (!containsTargetDate) continue;
 
-            // 2. Semantic matching by territory type and date
+            // Territory type matching
             if (territory.Equals("fb_planned", StringComparison.OrdinalIgnoreCase) ||
                 territory.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
             {
-                if (post.Message.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) &&
-                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                if (post.Message.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
                 {
                     return post;
                 }
@@ -392,8 +411,7 @@ public class FacebookPipeline : IChannelPipeline
             else if (territory.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
                      territory.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
             {
-                if (post.Message.Contains("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase) &&
-                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                if (post.Message.Contains("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
                 {
                     return post;
                 }
@@ -401,8 +419,15 @@ public class FacebookPipeline : IChannelPipeline
             else if (territory.Equals("fb_emergency", StringComparison.OrdinalIgnoreCase) ||
                      territory.StartsWith("emergency", StringComparison.OrdinalIgnoreCase))
             {
-                if (post.Message.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) &&
-                    (string.IsNullOrEmpty(targetDate) || post.Message.Contains(targetDate, StringComparison.OrdinalIgnoreCase)))
+                if (post.Message.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+                {
+                    return post;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(postText))
+            {
+                var firstLine = postText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+                if (!string.IsNullOrWhiteSpace(firstLine) && post.Message.Contains(firstLine, StringComparison.OrdinalIgnoreCase))
                 {
                     return post;
                 }
