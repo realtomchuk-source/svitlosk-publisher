@@ -426,9 +426,6 @@ public static class FacebookContentFormatter
             }
         }
 
-        sb.AppendLine("Інформація може змінюватися відповідно до поточних розпоряджень НЕК «Укренерго».");
-        sb.AppendLine();
-
         // Technical footer
         var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");

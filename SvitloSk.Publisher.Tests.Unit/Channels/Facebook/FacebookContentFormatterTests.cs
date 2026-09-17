@@ -205,7 +205,7 @@ public class FacebookContentFormatterTests
         Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("08:00–12:00", result);
         Assert.Contains("• вул. Франка", result);
-        Assert.Contains("Укренерго", result);
+        Assert.DoesNotContain("Укренерго", result);
         Assert.DoesNotContain("Технічна інформація:", result);
         Assert.Contains("#відключення", result);
         Assert.Contains("#svitlosk", result);
