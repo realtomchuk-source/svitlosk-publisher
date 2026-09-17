@@ -412,7 +412,7 @@ public static class FacebookContentFormatter
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("МІСТО СТАРОКОСТЯНТИНІВ");
+        sb.AppendLine("м. Старокостянтинів");
 
         var distinctIntervals = blocks
             .Select(b => b.TimeInterval)

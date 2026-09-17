@@ -103,7 +103,7 @@ public class FacebookContentFormatterTests
 
         Assert.NotNull(result);
         Assert.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
-        Assert.Contains("МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("10:15–14:00", result);
         Assert.Contains("• вул. Грушевського, 5", result);
 
@@ -126,7 +126,7 @@ public class FacebookContentFormatterTests
         Assert.Contains("#аварійнівідключення", result);
 
         // Verify Starokon appears BEFORE rural districts
-        int starokonIndex = result.IndexOf("МІСТО СТАРОКОСТЯНТИНІВ");
+        int starokonIndex = result.IndexOf("м. Старокостянтинів");
         int ruralIndex = result.IndexOf("СТАРОСТИНСЬКІ ОКРУГИ");
         Assert.True(starokonIndex < ruralIndex, "Starokostiantyniv must be prioritized before rural districts");
     }
@@ -157,7 +157,7 @@ public class FacebookContentFormatterTests
         string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
 
         Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
-        Assert.Contains("МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("10:00–16:00", result);
         Assert.Contains("• вул. Острозького", result);
 
@@ -172,7 +172,7 @@ public class FacebookContentFormatterTests
         Assert.DoesNotContain("🌾", result);
         Assert.DoesNotContain("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", result);
 
-        int cityIdx = result.IndexOf("МІСТО СТАРОКОСТЯНТИНІВ");
+        int cityIdx = result.IndexOf("м. Старокостянтинів");
         int ruralIdx = result.IndexOf("СТАРОСТИНСЬКІ ОКРУГИ");
         Assert.True(cityIdx < ruralIdx);
     }
@@ -189,7 +189,7 @@ public class FacebookContentFormatterTests
 
         Assert.NotNull(result);
         Assert.Contains("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА\n16.09.2026", result);
-        Assert.Contains("МІСТО СТАРОКОСТЯНТИНІВ", result);
+        Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("08:00–12:00", result);
         Assert.Contains("• вул. Франка", result);
         Assert.Contains("Укренерго", result);
