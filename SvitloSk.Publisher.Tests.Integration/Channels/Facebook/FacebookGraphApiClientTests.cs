@@ -64,18 +64,27 @@ public class FacebookGraphApiClientTests
     [Fact]
     public async Task PublishPostAsync_PhotoPost_SendsMultipartToPhotosEndpoint()
     {
-        string? requestedUrl = null;
+        var requestedUrls = new List<string>();
         bool isMultipart = false;
 
         var handler = new FakeHttpMessageHandler
         {
             HandlerFunc = req =>
             {
-                requestedUrl = req.RequestUri?.ToString();
-                isMultipart = req.Content is MultipartFormDataContent;
+                requestedUrls.Add(req.RequestUri?.ToString() ?? "");
+                if (req.Content is MultipartFormDataContent) isMultipart = true;
+
+                if (req.RequestUri?.ToString().Contains("/photos") == true)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"id\":\"photo_777\"}", Encoding.UTF8, "application/json")
+                    });
+                }
+
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("{\"id\":\"photo_777\",\"post_id\":\"1001_photo_post_888\"}", Encoding.UTF8, "application/json")
+                    Content = new StringContent("{\"id\":\"1001_photo_post_888\"}", Encoding.UTF8, "application/json")
                 });
             }
         };
@@ -88,7 +97,8 @@ public class FacebookGraphApiClientTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("1001_photo_post_888", result.PostId);
-        Assert.Contains("graph.facebook.com/v19.0/page_1001/photos", requestedUrl);
+        Assert.Contains(requestedUrls, u => u.Contains("graph.facebook.com/v19.0/page_1001/photos"));
+        Assert.Contains(requestedUrls, u => u.Contains("graph.facebook.com/v19.0/page_1001/feed"));
         Assert.True(isMultipart);
     }
 

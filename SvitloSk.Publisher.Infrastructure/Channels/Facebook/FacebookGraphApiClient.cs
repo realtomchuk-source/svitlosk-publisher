@@ -44,21 +44,47 @@ public class FacebookGraphApiClient : IFacebookAdapter
         {
             if (imageBytes != null && imageBytes.Length > 0)
             {
-                // Upload photo to /{pageId}/photos
-                string url = $"https://graph.facebook.com/{_apiVersion}/{pageId}/photos";
+                // 1. Upload photo asset as unpublished to /{pageId}/photos
+                string photoUrl = $"https://graph.facebook.com/{_apiVersion}/{pageId}/photos";
 
-                using var content = new MultipartFormDataContent();
-                content.Add(new StringContent(text), "caption");
-                content.Add(new StringContent(_pageAccessToken), "access_token");
+                using var photoContent = new MultipartFormDataContent();
+                photoContent.Add(new StringContent("false"), "published");
+                photoContent.Add(new StringContent(_pageAccessToken), "access_token");
 
                 var imageContent = new ByteArrayContent(imageBytes);
                 imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-                content.Add(imageContent, "source", "post_image.png");
+                photoContent.Add(imageContent, "source", "post_image.png");
 
-                using var response = await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
-                string responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var photoResponse = await _httpClient.PostAsync(photoUrl, photoContent, cancellationToken).ConfigureAwait(false);
+                string photoJson = await photoResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-                return ParseResponse(response, responseJson, isCreate: true);
+                if (!photoResponse.IsSuccessStatusCode)
+                {
+                    return ParseError(photoJson);
+                }
+
+                using var photoDoc = JsonDocument.Parse(photoJson);
+                string? photoId = photoDoc.RootElement.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+
+                if (string.IsNullOrEmpty(photoId))
+                {
+                    return new FacebookDispatchResult(false, ErrorDescription: "Failed to obtain photo ID from unpublished upload.");
+                }
+
+                // 2. Publish guaranteed feed post to /{pageId}/feed with attached_media
+                string feedUrl = $"https://graph.facebook.com/{_apiVersion}/{pageId}/feed";
+                var formValues = new List<KeyValuePair<string, string>>
+                {
+                    new("message", text),
+                    new("attached_media[0]", $"{{\"media_fbid\":\"{photoId}\"}}"),
+                    new("access_token", _pageAccessToken)
+                };
+
+                using var feedContent = new FormUrlEncodedContent(formValues);
+                using var feedResponse = await _httpClient.PostAsync(feedUrl, feedContent, cancellationToken).ConfigureAwait(false);
+                string feedJson = await feedResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                return ParseResponse(feedResponse, feedJson, isCreate: true);
             }
             else
             {
