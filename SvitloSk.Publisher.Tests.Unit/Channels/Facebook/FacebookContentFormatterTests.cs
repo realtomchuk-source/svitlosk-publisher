@@ -26,8 +26,8 @@ public class FacebookContentFormatterTests
 
         Assert.Contains("14.09.2026", caption);
         Assert.Contains("12-підчерговий графік", caption);
-        Assert.Contains("#графік", caption);
-        Assert.Contains("#старокостянтинів", caption);
+        Assert.Contains("#відключення", caption);
+        Assert.Contains("#Старокостянтинів", caption);
     }
 
     [Fact]
@@ -120,10 +120,11 @@ public class FacebookContentFormatterTests
         Assert.DoesNotContain("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", result);
 
         // Technical footer
-        Assert.Contains("Технічна інформація:", result);
+        Assert.DoesNotContain("Технічна інформація:", result);
         Assert.Contains("Останнє оновлення журналу: 14:00", result);
         Assert.Contains("Стан моніторингу: активний", result);
-        Assert.Contains("#аварійнівідключення", result);
+        Assert.Contains("#відключення", result);
+        Assert.Contains("#svitlosk", result);
 
         // Verify Starokon appears BEFORE rural districts
         int starokonIndex = result.IndexOf("м. Старокостянтинів");
@@ -138,9 +139,13 @@ public class FacebookContentFormatterTests
 
         string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
 
-        Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — ВІВТОРОК 15.09.2026", result);
+        Assert.Contains("Планові знеструмлення: відсутні", result);
+        Assert.Contains("Аварійні знеструмлення: відсутні", result);
         Assert.Contains("планових знеструмлень у громаді не заплановано", result);
         Assert.Contains("Електропостачання споживачів здійснюється у штатному режимі", result);
+        Assert.DoesNotContain("Технічна інформація:", result);
+        Assert.Contains("#відключення", result);
         Assert.DoesNotContain("⚡", result);
         Assert.DoesNotContain("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", result);
     }
@@ -156,7 +161,10 @@ public class FacebookContentFormatterTests
 
         string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-15", territories);
 
-        Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — 15.09.2026", result);
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — ВІВТОРОК 15.09.2026", result);
+        Assert.Contains("Планові знеструмлення:\nм. Старокостянтинів, с. Самчики", result);
+        Assert.Contains("Аварійні знеструмлення: відсутні", result);
+        Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", result);
         Assert.Contains("м. Старокостянтинів", result);
         Assert.Contains("10:00–16:00", result);
         Assert.Contains("• вул. Острозького", result);
@@ -166,6 +174,12 @@ public class FacebookContentFormatterTests
         Assert.Contains("09:00–17:00", result);
         Assert.Contains("с. Самчики", result);
         Assert.Contains("• вул. Миру", result);
+
+        Assert.DoesNotContain("Технічна інформація:", result);
+        Assert.Contains("#відключення", result);
+        Assert.Contains("#Старокостянтинів", result);
+        Assert.Contains("#громада", result);
+        Assert.Contains("#svitlosk", result);
 
         Assert.DoesNotContain("⚡", result);
         Assert.DoesNotContain("🏙️", result);
@@ -193,7 +207,9 @@ public class FacebookContentFormatterTests
         Assert.Contains("08:00–12:00", result);
         Assert.Contains("• вул. Франка", result);
         Assert.Contains("Укренерго", result);
-        Assert.Contains("#прогноз", result);
+        Assert.DoesNotContain("Технічна інформація:", result);
+        Assert.Contains("#відключення", result);
+        Assert.Contains("#svitlosk", result);
         Assert.DoesNotContain("🔮", result);
         Assert.DoesNotContain("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", result);
     }

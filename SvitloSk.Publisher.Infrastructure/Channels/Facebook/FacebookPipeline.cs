@@ -403,7 +403,8 @@ public class FacebookPipeline : IChannelPipeline
             if (territory.Equals("fb_planned", StringComparison.OrdinalIgnoreCase) ||
                 territory.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
             {
-                if (post.Message.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+                if (post.Message.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) ||
+                    post.Message.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
                 {
                     return post;
                 }

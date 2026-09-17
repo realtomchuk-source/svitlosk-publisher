@@ -17,6 +17,8 @@ namespace SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 /// </summary>
 public static class FacebookContentFormatter
 {
+    public const string DefaultHashtags = "#відключення #Старокостянтинів #громада #svitlosk";
+
     public static string StripHtml(string? input)
     {
         if (string.IsNullOrEmpty(input)) return string.Empty;
@@ -28,7 +30,7 @@ public static class FacebookContentFormatter
     {
         return $"⚡ ГРАФІК ЗНЕСТРУМЛЕНЬ — {formattedDate}\n\n" +
                "Опубліковано детальний 12-підчерговий графік погодинних відключень електроенергії у Старокостянтинівській міській територіальній громаді.\n\n" +
-               "#графік #старокостянтинів #підчерги #svitlosk";
+               $"{DefaultHashtags}";
     }
 
     public static string FormatConsolidatedTodayPost(
@@ -68,7 +70,7 @@ public static class FacebookContentFormatter
 
         var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
         sb.AppendLine($"🕒 Останнє оновлення: {localTime:HH:mm}");
-        sb.AppendLine("#svitlosk #старокостянтинів #відключення #графік");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd();
     }
@@ -107,7 +109,7 @@ public static class FacebookContentFormatter
         }
 
         sb.AppendLine("⚠️ Зверніть увагу: графік може бути скориговано відповідно до розпоряджень НЕК «Укренерго».");
-        sb.AppendLine("#прогноз #завтра #старокостянтинів #svitlosk");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd();
     }
@@ -128,7 +130,7 @@ public static class FacebookContentFormatter
         sb.AppendLine();
         sb.AppendLine();
         sb.AppendLine("⚡ SvitloSk Journal | Старокостянтинівська міська територіальна громада");
-        sb.AppendLine("#відключення #старокостянтинів #громада #svitlosk");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd();
     }
@@ -226,11 +228,10 @@ public static class FacebookContentFormatter
 
         // Technical footer
         var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
-        sb.AppendLine("Технічна інформація: ");
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
-        sb.AppendLine("Стан моніторингу: активний  ");
+        sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();
-        sb.AppendLine("#аварійнівідключення #відключення #Старокостянтинів #громада #svitlosk");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
@@ -242,11 +243,57 @@ public static class FacebookContentFormatter
         DateTime? lastUpdatedUtc = null)
     {
         string formattedDate = EditorialContentTransformer.FormatDate(editionDate);
+        string dayOfWeekUpper = "СЬОГОДНІ";
+        if (DateTime.TryParse(editionDate, out var dt))
+        {
+            dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(dt.DayOfWeek).ToUpperInvariant();
+        }
+        else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExact))
+        {
+            dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExact.DayOfWeek).ToUpperInvariant();
+        }
+        else
+        {
+            var match = Regex.Match(editionDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
+            {
+                dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(regexDate.DayOfWeek).ToUpperInvariant();
+            }
+        }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"ПЛАНОВІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
-        sb.AppendLine();
+        sb.AppendLine($"ЖУРНАЛ ЗНЕСТРУМЛЕНЬ — {dayOfWeekUpper} {formattedDate}");
         sb.AppendLine("Старокостянтинівська міська територіальна громада");
+        sb.AppendLine();
+
+        var allPlannedRecords = territories.SelectMany(t => t.PlannedRecords ?? Array.Empty<OutageRecord>()).ToList();
+        var allEmergencyRecords = territories.SelectMany(t => t.EmergencyRecords ?? Array.Empty<OutageRecord>()).ToList();
+
+        var plannedSettlements = TerritoryAggregator.ExtractSettlements(allPlannedRecords);
+        var emergencySettlements = TerritoryAggregator.ExtractSettlements(allEmergencyRecords);
+
+        if (plannedSettlements.Count > 0)
+        {
+            sb.AppendLine("Планові знеструмлення:");
+            sb.AppendLine(string.Join(", ", plannedSettlements));
+        }
+        else
+        {
+            sb.AppendLine("Планові знеструмлення: відсутні");
+        }
+
+        sb.AppendLine();
+
+        if (emergencySettlements.Count > 0)
+        {
+            sb.AppendLine("Аварійні знеструмлення:");
+            sb.AppendLine(string.Join(", ", emergencySettlements));
+        }
+        else
+        {
+            sb.AppendLine("Аварійні знеструмлення: відсутні");
+        }
+
         sb.AppendLine();
 
         var plannedTerritories = territories
@@ -261,6 +308,9 @@ public static class FacebookContentFormatter
         }
         else
         {
+            sb.AppendLine("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ");
+            sb.AppendLine();
+
             // 1. City of Starokostiantyniv first (top priority)
             var city = plannedTerritories.FirstOrDefault(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase));
             if (city != null)
@@ -306,11 +356,10 @@ public static class FacebookContentFormatter
 
         // Technical footer
         var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
-        sb.AppendLine("Технічна інформація: ");
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
-        sb.AppendLine("Стан моніторингу: активний  ");
+        sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();
-        sb.AppendLine("#відключення #плановівідключення #Старокостянтинів #громада #svitlosk");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
@@ -394,11 +443,10 @@ public static class FacebookContentFormatter
 
         // Technical footer
         var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
-        sb.AppendLine("Технічна інформація: ");
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
-        sb.AppendLine("Стан моніторингу: активний  ");
+        sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();
-        sb.AppendLine("#прогноз #відключення #Старокостянтинів #громада #svitlosk");
+        sb.AppendLine(DefaultHashtags);
 
         return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
