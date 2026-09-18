@@ -64,19 +64,50 @@ public class FacebookPipeline : IChannelPipeline
         IReadOnlyList<FacebookPostSummary>? recentPagePosts = null;
         var reconciledPostIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        bool hasCreateOrUnlinkedDecisions = decisions.Any(d =>
-            !string.Equals(d.TerritoryIdentifier, "system_status", StringComparison.OrdinalIgnoreCase) &&
-            (d.DecisionResult == DecisionResult.Create || (d.DecisionResult == DecisionResult.Update && string.IsNullOrEmpty(d.ExternalMessageId))));
-
-        if (hasCreateOrUnlinkedDecisions)
+        try
         {
-            try
+            recentPagePosts = await _facebookAdapter.GetRecentPostsAsync(_pageId, limit: 10, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARNING][FacebookPipeline] Pre-flight feed check failed gracefully: {ex.Message}");
+        }
+
+        // Pre-flight sweep: ensure obsolete tomorrow forecast posts (date <= today) are automatically deleted
+        if (recentPagePosts != null && recentPagePosts.Count > 0)
+        {
+            string? todayDateStr = decisions.FirstOrDefault(d => 
+                (string.Equals(d.TerritoryIdentifier, "fb_planned", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(d.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(d.ScheduleDate))?.ScheduleDate;
+
+            DateTime todayDate = DateTime.TryParse(todayDateStr, out var parsedToday) ? parsedToday.Date : DateTime.UtcNow.Date;
+
+            foreach (var post in recentPagePosts)
             {
-                recentPagePosts = await _facebookAdapter.GetRecentPostsAsync(_pageId, limit: 10, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARNING][FacebookPipeline] Pre-flight feed check failed gracefully: {ex.Message}");
+                if (string.IsNullOrWhiteSpace(post.Message)) continue;
+
+                if (post.Message.Contains("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var match = Regex.Match(post.Message, @"\b(\d{2})\.(\d{2})\.(\d{4})\b");
+                    if (match.Success)
+                    {
+                        string dateStr = $"{match.Groups[3].Value}-{match.Groups[2].Value}-{match.Groups[1].Value}";
+                        if (DateTime.TryParse(dateStr, out var postForecastDate) && postForecastDate.Date <= todayDate)
+                        {
+                            Console.WriteLine($"[FacebookPipeline] Pre-flight cleanup: removing obsolete tomorrow forecast post '{post.Id}' (Forecast date: {dateStr}, Today: {todayDate:yyyy-MM-dd}).");
+                            try
+                            {
+                                await _facebookAdapter.DeletePostAsync(post.Id, cancellationToken).ConfigureAwait(false);
+                                reconciledPostIds.Add(post.Id);
+                            }
+                            catch (Exception delEx)
+                            {
+                                Console.WriteLine($"[WARNING][FacebookPipeline] Failed to delete obsolete forecast post '{post.Id}': {delEx.Message}");
+                            }
+                        }
+                    }
+                }
             }
         }
 

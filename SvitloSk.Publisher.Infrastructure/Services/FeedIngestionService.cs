@@ -315,7 +315,7 @@ public class FeedIngestionService
             ? _bannerAssembly.AssembleFacebookDayHeaderSvg(editionDate)
             : _bannerAssembly.AssembleFacebookNoOutagesSvg(editionDate);
         byte[] planPng = _rasterizer.RasterizeSvgToPng(planSvg, 1200, 630);
-        packages.Add(new InputTerritoryPackage("fb_planned", plannedText, planPng, false));
+        packages.Add(new InputTerritoryPackage("fb_planned", plannedText, planPng, true));
         Console.WriteLine($"[INFO][Facebook] Assembled planned package 'fb_planned' (HasPlanned: {hasPlanned}).");
 
         // 3. Tomorrow forecast post (Created when tomorrow data exists)

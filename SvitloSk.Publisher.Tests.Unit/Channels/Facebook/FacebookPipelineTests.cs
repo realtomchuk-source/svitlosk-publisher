@@ -278,4 +278,57 @@ public class FacebookPipelineTests
 
         Assert.Null(match);
     }
+
+    [Fact]
+    public async Task DispatchAsync_PreFlightSweep_DeletesObsoleteTomorrowForecast_WhenDateIsTodayOrPast()
+    {
+        var adapter = new TestFacebookAdapter
+        {
+            RecentPosts = new List<FacebookPostSummary>
+            {
+                new("post_old_forecast", "ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА\n18.09.2026\nСтарокостянтинів"),
+                new("post_yesterday_journal", "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n17.09.2026 ЧЕТВЕР\nСтарокостянтинів")
+            }
+        };
+
+        var pipeline = new FacebookPipeline(adapter, "test_page_123", new TestGraphicRasterizer());
+
+        var decisions = new List<EditorialDecision>
+        {
+            new(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "fb_planned", "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n18.09.2026 П'ЯТНИЦЯ", ScheduleDate: "2026-09-18")
+        };
+
+        var result = await pipeline.DispatchAsync(decisions);
+
+        Assert.True(result.IsSuccess);
+        // Obsolete forecast was deleted; yesterday's journal was preserved!
+        Assert.Equal(1, adapter.DeleteCount);
+        Assert.Equal("post_old_forecast", adapter.LastDeletedPostId);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_PreFlightSweep_PreservesFutureTomorrowForecast()
+    {
+        var adapter = new TestFacebookAdapter
+        {
+            RecentPosts = new List<FacebookPostSummary>
+            {
+                new("post_future_forecast", "ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА\n19.09.2026\nСтарокостянтинів"),
+                new("post_yesterday_journal", "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n17.09.2026 ЧЕТВЕР\nСтарокостянтинів")
+            }
+        };
+
+        var pipeline = new FacebookPipeline(adapter, "test_page_123", new TestGraphicRasterizer());
+
+        var decisions = new List<EditorialDecision>
+        {
+            new(DecisionResult.Create, PublicationClassification.Persistent, Guid.NewGuid(), "fb_planned", "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n18.09.2026 П'ЯТНИЦЯ", ScheduleDate: "2026-09-18")
+        };
+
+        var result = await pipeline.DispatchAsync(decisions);
+
+        Assert.True(result.IsSuccess);
+        // Neither future forecast nor yesterday's journal is deleted
+        Assert.Equal(0, adapter.DeleteCount);
+    }
 }

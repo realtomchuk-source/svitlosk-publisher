@@ -152,7 +152,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 else if (pubRecord.TerritoryId.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Text;
-                    isPersistent = false;
+                    isPersistent = true;
                 }
                 else if (pubRecord.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
                 {
