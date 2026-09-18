@@ -26,11 +26,36 @@ public static class FacebookContentFormatter
         return HttpUtility.HtmlDecode(noTags).Trim();
     }
 
-    public static string FormatGraphicCaption(string formattedDate)
+    public static string FormatGraphicCaption(string rawDate)
     {
-        return $"⚡ ГРАФІК ЗНЕСТРУМЛЕНЬ — {formattedDate}\n\n" +
-               "Опубліковано детальний 12-підчерговий графік погодинних відключень електроенергії у Старокостянтинівській міській територіальній громаді.\n\n" +
-               $"{DefaultHashtags}";
+        string formattedDate = EditorialContentTransformer.FormatDate(rawDate);
+        string dayOfWeekLower = "сьогодні";
+        if (DateTime.TryParse(rawDate, out var dt))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dt.DayOfWeek).ToLowerInvariant();
+        }
+        else if (DateTime.TryParseExact(rawDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExact))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExact.DayOfWeek).ToLowerInvariant();
+        }
+        else
+        {
+            var match = Regex.Match(rawDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
+            {
+                dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(regexDate.DayOfWeek).ToLowerInvariant();
+            }
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("ГРАФІК ЗНЕСТРУМЛЕНЬ");
+        sb.AppendLine($"{formattedDate} {dayOfWeekLower}, Старокостянтинівська міська територіальна громада");
+        sb.AppendLine();
+        sb.AppendLine("Опубліковано детальний 12-підчерговий графік погодинних відключень електроенергії.");
+        sb.AppendLine();
+        sb.AppendLine(DefaultHashtags);
+
+        return sb.ToString().TrimEnd().Replace("\r\n", "\n");
     }
 
     public static string FormatConsolidatedTodayPost(

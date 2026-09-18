@@ -190,13 +190,23 @@ public class FacebookPipeline : IChannelPipeline
 
                 if (decision.Type == PublicationType.Graphic)
                 {
+                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
+
+                    // Pre-flight check: if matching graphic post already exists on page for this date, delete old one to prevent duplicates
+                    var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, caption);
+                    if (existingPost != null)
+                    {
+                        Console.WriteLine($"[FacebookPipeline] Pre-flight reconciliation: found existing graphic post '{existingPost.Id}'. Deleting old graphic before publishing new one.");
+                        reconciledPostIds.Add(existingPost.Id);
+                        await _facebookAdapter.DeletePostAsync(existingPost.Id, cancellationToken).ConfigureAwait(false);
+                    }
+
                     byte[]? imageBytes = null;
                     if (decision.SvgBytes != null && decision.SvgBytes.Length > 0)
                     {
                         imageBytes = _rasterizer.RasterizeSvgToPng(decision.SvgBytes, 1080, 1080);
                     }
 
-                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
                     pubRes = await _facebookAdapter.PublishPostAsync(_pageId, caption, imageBytes, cancellationToken).ConfigureAwait(false);
                 }
                 else
@@ -245,10 +255,23 @@ public class FacebookPipeline : IChannelPipeline
 
                 if (decision.Type == PublicationType.Graphic)
                 {
+                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
+
                     // Graphic schedule photo must be replaced: delete old and create new
                     if (!string.IsNullOrEmpty(decision.ExternalMessageId))
                     {
+                        reconciledPostIds.Add(decision.ExternalMessageId);
                         await _facebookAdapter.DeletePostAsync(decision.ExternalMessageId, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, caption);
+                        if (existingPost != null)
+                        {
+                            Console.WriteLine($"[FacebookPipeline] Reconciling unlinked graphic update: deleting existing post '{existingPost.Id}'.");
+                            reconciledPostIds.Add(existingPost.Id);
+                            await _facebookAdapter.DeletePostAsync(existingPost.Id, cancellationToken).ConfigureAwait(false);
+                        }
                     }
 
                     byte[]? imageBytes = null;
@@ -257,7 +280,6 @@ public class FacebookPipeline : IChannelPipeline
                         imageBytes = _rasterizer.RasterizeSvgToPng(decision.SvgBytes, 1080, 1080);
                     }
 
-                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
                     updRes = await _facebookAdapter.PublishPostAsync(_pageId, caption, imageBytes, cancellationToken).ConfigureAwait(false);
                 }
                 else
@@ -452,6 +474,14 @@ public class FacebookPipeline : IChannelPipeline
                      territory.StartsWith("emergency", StringComparison.OrdinalIgnoreCase))
             {
                 if (post.Message.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+                {
+                    return post;
+                }
+            }
+            else if (decision.Type == PublicationType.Graphic ||
+                     territory.Equals("graphic", StringComparison.OrdinalIgnoreCase))
+            {
+                if (post.Message.Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
                 {
                     return post;
                 }

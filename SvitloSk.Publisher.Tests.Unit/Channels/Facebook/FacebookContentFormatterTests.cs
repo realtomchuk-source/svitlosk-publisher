@@ -24,10 +24,10 @@ public class FacebookContentFormatterTests
     {
         string caption = FacebookContentFormatter.FormatGraphicCaption("14.09.2026");
 
-        Assert.Contains("14.09.2026", caption);
+        Assert.Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", caption);
+        Assert.Contains("14.09.2026 понеділок, Старокостянтинівська міська територіальна громада", caption);
         Assert.Contains("12-підчерговий графік", caption);
-        Assert.Contains("#відключення", caption);
-        Assert.Contains("#Старокостянтинів", caption);
+        Assert.EndsWith("#відключення #громада #svitlosk #Старокостянтинів", caption.TrimEnd());
     }
 
     [Fact]

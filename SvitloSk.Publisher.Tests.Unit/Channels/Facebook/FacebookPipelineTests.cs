@@ -331,4 +331,61 @@ public class FacebookPipelineTests
         // Neither future forecast nor yesterday's journal is deleted
         Assert.Equal(0, adapter.DeleteCount);
     }
+
+    [Fact]
+    public void FindMatchingPost_MatchesGraphicPost_WhenDateMatches()
+    {
+        var recentPosts = new List<FacebookPostSummary>
+        {
+            new("post_graphic_today", "ГРАФІК ЗНЕСТРУМЛЕНЬ\n18.09.2026 п'ятниця, Старокостянтинівська міська територіальна громада\n\nОпубліковано детальний 12-підчерговий графік")
+        };
+
+        var decision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Persistent,
+            Guid.NewGuid(),
+            "graphic",
+            ScheduleDate: "2026-09-18",
+            Type: PublicationType.Graphic
+        );
+
+        var match = FacebookPipeline.FindMatchingPost(recentPosts, null, decision, "ГРАФІК ЗНЕСТРУМЛЕНЬ\n18.09.2026 п'ятниця");
+
+        Assert.NotNull(match);
+        Assert.Equal("post_graphic_today", match.Id);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GraphicPost_DeletesExistingMatchingPost_BeforePublishing()
+    {
+        var adapter = new TestFacebookAdapter
+        {
+            RecentPosts = new List<FacebookPostSummary>
+            {
+                new("existing_graphic_post", "ГРАФІК ЗНЕСТРУМЛЕНЬ\n18.09.2026 п'ятниця, Старокостянтинівська міська територіальна громада\n\nОпубліковано детальний 12-підчерговий графік")
+            }
+        };
+
+        var pipeline = new FacebookPipeline(adapter, "test_page_123", new TestGraphicRasterizer());
+
+        var decision = new EditorialDecision(
+            DecisionResult.Create,
+            PublicationClassification.Persistent,
+            Guid.NewGuid(),
+            "graphic",
+            ScheduleDate: "2026-09-18",
+            Type: PublicationType.Graphic,
+            SvgBytes: new byte[] { 60, 115, 118, 103, 62 }
+        );
+
+        var result = await pipeline.DispatchAsync(new[] { decision });
+
+        Assert.True(result.IsSuccess);
+        // Old graphic post was deleted before publishing new one to prevent duplicates!
+        Assert.Equal(1, adapter.DeleteCount);
+        Assert.Equal("existing_graphic_post", adapter.LastDeletedPostId);
+        Assert.Equal(1, adapter.PublishCount);
+        Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
+    }
 }
+
