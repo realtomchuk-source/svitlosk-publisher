@@ -17,7 +17,7 @@ namespace SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 /// </summary>
 public static class FacebookContentFormatter
 {
-    public const string DefaultHashtags = "#відключення #Старокостянтинів #громада #svitlosk";
+    public const string DefaultHashtags = "#відключення #громада #svitlosk #Старокостянтинів";
 
     public static string StripHtml(string? input)
     {
@@ -177,11 +177,19 @@ public static class FacebookContentFormatter
         }
 
         string formattedDate = EditorialContentTransformer.FormatDate(editionDate);
+        string dayOfWeekLower = "сьогодні";
+        if (DateTime.TryParse(editionDate, out var dtEm))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtEm.DayOfWeek).ToLowerInvariant();
+        }
+        else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExactEm))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExactEm.DayOfWeek).ToLowerInvariant();
+        }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"АВАРІЙНІ ЗНЕСТРУМЛЕННЯ — {formattedDate}");
-        sb.AppendLine();
-        sb.AppendLine("Старокостянтинівська міська територіальна громада");
+        sb.AppendLine("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ");
+        sb.AppendLine($"{formattedDate} {dayOfWeekLower}, Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         // 1. City of Starokostiantyniv first (top priority)
@@ -243,28 +251,27 @@ public static class FacebookContentFormatter
         DateTime? lastUpdatedUtc = null)
     {
         string formattedDate = EditorialContentTransformer.FormatDate(editionDate);
-        string dayOfWeekUpper = "СЬОГОДНІ";
+        string dayOfWeekLower = "сьогодні";
         if (DateTime.TryParse(editionDate, out var dt))
         {
-            dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(dt.DayOfWeek).ToUpperInvariant();
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dt.DayOfWeek).ToLowerInvariant();
         }
         else if (DateTime.TryParseExact(editionDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExact))
         {
-            dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExact.DayOfWeek).ToUpperInvariant();
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExact.DayOfWeek).ToLowerInvariant();
         }
         else
         {
             var match = Regex.Match(editionDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
             if (match.Success && DateTime.TryParse(match.Value, out var regexDate))
             {
-                dayOfWeekUpper = EditorialContentTransformer.GetUkrainianDayOfWeek(regexDate.DayOfWeek).ToUpperInvariant();
+                dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(regexDate.DayOfWeek).ToLowerInvariant();
             }
         }
 
         var sb = new StringBuilder();
         sb.AppendLine("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ");
-        sb.AppendLine($"{formattedDate} {dayOfWeekUpper}");
-        sb.AppendLine("Старокостянтинівська міська територіальна громада");
+        sb.AppendLine($"{formattedDate} {dayOfWeekLower}, Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         var allPlannedRecords = territories.SelectMany(t => t.PlannedRecords ?? Array.Empty<OutageRecord>()).ToList();
@@ -370,12 +377,27 @@ public static class FacebookContentFormatter
         }
 
         string formattedDate = EditorialContentTransformer.FormatDate(tomorrowDate);
+        string dayOfWeekLower = "завтра";
+        if (DateTime.TryParse(tomorrowDate, out var dtTom))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtTom.DayOfWeek).ToLowerInvariant();
+        }
+        else if (DateTime.TryParseExact(tomorrowDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtExactTom))
+        {
+            dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(dtExactTom.DayOfWeek).ToLowerInvariant();
+        }
+        else
+        {
+            var matchTom = Regex.Match(tomorrowDate, @"(\d{4}-\d{2}-\d{2})|(\d{2}\.\d{2}\.\d{4})");
+            if (matchTom.Success && DateTime.TryParse(matchTom.Value, out var regexDateTom))
+            {
+                dayOfWeekLower = EditorialContentTransformer.GetUkrainianDayOfWeek(regexDateTom.DayOfWeek).ToLowerInvariant();
+            }
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine("ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА");
-        sb.AppendLine(formattedDate);
-        sb.AppendLine();
-        sb.AppendLine("Старокостянтинівська міська територіальна громада");
+        sb.AppendLine($"{formattedDate} {dayOfWeekLower}, Старокостянтинівська міська територіальна громада");
         sb.AppendLine();
 
         // 1. City first
