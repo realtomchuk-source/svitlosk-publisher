@@ -26,6 +26,8 @@ local_*
 *.json
 !local/config/*.json
 !local/secrets/README.md
+!tools/whatsapp-bridge/package.json
+!tools/whatsapp-bridge/package-lock.json
 
 ## Deploy secrets and script outputs
 deploy/*.env
@@ -34,3 +36,7 @@ local/logs/
 local/output/
 *.log
 *.tmp
+
+## Node.js bridge
+tools/whatsapp-bridge/node_modules/
+

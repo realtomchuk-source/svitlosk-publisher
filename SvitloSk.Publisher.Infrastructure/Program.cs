@@ -10,6 +10,7 @@ using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
 using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
 using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
+using SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 using SvitloSk.Publisher.Infrastructure.Git;
 using SvitloSk.Publisher.Infrastructure.Graphics;
 using SvitloSk.Publisher.Infrastructure.Persistence;
@@ -32,6 +33,8 @@ public class Program
         bool runFacebookTestPost = false;
         bool runFacebookSync = false;
         bool runFacebookCleanup = false;
+        bool runWhatsAppCheck = false;
+        bool runWhatsAppSync = false;
         bool runFeedCheck = false;
 
         foreach (var arg in args)
@@ -47,6 +50,8 @@ public class Program
             else if (arg.Equals("--facebook-test-post", StringComparison.OrdinalIgnoreCase)) runFacebookTestPost = true;
             else if (arg.Equals("--facebook-sync", StringComparison.OrdinalIgnoreCase)) runFacebookSync = true;
             else if (arg.Equals("--facebook-cleanup-legacy", StringComparison.OrdinalIgnoreCase)) runFacebookCleanup = true;
+            else if (arg.Equals("--whatsapp-check", StringComparison.OrdinalIgnoreCase)) runWhatsAppCheck = true;
+            else if (arg.Equals("--whatsapp-sync", StringComparison.OrdinalIgnoreCase)) runWhatsAppSync = true;
             else if (arg.Equals("--feed-check", StringComparison.OrdinalIgnoreCase)) runFeedCheck = true;
         }
 
@@ -88,7 +93,7 @@ public class Program
                 registryPath = Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_registry.json");
                 Console.WriteLine($"[DryRun] Isolated registry path: {registryPath}");
             }
-            else if (!runFacebookCheck && !runFacebookTestPost && !runFacebookSync)
+            else if (!runFacebookCheck && !runFacebookTestPost && !runFacebookSync && !runWhatsAppCheck && !runWhatsAppSync)
             {
                 if (string.IsNullOrWhiteSpace(botToken))
                 {
@@ -124,6 +129,27 @@ public class Program
             else
             {
                 fbRegistryPath ??= "local/registry/facebook_registry.json";
+            }
+
+            // 1.2 WhatsApp Environment & Configuration
+            string? waChannelId = Environment.GetEnvironmentVariable("WHATSAPP_CHANNEL_ID")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_CHANNEL_ID", EnvironmentVariableTarget.User);
+            string? waToken = Environment.GetEnvironmentVariable("WHATSAPP_ACCESS_TOKEN")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_ACCESS_TOKEN", EnvironmentVariableTarget.User);
+            string? waBridgeUrl = Environment.GetEnvironmentVariable("WHATSAPP_BRIDGE_URL")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_BRIDGE_URL", EnvironmentVariableTarget.User);
+            string? waRegistryPath = Environment.GetEnvironmentVariable("WHATSAPP_REGISTRY_PATH")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_REGISTRY_PATH", EnvironmentVariableTarget.User);
+
+            if (isDryRun)
+            {
+                waChannelId ??= "wa_dryrun_channel";
+                waToken ??= "wa_dryrun_token";
+                waRegistryPath = Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_whatsapp_registry.json");
+            }
+            else
+            {
+                waRegistryPath ??= "local/registry/whatsapp_registry.json";
             }
 
             // 2. Composition Root
@@ -170,6 +196,20 @@ public class Program
 
             IChannelPipeline? facebookPipeline = (facebookAdapter != null && !string.IsNullOrWhiteSpace(fbPageId))
                 ? new FacebookPipeline(facebookAdapter, fbPageId, rasterizer, bannerAssembly)
+                : null;
+
+            IWhatsAppAdapter? whatsAppAdapter = isDryRun
+                ? new WhatsAppDryRunAdapter()
+                : (!string.IsNullOrWhiteSpace(waBridgeUrl)
+                    ? new WhatsAppBridgeAdapter(httpClient, waBridgeUrl)
+                    : (waChannelId != null && (waChannelId.Contains("whatsapp.com/channel") || waChannelId.EndsWith("@newsletter") || waChannelId.StartsWith("0029"))
+                        ? new WhatsAppBridgeAdapter(httpClient)
+                        : (!string.IsNullOrWhiteSpace(waToken)
+                            ? new WhatsAppCloudApiClient(httpClient, waToken)
+                            : new WhatsAppBridgeAdapter(httpClient))));
+
+            IChannelPipeline? whatsAppPipeline = (whatsAppAdapter != null && !string.IsNullOrWhiteSpace(waChannelId))
+                ? new WhatsAppPipeline(whatsAppAdapter, waChannelId, new WhatsAppRateLimiter(delayProvider))
                 : null;
 
             var orchestrator = new PublisherOrchestrator(
@@ -350,6 +390,81 @@ public class Program
                 }
             }
 
+            if (runWhatsAppCheck)
+            {
+                if (whatsAppAdapter == null || string.IsNullOrWhiteSpace(waChannelId))
+                {
+                    Console.Error.WriteLine("[FATAL] WhatsApp check requires WHATSAPP_CHANNEL_ID (or channel link).");
+                    return 1;
+                }
+                var chkResult = await whatsAppAdapter.CheckChannelAccessAsync(waChannelId, cts.Token);
+                if (chkResult.IsSuccess)
+                {
+                    Console.WriteLine($"[SUCCESS] {chkResult.ErrorDescription}");
+                    return 0;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ERROR] WhatsApp channel check failed: {chkResult.ErrorDescription}");
+                    return 1;
+                }
+            }
+
+            if (runWhatsAppSync)
+            {
+                if (whatsAppAdapter == null || string.IsNullOrWhiteSpace(waChannelId))
+                {
+                    Console.Error.WriteLine("[FATAL] WhatsApp sync requires WHATSAPP_CHANNEL_ID (or channel link).");
+                    return 1;
+                }
+
+                Console.WriteLine("\n[START] WhatsApp Channel Standalone Synchronization");
+                Console.WriteLine($"[INFO] WhatsApp Registry: '{waRegistryPath}', Channel ID: '{waChannelId}'");
+
+                var waIngestionService = new FeedIngestionService(parser, bannerAssembly, rasterizer, transformer);
+                var waInput = await waIngestionService.IngestEditorialInputAsync(httpClient, isDryRun, cts.Token);
+
+                if (whatsAppPipeline == null)
+                {
+                    whatsAppPipeline = new WhatsAppPipeline(whatsAppAdapter, waChannelId, new WhatsAppRateLimiter(delayProvider));
+                }
+
+                var waOrchestrator = new PublisherOrchestrator(
+                    registryStore,
+                    gitTransport,
+                    hashCalculator,
+                    decisionEngine,
+                    whatsAppPipeline,
+                    parser,
+                    transformer
+                );
+
+                var waWatch = Stopwatch.StartNew();
+                var waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath!, waChannelId, waInput, null, cts.Token).ConfigureAwait(false);
+                waWatch.Stop();
+
+                int waCreate = waResult.Results.Count(r => r.DecisionResult == "Create");
+                int waUpdate = waResult.Results.Count(r => r.DecisionResult == "Update");
+                int waDelete = waResult.Results.Count(r => r.DecisionResult == "Delete");
+                int waNoop = waResult.Results.Count(r => r.DecisionResult is not ("Create" or "Update" or "Delete"));
+
+                if (waResult.IsSuccess)
+                {
+                    Console.WriteLine($"[SUCCESS] WhatsApp sync completed in {waWatch.ElapsedMilliseconds}ms. Total: {waResult.TotalProcessed}, Successful: {waResult.TotalSuccessful}.");
+                    Console.WriteLine($"[INFO][WhatsApp] Metrics -> CREATE: {waCreate} | UPDATE: {waUpdate} | DELETE: {waDelete} | NOOP: {waNoop}");
+                    return 0;
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ERROR][WhatsApp] Sync failed: {waResult.FatalErrorDescription}");
+                    foreach (var res in waResult.Results.Where(r => !r.IsSuccess))
+                    {
+                        Console.Error.WriteLine($"[ERROR][WhatsApp] Item '{res.TerritoryIdentifier}' ({res.DecisionResult}) failed: {res.ErrorDescription}");
+                    }
+                    return 1;
+                }
+            }
+
             if (runFeedCheck)
                 return await diagnosticsService.RunFeedCheckAsync(httpClient, parser, cts.Token);
 
@@ -437,6 +552,52 @@ public class Program
                 else
                 {
                     Console.WriteLine("[INFO] Facebook channel is not configured, skipping.");
+                }
+
+                // 7. WhatsApp Channel Synchronization (Isolated Blast Radius)
+                if (whatsAppPipeline != null && !string.IsNullOrWhiteSpace(waRegistryPath) && !string.IsNullOrWhiteSpace(waChannelId))
+                {
+                    Console.WriteLine($"\n[START] WhatsApp Channel Synchronization");
+                    Console.WriteLine($"[INFO] WhatsApp Registry: '{waRegistryPath}', Channel ID: '{waChannelId}'");
+                    try
+                    {
+                        var waOrchestrator = new PublisherOrchestrator(
+                            registryStore,
+                            gitTransport,
+                            hashCalculator,
+                            decisionEngine,
+                            whatsAppPipeline,
+                            parser,
+                            transformer
+                        );
+
+                        var waWatch = Stopwatch.StartNew();
+                        var waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath, waChannelId, input, null, cts.Token).ConfigureAwait(false);
+                        waWatch.Stop();
+
+                        int waCreate = waResult.Results.Count(r => r.DecisionResult == "Create");
+                        int waUpdate = waResult.Results.Count(r => r.DecisionResult == "Update");
+                        int waDelete = waResult.Results.Count(r => r.DecisionResult == "Delete");
+                        int waNoop = waResult.Results.Count(r => r.DecisionResult is not ("Create" or "Update" or "Delete"));
+
+                        if (waResult.IsSuccess)
+                        {
+                            Console.WriteLine($"[SUCCESS] WhatsApp sync completed in {waWatch.ElapsedMilliseconds}ms. Total: {waResult.TotalProcessed}, Successful: {waResult.TotalSuccessful}.");
+                            Console.WriteLine($"[INFO][WhatsApp] Metrics -> CREATE: {waCreate} | UPDATE: {waUpdate} | DELETE: {waDelete} | NOOP: {waNoop}");
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"[WARN][WhatsApp] Sync encountered issues: {waResult.FatalErrorDescription}");
+                        }
+                    }
+                    catch (Exception waEx)
+                    {
+                        Console.Error.WriteLine($"[ERROR][WhatsApp] Non-fatal exception in WhatsApp channel: {waEx.Message}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[INFO] WhatsApp channel is not configured, skipping.");
                 }
 
                 return 0;
