@@ -28,6 +28,20 @@ if ([string]::IsNullOrEmpty($env:FACEBOOK_REGISTRY_PATH)) {
     $env:FACEBOOK_REGISTRY_PATH = [Environment]::GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH", "User")
 }
 
+# WhatsApp environment variables
+if ([string]::IsNullOrEmpty($env:WHATSAPP_CHANNEL_ID)) {
+    $env:WHATSAPP_CHANNEL_ID = [Environment]::GetEnvironmentVariable("WHATSAPP_CHANNEL_ID", "User")
+}
+if ([string]::IsNullOrEmpty($env:WHATSAPP_BRIDGE_URL)) {
+    $env:WHATSAPP_BRIDGE_URL = [Environment]::GetEnvironmentVariable("WHATSAPP_BRIDGE_URL", "User")
+}
+if ([string]::IsNullOrEmpty($env:WHATSAPP_ACCESS_TOKEN)) {
+    $env:WHATSAPP_ACCESS_TOKEN = [Environment]::GetEnvironmentVariable("WHATSAPP_ACCESS_TOKEN", "User")
+}
+if ([string]::IsNullOrEmpty($env:WHATSAPP_REGISTRY_PATH)) {
+    $env:WHATSAPP_REGISTRY_PATH = [Environment]::GetEnvironmentVariable("WHATSAPP_REGISTRY_PATH", "User")
+}
+
 # Verify configuration presence before launching dotnet run
 if ([string]::IsNullOrWhiteSpace($env:TELEGRAM_BOT_TOKEN) -or [string]::IsNullOrWhiteSpace($env:TELEGRAM_CHAT_ID) -or [string]::IsNullOrWhiteSpace($env:REGISTRY_PATH)) {
     Write-Error "System Environment configuration variables are missing. Please run set-publisher-secrets.ps1 first."
