@@ -60,6 +60,24 @@ public class WhatsAppPipeline : IChannelPipeline
                 await _rateLimiter.ThrottleAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            // 1. Technical system_status is not posted as a standalone spam post on WhatsApp Channels
+            // because WhatsApp Channels (Newsletters) do not support automated message deletion or in-place tail edits.
+            if (string.Equals(decision.TerritoryIdentifier, "system_status", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new DispatchResultRecord(
+                    decision.PublicationId,
+                    decision.TerritoryIdentifier,
+                    decision.DecisionResult.ToString(),
+                    IsSuccess: true,
+                    MessageId: null,
+                    ErrorDescription: null,
+                    PublicationType: decision.Type.ToString(),
+                    ExternalMessageId: decision.ExternalMessageId ?? "wa_virtual_system_status"
+                ));
+                totalSuccessful++;
+                continue;
+            }
+
             if (!IsWhatsAppOperation(decision.DecisionResult))
             {
                 results.Add(new DispatchResultRecord(

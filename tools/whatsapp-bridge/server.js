@@ -156,6 +156,25 @@ app.get('/channel-info', async (req, res) => {
     }
 });
 
+// 2b. Fetch channel messages
+app.get('/messages', async (req, res) => {
+    if (!isConnected || !sock) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected yet.' });
+    }
+
+    const channelId = req.query.channelId;
+    try {
+        const jid = await resolveDestinationJid(channelId);
+        if (typeof sock.newsletterFetchMessages === 'function') {
+            const result = await sock.newsletterFetchMessages(jid, 10, undefined, undefined);
+            return res.json({ isSuccess: true, result });
+        }
+        res.status(400).json({ isSuccess: false, errorDescription: 'newsletterFetchMessages not supported' });
+    } catch (err) {
+        res.status(500).json({ isSuccess: false, errorDescription: err.message });
+    }
+});
+
 // 3. Send text message
 app.post('/send', async (req, res) => {
     if (!isConnected || !sock) {

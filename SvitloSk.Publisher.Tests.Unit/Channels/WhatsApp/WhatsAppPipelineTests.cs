@@ -51,13 +51,13 @@ public class WhatsAppPipelineTests
         var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.TotalProcessed);
+        Assert.Equal(2, result.TotalProcessed);
         Assert.Equal(3, result.TotalSuccessful);
         Assert.All(result.Results, r => Assert.True(r.IsSuccess));
         Assert.All(result.Results, r => Assert.NotNull(r.ExternalMessageId));
 
-        // Check dry run adapter recorded messages
-        Assert.Equal(3, dryRunAdapter.DispatchedMessages.Count);
+        // Check dry run adapter recorded messages (system_status is virtualized and not dispatched as standalone message)
+        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
     }
 
     [Fact]
