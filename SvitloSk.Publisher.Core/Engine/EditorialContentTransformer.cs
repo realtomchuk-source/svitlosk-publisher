@@ -80,8 +80,6 @@ public class EditorialContentTransformer
             sb.AppendLine("<b>Планові знеструмлення:</b> відсутні");
         }
 
-        sb.AppendLine();
-
         if (stats.EmergencySettlements.Count > 0)
         {
             string eList = string.Join(", ", stats.EmergencySettlements);
@@ -113,7 +111,10 @@ public class EditorialContentTransformer
     {
         var sb = new StringBuilder();
 
-        string territoryTitle = HttpUtility.HtmlEncode(data.CanonicalName);
+        string rawTitle = data.CanonicalName.Equals("Місто Старокостянтинів", StringComparison.OrdinalIgnoreCase)
+            ? "м. Старокостянтинів"
+            : data.CanonicalName;
+        string territoryTitle = HttpUtility.HtmlEncode(rawTitle);
         sb.AppendLine($"<b>{territoryTitle}</b>");
         sb.AppendLine();
 

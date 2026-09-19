@@ -378,7 +378,7 @@ public class PublisherOrchestratorTests : IDisposable
         var record = new OutageRecord("Місто Старокостянтинів", "ПЛАНОВІ", "з 08:00 по 12:00\nвул. Миру 14, 16 1 черга", "1");
         string rendered = transformer.RenderTemplate(record, "СЬОГОДНІ — 2026-08-08");
 
-        Assert.Contains("<b>Місто Старокостянтинів</b>", rendered);
+        Assert.Contains("<b>м. Старокостянтинів</b>", rendered);
         Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (08:00–12:00)</b>", rendered);
         Assert.Contains("- вул. Миру, 14, 16", rendered);
         Assert.DoesNotContain("черга", rendered, StringComparison.OrdinalIgnoreCase);
@@ -415,7 +415,7 @@ public class PublisherOrchestratorTests : IDisposable
 
         Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (08:00–12:00)</b>", renderedPlano);
         Assert.Contains("<blockquote><b>АВАРІЙНІ ЗНЕСТРУМЛЕННЯ</b>", renderedAvariyni);
-        Assert.Contains("<b>Місто Старокостянтинів</b>", renderedAvariyni);
+        Assert.Contains("<b>м. Старокостянтинів</b>", renderedAvariyni);
         Assert.Contains("- вул. Ізяславська, 27, аварія на лінії", renderedAvariyni);
     }
 
@@ -591,13 +591,13 @@ public class PublisherOrchestratorTests : IDisposable
         
         Assert.Equal(4, adapter.SendCount);
         
-        var planText = adapter.SentTexts.Find(t => t.Contains("<b>Місто Старокостянтинів</b>"));
+        var planText = adapter.SentTexts.Find(t => t.Contains("<b>м. Старокостянтинів</b>"));
         var emergText = adapter.SentTexts.Find(t => t.Contains("Березненський"));
         
         Assert.NotNull(planText);
         Assert.NotNull(emergText);
 
-        Assert.Contains("<b>Місто Старокостянтинів</b>", planText);
+        Assert.Contains("<b>м. Старокостянтинів</b>", planText);
         Assert.Contains("<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", planText);
         Assert.Contains("08:00–12:00", planText);
         Assert.Contains("- вул. Миру, 14, 16", planText);
@@ -1942,7 +1942,7 @@ public class GraphicOrchestrationTests : IDisposable
         Assert.Contains("<blockquote>", post);
         Assert.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", post);
         Assert.Contains("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", post);
-        Assert.Contains("Місто Старокостянтинів", post);
+        Assert.Contains("м. Старокостянтинів", post);
         Assert.Contains("вул. Миру", post);
         Assert.Contains("вул. Центральна", post);
 
