@@ -155,7 +155,8 @@ public class SequentialDispatcher : IChannelPipeline
                 adapterResult.IsSuccess,
                 adapterResult.MessageId,
                 adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription,
-                decision.Type.ToString()
+                decision.Type.ToString(),
+                adapterResult.MessageId?.ToString() ?? decision.ExternalMessageId
             ));
 
             if (adapterResult.IsSuccess)

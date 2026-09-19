@@ -553,6 +553,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     "SENT",
                     "Text"
                 );
+                updatedPublications.RemoveAll(p => p.TerritoryId.Equals(res.TerritoryIdentifier, StringComparison.OrdinalIgnoreCase) && p.TransmissionState == "DELETED");
                 updatedPublications.Add(record);
             }
             else if (res.DecisionResult == DecisionResult.Update.ToString())

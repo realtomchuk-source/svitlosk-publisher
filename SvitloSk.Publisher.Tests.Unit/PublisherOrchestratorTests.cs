@@ -896,6 +896,67 @@ public class PublisherOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TC_PublisherOrchestrator_ExternalChannel_SystemStatus_DeletesPreviousAndCreatesNewAtTail()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var fakeTelegramAdapter = new FakeTelegramAdapter();
+        var delayProvider = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(fakeTelegramAdapter, delayProvider);
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            dispatcher,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        string headerContent = "<b>ЖУРНАЛ ЗНЕСТРУМЛЕНЬ</b>";
+        string headerHash = new ContentHashCalculator().ComputeHash(headerContent, null);
+
+        // Pre-existing registry with a string ExternalMessageId (typical for WhatsApp/Facebook)
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-09-19",
+            Status: "ACTIVE",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "journal_header", "wa_header_msg_1", headerHash, "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", "3EB0AC9C924BCB63BC9519", "old-status-hash", "SENT", "Text")
+            }
+        );
+
+        var input = new EditorialInput(
+            EditionDate: "2026-09-19",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("journal_header", headerContent, Array.Empty<byte>(), true)
+            },
+            TomorrowForecastAvailable: false
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "wa_channel_123", input);
+
+        Assert.True(result.IsSuccess);
+        // Verify that system_status resulted in DELETE (of 3EB0AC9C924BCB63BC9519) and CREATE of a new message
+        var delDecision = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.NotNull(delDecision);
+        Assert.Equal("3EB0AC9C924BCB63BC9519", delDecision.ExternalMessageId);
+
+        var createDecision = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+        Assert.NotNull(createDecision);
+
+        // Registry should only have 1 active system_status record
+        var finalReg = await fakeRegistryStore.LoadAsync(_registryPath);
+        Assert.NotNull(finalReg);
+        var statusRecords = finalReg.Publications.Where(p => p.TerritoryId == "system_status").ToList();
+        Assert.Single(statusRecords);
+        Assert.Equal("SENT", statusRecords[0].TransmissionState);
+    }
+
+    [Fact]
     public async Task TC_PublisherOrchestrator_WhenOutageFinishes_MaintainsDayHeaderAndHistoricalStats()
     {
         var fakeRegistryStore = new FakeRegistryStore();

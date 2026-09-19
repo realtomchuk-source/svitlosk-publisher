@@ -38,17 +38,20 @@ public class EditorialPolicyService
         var techValidity = _decisionEngine.EvaluatePublicationValidity("system_status", techHash, existingTechPub);
 
         int? techMsgId = null;
+        string? techExtId = null;
         Guid? existingTechArtifactId = null;
         if (existingRecords != null)
         {
             var record = existingRecords.FirstOrDefault(p => 
                 p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
                 p.TransmissionState != "DELETED" &&
-                p.TelegramMessageId.HasValue);
+                (p.TelegramMessageId.HasValue || !string.IsNullOrEmpty(p.ExternalMessageId)));
             techMsgId = record?.TelegramMessageId;
+            techExtId = record?.ExternalMessageId ?? record?.TelegramMessageId?.ToString();
             existingTechArtifactId = record?.PublisherArtifactId;
         }
 
+        bool hasExistingStatus = !string.IsNullOrEmpty(techExtId);
         bool anyNewJournalCreates = precedingDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
         bool isPhysicallyAboveOtherPosts = techMsgId.HasValue && existingRecords != null && existingRecords.Any(p =>
             !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
@@ -56,7 +59,7 @@ public class EditorialPolicyService
             p.TelegramMessageId.HasValue &&
             p.TelegramMessageId.Value > techMsgId.Value);
 
-        bool shouldRecreateAtTail = (anyNewJournalCreates || isPhysicallyAboveOtherPosts) && techMsgId.HasValue;
+        bool shouldRecreateAtTail = (anyNewJournalCreates || isPhysicallyAboveOtherPosts) && hasExistingStatus;
 
         if (shouldRecreateAtTail)
         {
@@ -67,7 +70,7 @@ public class EditorialPolicyService
                 existingTechArtifactId ?? existingTechPub?.PublicationId ?? Guid.NewGuid(),
                 "system_status",
                 null,
-                techMsgId?.ToString()
+                techExtId
             ));
 
             // 2. Create fresh system_status at the bottom of the stream
@@ -91,16 +94,35 @@ public class EditorialPolicyService
                 var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
                 if (techUpdate.DecisionResult == DecisionResult.Update)
                 {
-                    if (!techMsgId.HasValue)
+                    if (techMsgId.HasValue)
+                    {
+                        result.Add(techUpdate with { TelegramMessageId = techMsgId, ExternalMessageId = techExtId, TargetHash = statusContent });
+                    }
+                    else if (hasExistingStatus)
+                    {
+                        // External channels (e.g. WhatsApp): delete previous status and create new one at tail
+                        result.Add(new EditorialDecision(
+                            DecisionResult.Delete,
+                            PublicationClassification.Ephemeral,
+                            existingTechArtifactId ?? existingTechPub?.PublicationId ?? Guid.NewGuid(),
+                            "system_status",
+                            null,
+                            techExtId
+                        ));
+                        result.Add(new EditorialDecision(
+                            DecisionResult.Create,
+                            PublicationClassification.Ephemeral,
+                            Guid.NewGuid(),
+                            "system_status",
+                            statusContent
+                        ));
+                    }
+                    else
                     {
                         var techCreateFallback = _decisionEngine.EvaluatePublicationCreation(
                             new EditorialDecision(DecisionResult.NotValid, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: techHash),
                             PublicationClassification.Ephemeral);
                         result.Add(techCreateFallback with { TargetHash = statusContent });
-                    }
-                    else
-                    {
-                        result.Add(techUpdate with { TelegramMessageId = techMsgId, TargetHash = statusContent });
                     }
                 }
             }

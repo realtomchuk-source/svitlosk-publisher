@@ -368,8 +368,8 @@ public static class WhatsAppContentFormatter
         string result = text.Replace("\r\n", "\n").Replace("\r", "\n");
 
         // Normalize city header to approved standard: *м. СТАРОКОСТЯНТИНІВ*
-        result = Regex.Replace(result, @"<b>(?:Місто\s+Старокостянтинів|Старокостянтинів)</b>", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.IgnoreCase);
-        result = Regex.Replace(result, @"^\*?(?:Місто\s+Старокостянтинів|Старокостянтинів)\*?$", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        result = Regex.Replace(result, @"<b>(?:(?:м\.|Місто)\s+)?Старокостянтинів</b>", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.IgnoreCase);
+        result = Regex.Replace(result, @"^\*?(?:(?:м\.|Місто)\s+)?Старокостянтинів\*?$", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
         // Collapse multiline header labels into a single line: "Аварійні знеструмлення:\nм. Старокостянтинів" -> "Аварійні знеструмлення: м. Старокостянтинів"
         result = Regex.Replace(result, @"(\*?(?:<b>)?(?:Планові|Аварійні)\s+знеструмлення:(?:</b>)?\*?)\s*\n\s*([^\n]+)", "$1 $2", RegexOptions.IgnoreCase);
