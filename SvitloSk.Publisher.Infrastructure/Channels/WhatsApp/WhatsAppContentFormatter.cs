@@ -67,21 +67,17 @@ public static class WhatsAppContentFormatter
         if (stats.PlannedSettlements != null && stats.PlannedSettlements.Count > 0)
         {
             string pList = string.Join(", ", stats.PlannedSettlements);
-            sb.AppendLine("*Планові знеструмлення:*");
-            sb.AppendLine(pList);
+            sb.AppendLine($"*Планові знеструмлення:* {pList}");
         }
         else
         {
             sb.AppendLine("*Планові знеструмлення:* відсутні");
         }
 
-        sb.AppendLine();
-
         if (stats.EmergencySettlements != null && stats.EmergencySettlements.Count > 0)
         {
             string eList = string.Join(", ", stats.EmergencySettlements);
-            sb.AppendLine("*Аварійні знеструмлення:*");
-            sb.AppendLine(eList);
+            sb.AppendLine($"*Аварійні знеструмлення:* {eList}");
         }
         else
         {
@@ -118,8 +114,8 @@ public static class WhatsAppContentFormatter
     {
         var localTime = utcTime.AddHours(3);
         var sb = new StringBuilder();
-        sb.AppendLine($"`ОСТАННЄ ОНОВЛЕННЯ ЖУРНАЛУ: {localTime:HH:mm}`");
-        sb.AppendLine($"_Стан моніторингу: {monitoringState}_");
+        sb.AppendLine($"Останнє оновлення журналу: *{localTime:HH:mm}*");
+        sb.AppendLine($"Стан моніторингу: {monitoringState}");
         return CleanOutput(sb.ToString());
     }
 
@@ -133,7 +129,7 @@ public static class WhatsAppContentFormatter
         if (isTomorrow)
         {
             string tomShortDate = !string.IsNullOrWhiteSpace(tomorrowDate) ? FormatShortDate(tomorrowDate) : "завтра";
-            sb.AppendLine($"*ПРОГНОЗ НА ЗАВТРА* • `{tomShortDate}`");
+            sb.AppendLine($"*ПРОГНОЗ НА ЗАВТРА* • *{tomShortDate}*");
         }
 
         // 2. Territory Title
@@ -159,7 +155,7 @@ public static class WhatsAppContentFormatter
             for (int i = 0; i < emergBlocks.Count; i++)
             {
                 var block = emergBlocks[i];
-                string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • `{block.TimeInterval}`" : string.Empty;
+                string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • *{block.TimeInterval}*" : string.Empty;
                 sb.AppendLine($"> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*{timeBadge}");
 
                 string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName, isEmergency: true, showVillageIntervals: hasMultipleEmergBlocks);
@@ -203,7 +199,7 @@ public static class WhatsAppContentFormatter
                 for (int i = 0; i < planBlocks.Count; i++)
                 {
                     var block = planBlocks[i];
-                    string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • `{block.TimeInterval}`" : string.Empty;
+                    string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • *{block.TimeInterval}*" : string.Empty;
 
                     if (i > 0)
                     {
@@ -304,7 +300,7 @@ public static class WhatsAppContentFormatter
                     string effectiveInterval = !string.IsNullOrEmpty(interval) ? interval : commonTimeInterval ?? string.Empty;
                     string badge = (showVillageIntervals && !string.IsNullOrEmpty(effectiveInterval)) || 
                                    (!string.IsNullOrEmpty(interval) && !interval.Equals(commonTimeInterval, StringComparison.OrdinalIgnoreCase))
-                        ? $" • `{effectiveInterval}`"
+                        ? $" • *{effectiveInterval}*"
                         : string.Empty;
 
                     sb.AppendLine($"{prefix}*{settlement}*{badge}");
@@ -317,7 +313,7 @@ public static class WhatsAppContentFormatter
             if (timeMatch.Success)
             {
                 string interval = $"{timeMatch.Groups[2].Value} – {timeMatch.Groups[4].Value}";
-                sb.AppendLine($"{prefix}`{interval}`");
+                sb.AppendLine($"{prefix}*{interval}*");
 
                 string remainder = line.Substring(timeMatch.Length).Trim(' ', ':', ',', '-').Trim();
                 if (!string.IsNullOrEmpty(remainder))
@@ -375,6 +371,9 @@ public static class WhatsAppContentFormatter
         result = Regex.Replace(result, @"<b>(?:Місто\s+Старокостянтинів|Старокостянтинів)</b>", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.IgnoreCase);
         result = Regex.Replace(result, @"^\*?(?:Місто\s+Старокостянтинів|Старокостянтинів)\*?$", "*м. СТАРОКОСТЯНТИНІВ*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
+        // Collapse multiline header labels into a single line: "Аварійні знеструмлення:\nм. Старокостянтинів" -> "Аварійні знеструмлення: м. Старокостянтинів"
+        result = Regex.Replace(result, @"(\*?(?:<b>)?(?:Планові|Аварійні)\s+знеструмлення:(?:</b>)?\*?)\s*\n\s*([^\n]+)", "$1 $2", RegexOptions.IgnoreCase);
+
         // Convert blockquotes to WhatsApp > quotes
         result = Regex.Replace(result, @"<blockquote>([\s\S]*?)</blockquote>", m =>
         {
@@ -397,10 +396,17 @@ public static class WhatsAppContentFormatter
         // Convert HTML tags to WhatsApp Markdown
         result = Regex.Replace(result, @"<b>(.*?)</b>", "*$1*");
         result = Regex.Replace(result, @"<i>(.*?)</i>", "_$1_");
-        result = Regex.Replace(result, @"<code>(.*?)</code>", "`$1`");
+        result = Regex.Replace(result, @"<code>(.*?)</code>", "*$1*");
 
-        // Convert (HH:mm–HH:mm) into digital monospace badges • `HH:mm – HH:mm`
-        result = Regex.Replace(result, @"\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)", "• `$1 – $2`");
+        // Convert (HH:mm–HH:mm) into unified bold badges • *HH:mm – HH:mm*
+        result = Regex.Replace(result, @"\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)", "• *$1 – $2*");
+
+        // Unify time formatting: strip backticks around times and time ranges to keep font size and appearance unified
+        result = Regex.Replace(result, @"`(\d{2}:\d{2}(?:\s*(?:–|-|до|по)\s*\d{2}:\d{2})?)`", "*$1*");
+        result = Regex.Replace(result, @"`([^`\n]+)`", "*$1*");
+
+        // Unify system status: "Останнє оновлення: 17:31" -> "Останнє оновлення журналу: *17:31*"
+        result = Regex.Replace(result, @"\*?Останнє оновлення(?:\s+журналу)?\*?:\s*\*?(\d{2}:\d{2})\*?", "Останнє оновлення журналу: *$1*", RegexOptions.IgnoreCase);
 
         // Strip remaining HTML tags
         result = Regex.Replace(result, @"</?[a-zA-Z0-9]+[^>]*>", "");

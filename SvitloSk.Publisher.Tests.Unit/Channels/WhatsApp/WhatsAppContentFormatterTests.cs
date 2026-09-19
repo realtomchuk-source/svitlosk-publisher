@@ -41,13 +41,13 @@ public class WhatsAppContentFormatterTests
         // 1. Must use the exact approved title: *м. СТАРОКОСТЯНТИНІВ*
         Assert.Contains("*м. СТАРОКОСТЯНТИНІВ*", output);
 
-        // 2. Emergency block with quote callout and monospace time badge
-        Assert.Contains("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ* • `10:00 – 14:00`", output);
+        // 2. Emergency block with quote callout and unified bold time badge
+        Assert.Contains("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 14:00*", output);
         Assert.Contains("> - вул. Івана Франка: 1–5", output);
         Assert.Contains("> - вул. Попова: 4, 6, 8", output);
 
         // 3. Planned block with time badge and list
-        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • `09:00 – 17:00`", output);
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *09:00 – 17:00*", output);
         Assert.Contains("- вул. Миру: 10–14", output);
 
         // 4. Absolute absence of HTML tags
@@ -88,9 +88,9 @@ public class WhatsAppContentFormatterTests
 
         Assert.Contains("*ПАШКОВЕЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ*", output);
         Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*", output);
-        Assert.Contains("*с. Пашківці* • `08:30 – 16:30`", output);
+        Assert.Contains("*с. Пашківці* • *08:30 – 16:30*", output);
         Assert.Contains("- вул. Центральна: 12–15", output);
-        Assert.Contains("*с. Григорівка* • `09:00 – 17:00`", output);
+        Assert.Contains("*с. Григорівка* • *09:00 – 17:00*", output);
         Assert.Contains("- вул. Шевченка: 2, 4, 6", output);
 
         // No HTML tags or emojis
@@ -113,10 +113,8 @@ public class WhatsAppContentFormatterTests
 
         Assert.Contains("*ЖУРНАЛ ЗНЕСТРУМЛЕНЬ | СТАРОКОСТЯНТИНІВСЬКА МТГ*", output);
         Assert.Contains("19 вересня 2026 року, субота", output);
-        Assert.Contains("*Планові знеструмлення:*", output);
-        Assert.Contains("м. Старокостянтинів, с. Пашківці", output);
-        Assert.Contains("*Аварійні знеструмлення:*", output);
-        Assert.Contains("м. Старокостянтинів", output);
+        Assert.Contains("*Планові знеструмлення:* м. Старокостянтинів, с. Пашківці", output);
+        Assert.Contains("*Аварійні знеструмлення:* м. Старокостянтинів", output);
         Assert.Contains("_Інформація оновлюється автоматично протягом доби_", output);
 
         Assert.DoesNotContain("<b>", output);
@@ -155,21 +153,21 @@ public class WhatsAppContentFormatterTests
 
         string output = WhatsAppContentFormatter.RenderTerritoryPost(data, isTomorrow: true, tomorrowDate: "2026-09-20");
 
-        Assert.Contains("*ПРОГНОЗ НА ЗАВТРА* • `20.09.2026`", output);
+        Assert.Contains("*ПРОГНОЗ НА ЗАВТРА* • *20.09.2026*", output);
         Assert.Contains("*ПАШКОВЕЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ*", output);
-        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • `09:00 – 17:00`", output);
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *09:00 – 17:00*", output);
         Assert.Contains("- вул. Центральна: 1–3", output);
     }
 
     [Fact]
-    public void TC_RenderSystemStatus_OutputsMonospaceBadge()
+    public void TC_RenderSystemStatus_OutputsUnifiedBoldTime()
     {
         var testUtc = new DateTime(2026, 9, 19, 11, 15, 0, DateTimeKind.Utc);
         string output = WhatsAppContentFormatter.RenderSystemStatus(testUtc, "активний");
 
         // 11:15 UTC + 3 hours = 14:15
-        Assert.Contains("`ОСТАННЄ ОНОВЛЕННЯ ЖУРНАЛУ: 14:15`", output);
-        Assert.Contains("_Стан моніторингу: активний_", output);
+        Assert.Contains("Останнє оновлення журналу: *14:15*", output);
+        Assert.Contains("Стан моніторингу: активний", output);
     }
 
     [Fact]
