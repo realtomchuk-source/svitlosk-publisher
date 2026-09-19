@@ -387,5 +387,50 @@ public class FacebookPipelineTests
         Assert.Equal(1, adapter.PublishCount);
         Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
     }
+
+    [Fact]
+    public void IsNoOutagesPost_CorrectlyIdentifiesNoOutagesVsOutages()
+    {
+        string noOutages = "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n19.09.2026 субота\n\nПланові знеструмлення: відсутні\nАварійні знеструмлення: відсутні";
+        string withEmergency = "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n19.09.2026 субота\n\nПланові знеструмлення: відсутні\nАварійні знеструмлення: м. Старокостянтинів";
+
+        Assert.True(FacebookPipeline.IsNoOutagesPost(noOutages));
+        Assert.False(FacebookPipeline.IsNoOutagesPost(withEmergency));
+    }
+
+    [Fact]
+    public async Task DispatchAsync_BannerStateTransition_RecreatesPost_WhenEmergencyOutagesAppear()
+    {
+        var adapter = new TestFacebookAdapter
+        {
+            RecentPosts = new List<FacebookPostSummary>
+            {
+                new("morning_no_outages_post", "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n19.09.2026 субота, Старокостянтинівська міська територіальна громада\n\nПланові знеструмлення: відсутні\nАварійні знеструмлення: відсутні\n\nОстаннє оновлення: 06:25")
+            }
+        };
+
+        var pipeline = new FacebookPipeline(adapter, "test_page_123", new TestGraphicRasterizer());
+
+        var updateDecision = new EditorialDecision(
+            DecisionResult.Update,
+            PublicationClassification.Persistent,
+            Guid.NewGuid(),
+            "fb_planned",
+            TargetHash: "ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n19.09.2026 субота, Старокостянтинівська міська територіальна громада\n\nПланові знеструмлення: відсутні\nАварійні знеструмлення: м. Старокостянтинів\n\nАВАРІЙНІ ЗНЕСТРУМЛЕННЯ\n\nм. Старокостянтинів\nвул. Грушевського\n\nОстаннє оновлення: 12:26",
+            ExternalMessageId: "morning_no_outages_post",
+            ScheduleDate: "2026-09-19"
+        );
+
+        var result = await pipeline.DispatchAsync(new[] { updateDecision });
+
+        Assert.True(result.IsSuccess);
+        // Banner changed from "ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ" to active outages DayHeader!
+        // Previous post must be deleted and new post published with updated photo!
+        Assert.Equal(1, adapter.DeleteCount);
+        Assert.Equal("morning_no_outages_post", adapter.LastDeletedPostId);
+        Assert.Equal(1, adapter.PublishCount);
+        Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
+    }
 }
+
 

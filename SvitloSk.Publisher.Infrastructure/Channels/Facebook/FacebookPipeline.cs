@@ -286,9 +286,32 @@ public class FacebookPipeline : IChannelPipeline
                 {
                     string cleanText = FormatPostText(decision);
 
-                    if (!string.IsNullOrEmpty(decision.ExternalMessageId))
+                    // Check if banner image needs to change (e.g. transitioning between "ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ" and active outages header)
+                    bool isNoOutagesNew = IsNoOutagesPost(cleanText);
+                    var existingPost = (!string.IsNullOrEmpty(decision.ExternalMessageId)
+                                           ? recentPagePosts?.FirstOrDefault(p => p.Id == decision.ExternalMessageId)
+                                           : null)
+                                       ?? FindMatchingPost(recentPagePosts, reconciledPostIds, decision, cleanText);
+
+                    bool bannerChanged = false;
+                    if (existingPost != null && !string.IsNullOrWhiteSpace(existingPost.Message))
                     {
-                        // In-place text update preserves user likes, comments, and shares
+                        bool isNoOutagesOld = IsNoOutagesPost(existingPost.Message);
+                        bannerChanged = (isNoOutagesNew != isNoOutagesOld);
+                    }
+
+                    if (bannerChanged && existingPost != null)
+                    {
+                        Console.WriteLine($"[FacebookPipeline] Banner state transition detected (NoOutages: {isNoOutagesNew}). Recreating post '{existingPost.Id}' to update attached image.");
+                        await _facebookAdapter.DeletePostAsync(existingPost.Id, cancellationToken).ConfigureAwait(false);
+                        reconciledPostIds.Add(existingPost.Id);
+
+                        byte[]? bannerBytes = ResolveFacebookBanner(decision);
+                        updRes = await _facebookAdapter.PublishPostAsync(_pageId, cleanText, bannerBytes, cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (!string.IsNullOrEmpty(decision.ExternalMessageId))
+                    {
+                        // In-place text update preserves user likes, comments, and shares when banner image is unchanged
                         updRes = await _facebookAdapter.UpdatePostAsync(decision.ExternalMessageId, cleanText, cancellationToken).ConfigureAwait(false);
 
                         // If in-place update failed (e.g. post was deleted externally), recreate
@@ -301,7 +324,6 @@ public class FacebookPipeline : IChannelPipeline
                     else
                     {
                         // Fallback reconciliation check against recent page posts before publishing
-                        var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, cleanText);
                         if (existingPost != null)
                         {
                             Console.WriteLine($"[FacebookPipeline] Reconciling unlinked update with existing post '{existingPost.Id}' for '{decision.TerritoryIdentifier}'.");
@@ -348,6 +370,13 @@ public class FacebookPipeline : IChannelPipeline
         );
     }
 
+    public static bool IsNoOutagesPost(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        return text.Contains("Планові знеструмлення: відсутні", StringComparison.OrdinalIgnoreCase) &&
+               text.Contains("Аварійні знеструмлення: відсутні", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool HasBanner(EditorialDecision decision)
     {
         return decision.GraphicBytes != null ||
@@ -374,7 +403,10 @@ public class FacebookPipeline : IChannelPipeline
             if (string.Equals(decision.TerritoryIdentifier, "fb_planned", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase))
             {
-                byte[] svg = _bannerAssembly.AssembleFacebookDayHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+                bool isNoOutages = IsNoOutagesPost(decision.TargetHash);
+                byte[] svg = isNoOutages
+                    ? _bannerAssembly.AssembleFacebookNoOutagesSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"))
+                    : _bannerAssembly.AssembleFacebookDayHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
             }
 
@@ -473,7 +505,9 @@ public class FacebookPipeline : IChannelPipeline
             else if (territory.Equals("fb_emergency", StringComparison.OrdinalIgnoreCase) ||
                      territory.StartsWith("emergency", StringComparison.OrdinalIgnoreCase))
             {
-                if (post.Message.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase))
+                if (!post.Message.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase) &&
+                    (post.Message.StartsWith("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", StringComparison.OrdinalIgnoreCase) ||
+                     post.Message.Contains("\nАВАРІЙНІ ЗНЕСТРУМЛЕННЯ\n", StringComparison.OrdinalIgnoreCase)))
                 {
                     return post;
                 }

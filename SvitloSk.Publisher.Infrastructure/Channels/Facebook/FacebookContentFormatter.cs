@@ -316,17 +316,63 @@ public static class FacebookContentFormatter
         sb.AppendLine(emergencyLine);
         sb.AppendLine();
 
+        var emergencyTerritories = territories
+            .Where(t => t.EmergencyRecords != null && t.EmergencyRecords.Count > 0)
+            .ToList();
+
+        if (emergencyTerritories.Count > 0)
+        {
+            sb.AppendLine("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ");
+            sb.AppendLine();
+
+            // 1. City of Starokostiantyniv first (top priority)
+            var emergCity = emergencyTerritories.FirstOrDefault(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase));
+            if (emergCity != null)
+            {
+                string cityText = RenderCitySection(emergCity.EmergencyRecords);
+                if (!string.IsNullOrWhiteSpace(cityText))
+                {
+                    sb.AppendLine(cityText);
+                    sb.AppendLine();
+                }
+            }
+
+            // 2. Rural Starosta districts
+            var emergRural = emergencyTerritories
+                .Where(t => !t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            if (emergRural.Count > 0)
+            {
+                var ruralBlocks = new List<string>();
+                foreach (var district in emergRural)
+                {
+                    string distText = RenderDistrictSection(district, isEmergency: true);
+                    if (!string.IsNullOrWhiteSpace(distText))
+                    {
+                        ruralBlocks.Add(distText);
+                    }
+                }
+
+                if (ruralBlocks.Count > 0)
+                {
+                    sb.AppendLine("СТАРОСТИНСЬКІ ОКРУГИ");
+                    sb.AppendLine();
+                    foreach (var block in ruralBlocks)
+                    {
+                        sb.AppendLine(block);
+                        sb.AppendLine();
+                    }
+                }
+            }
+        }
+
         var plannedTerritories = territories
             .Where(t => t.PlannedRecords != null && t.PlannedRecords.Count > 0)
             .ToList();
 
-        if (plannedTerritories.Count == 0)
-        {
-            sb.AppendLine("✅ Станом на сьогодні планових знеструмлень у громаді не заплановано.");
-            sb.AppendLine("Електропостачання споживачів здійснюється у штатному режимі.");
-            sb.AppendLine();
-        }
-        else
+        if (plannedTerritories.Count > 0)
         {
             sb.AppendLine("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ");
             sb.AppendLine();

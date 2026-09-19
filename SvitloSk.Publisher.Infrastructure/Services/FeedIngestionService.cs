@@ -290,33 +290,17 @@ public class FeedIngestionService
         var todayRecords = await GetCumulativeTodayRecordsAsync(httpClient, editionDate, rawTodayRecords, isDryRun, cancellationToken).ConfigureAwait(false);
         var todayAggregated = TerritoryAggregator.AggregateByTerritory(todayRecords);
 
-        // 1. Emergency post (Created ONLY if emergency records exist)
-        bool hasEmergencies = todayAggregated.Any(t => t.EmergencyRecords != null && t.EmergencyRecords.Count > 0);
-        if (hasEmergencies)
-        {
-            string? emergText = FacebookContentFormatter.FormatFacebookEmergencyPost(editionDate, todayAggregated, _transformer);
-            if (!string.IsNullOrWhiteSpace(emergText))
-            {
-                byte[] emergSvg = _bannerAssembly.AssembleFacebookEmergencyHeaderSvg(editionDate);
-                byte[] emergPng = _rasterizer.RasterizeSvgToPng(emergSvg, 1200, 630);
-                packages.Add(new InputTerritoryPackage("fb_emergency", emergText, emergPng, false));
-                Console.WriteLine("[INFO][Facebook] Assembled emergency package 'fb_emergency'.");
-            }
-        }
-        else
-        {
-            Console.WriteLine("[INFO][Facebook] No active emergency outages recorded for today. 'fb_emergency' post omitted.");
-        }
-
-        // 2. Planned post (Always created/maintained for today)
+        // Daily journal post (Consolidates all planned and emergency outages for today in a single post)
         string plannedText = FacebookContentFormatter.FormatFacebookPlannedPost(editionDate, todayAggregated, _transformer);
-        bool hasPlanned = todayAggregated.Any(t => t.PlannedRecords != null && t.PlannedRecords.Count > 0);
-        byte[] planSvg = hasPlanned
+        bool hasOutages = todayAggregated.Any(t =>
+            (t.PlannedRecords != null && t.PlannedRecords.Count > 0) ||
+            (t.EmergencyRecords != null && t.EmergencyRecords.Count > 0));
+        byte[] planSvg = hasOutages
             ? _bannerAssembly.AssembleFacebookDayHeaderSvg(editionDate)
             : _bannerAssembly.AssembleFacebookNoOutagesSvg(editionDate);
         byte[] planPng = _rasterizer.RasterizeSvgToPng(planSvg, 1200, 630);
         packages.Add(new InputTerritoryPackage("fb_planned", plannedText, planPng, true));
-        Console.WriteLine($"[INFO][Facebook] Assembled planned package 'fb_planned' (HasPlanned: {hasPlanned}).");
+        Console.WriteLine($"[INFO][Facebook] Assembled journal package 'fb_planned' (HasOutages: {hasOutages}).");
 
         // 3. Tomorrow forecast post (Created when tomorrow data exists)
         DateTime parsedToday = DateTime.Parse(editionDate);

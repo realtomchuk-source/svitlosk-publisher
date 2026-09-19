@@ -132,7 +132,7 @@ public class FacebookContentFormatterTests
     }
 
     [Fact]
-    public void FormatFacebookPlannedPost_NoPlanned_ShowsStableText()
+    public void FormatFacebookPlannedPost_NoPlanned_ShowsCleanHeadersWithoutRedundantText()
     {
         var territories = new List<AggregatedTerritoryData>();
 
@@ -141,12 +141,32 @@ public class FacebookContentFormatterTests
         Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n15.09.2026 вівторок, Старокостянтинівська міська територіальна громада", result);
         Assert.Contains("Планові знеструмлення: відсутні", result);
         Assert.Contains("Аварійні знеструмлення: відсутні", result);
-        Assert.Contains("планових знеструмлень у громаді не заплановано", result);
-        Assert.Contains("Електропостачання споживачів здійснюється у штатному режимі", result);
+        Assert.DoesNotContain("планових знеструмлень у громаді не заплановано", result);
+        Assert.DoesNotContain("Електропостачання споживачів здійснюється у штатному режимі", result);
         Assert.DoesNotContain("Технічна інформація:", result);
         Assert.Contains("#відключення", result);
         Assert.DoesNotContain("⚡", result);
         Assert.DoesNotContain("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", result);
+    }
+
+    [Fact]
+    public void FormatFacebookPlannedPost_WithOnlyEmergency_RendersEmergencySection()
+    {
+        var territories = new List<AggregatedTerritoryData>
+        {
+            new("starokostiantyniv", "Місто Старокостянтинів", new[] { new OutageRecord("м. Старокостянтинів", "АВАРІЙНІ", "з 11:30 до 16:00\nвул. Грушевського, 5") }, Array.Empty<OutageRecord>())
+        };
+
+        string result = FacebookContentFormatter.FormatFacebookPlannedPost("2026-09-19", territories);
+
+        Assert.Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ\n19.09.2026 субота, Старокостянтинівська міська територіальна громада", result);
+        Assert.Contains("Планові знеструмлення: відсутні", result);
+        Assert.Contains("Аварійні знеструмлення: м. Старокостянтинів", result);
+        Assert.Contains("АВАРІЙНІ ЗНЕСТРУМЛЕННЯ", result);
+        Assert.Contains("м. Старокостянтинів", result);
+        Assert.Contains("вул. Грушевського, 5", result);
+        Assert.DoesNotContain("ПЛАНОВІ ЗНЕСТРУМЛЕННЯ", result);
+        Assert.DoesNotContain("планових знеструмлень у громаді не заплановано", result);
     }
 
     [Fact]
