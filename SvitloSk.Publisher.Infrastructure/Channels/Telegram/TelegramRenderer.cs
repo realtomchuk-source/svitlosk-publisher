@@ -55,8 +55,7 @@ public static class TelegramRenderer
         if (model.PlannedSettlements.Count > 0)
         {
             string pList = string.Join(", ", model.PlannedSettlements);
-            sb.AppendLine("<b>Планові знеструмлення:</b>");
-            sb.AppendLine(pList);
+            sb.AppendLine($"<b>Планові знеструмлення:</b> {pList}");
         }
         else
         {
@@ -68,8 +67,7 @@ public static class TelegramRenderer
         if (model.EmergencySettlements.Count > 0)
         {
             string eList = string.Join(", ", model.EmergencySettlements);
-            sb.AppendLine("<b>Аварійні знеструмлення:</b>");
-            sb.AppendLine(eList);
+            sb.AppendLine($"<b>Аварійні знеструмлення:</b> {eList}");
         }
         else
         {

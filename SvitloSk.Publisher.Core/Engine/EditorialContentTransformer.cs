@@ -72,8 +72,7 @@ public class EditorialContentTransformer
         if (stats.PlannedSettlements.Count > 0)
         {
             string pList = string.Join(", ", stats.PlannedSettlements);
-            sb.AppendLine("<b>Планові знеструмлення:</b>");
-            sb.AppendLine(pList);
+            sb.AppendLine($"<b>Планові знеструмлення:</b> {pList}");
         }
         else
         {
@@ -83,8 +82,7 @@ public class EditorialContentTransformer
         if (stats.EmergencySettlements.Count > 0)
         {
             string eList = string.Join(", ", stats.EmergencySettlements);
-            sb.AppendLine("<b>Аварійні знеструмлення:</b>");
-            sb.AppendLine(eList);
+            sb.AppendLine($"<b>Аварійні знеструмлення:</b> {eList}");
         }
         else
         {

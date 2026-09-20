@@ -2036,10 +2036,12 @@ public class GraphicOrchestrationTests : IDisposable
         var stats = TerritoryAggregator.CalculateSummaryStats(records);
         var header = transformer.RenderJournalHeader("2026-09-05", stats);
 
-        Assert.Contains("<b>Планові знеструмлення:</b>", header);
-        Assert.Contains("м. Старокостянтинів", header);
-        Assert.Contains("<b>Аварійні знеструмлення:</b>", header);
-        Assert.Contains("с. Березне", header);
+        Assert.Contains("<b>Планові знеструмлення:</b> м. Старокостянтинів", header);
+        Assert.Contains("<b>Аварійні знеструмлення:</b> с. Березне", header);
+        Assert.DoesNotContain("<b>Планові знеструмлення:</b>\n", header);
+        Assert.DoesNotContain("<b>Планові знеструмлення:</b>\r\n", header);
+        Assert.DoesNotContain("<b>Аварійні знеструмлення:</b>\n", header);
+        Assert.DoesNotContain("<b>Аварійні знеструмлення:</b>\r\n", header);
         Assert.DoesNotContain("⚡", header);
         Assert.DoesNotContain("🚨", header);
         Assert.DoesNotContain("Стан на", header);
