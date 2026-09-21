@@ -61,6 +61,34 @@ public class WhatsAppPipelineTests
     }
 
     [Fact]
+    public async Task TC_DispatchAsync_VirtualizesTomorrowForecasts_AndSystemStatus()
+    {
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "journal_header", TargetHash: "<b>Заголовок дня</b>"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "starokostiantyniv", TargetHash: "<b>м. Старокостянтинів</b>"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_separator", TargetHash: "<b>Прогноз на завтра</b>"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_krasnosilskyi", TargetHash: "<b>Красносілка</b>"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: "<b>Останнє оновлення</b>")
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        // Only journal_header and starokostiantyniv are processed as actual WhatsApp messages
+        Assert.Equal(2, result.TotalProcessed);
+        Assert.Equal(5, result.TotalSuccessful);
+        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
+        
+        var tomorrowRecord = result.Results.First(r => r.TerritoryIdentifier == "tomorrow_krasnosilskyi");
+        Assert.Equal("wa_virtual_tomorrow", tomorrowRecord.ExternalMessageId);
+        Assert.True(tomorrowRecord.IsSuccess);
+    }
+
+    [Fact]
     public async Task TC_DispatchAsync_WhenUpdateFails_FallsBackToDeleteAndCreateRollover()
     {
         var mockAdapter = new FallbackMockWhatsAppAdapter();

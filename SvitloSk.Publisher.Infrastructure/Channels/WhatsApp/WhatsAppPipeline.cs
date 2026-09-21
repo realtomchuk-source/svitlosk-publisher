@@ -78,6 +78,25 @@ public class WhatsAppPipeline : IChannelPipeline
                 continue;
             }
 
+            // 2. Ephemeral tomorrow forecasts are not posted to WhatsApp Channels
+            // because WhatsApp Channels (Newsletters) do not support automated message deletion.
+            // Only the official daily journal is posted at the start of the current day.
+            if (decision.TerritoryIdentifier != null && decision.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new DispatchResultRecord(
+                    decision.PublicationId,
+                    decision.TerritoryIdentifier,
+                    decision.DecisionResult.ToString(),
+                    IsSuccess: true,
+                    MessageId: null,
+                    ErrorDescription: null,
+                    PublicationType: decision.Type.ToString(),
+                    ExternalMessageId: decision.ExternalMessageId ?? "wa_virtual_tomorrow"
+                ));
+                totalSuccessful++;
+                continue;
+            }
+
             if (!IsWhatsAppOperation(decision.DecisionResult))
             {
                 results.Add(new DispatchResultRecord(
