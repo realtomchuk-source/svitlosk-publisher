@@ -48,6 +48,40 @@ if ([string]::IsNullOrWhiteSpace($env:TELEGRAM_BOT_TOKEN) -or [string]::IsNullOr
 }
 
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+
+# Self-healing: Ensure WhatsApp Bridge is running if WhatsApp channel is configured
+if (-not [string]::IsNullOrWhiteSpace($env:WHATSAPP_CHANNEL_ID)) {
+    $bridgeUrl = if (-not [string]::IsNullOrWhiteSpace($env:WHATSAPP_BRIDGE_URL)) { $env:WHATSAPP_BRIDGE_URL } else { "http://127.0.0.1:3000" }
+    $bridgeHealthy = $false
+    try {
+        $res = Invoke-RestMethod -Uri "$bridgeUrl/health" -TimeoutSec 2 -ErrorAction Stop
+        if ($res.connected -eq $true) {
+            $bridgeHealthy = $true
+        }
+    } catch {
+        $bridgeHealthy = $false
+    }
+
+    if (-not $bridgeHealthy) {
+        Write-Host "[INFO] WhatsApp Bridge is not running on $bridgeUrl. Auto-starting bridge in background..." -ForegroundColor Yellow
+        $bridgeScript = Join-Path $repoRoot "tools\whatsapp-bridge\run-bridge.ps1"
+        if (Test-Path $bridgeScript) {
+            Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$bridgeScript`"" -WindowStyle Minimized
+            for ($i = 0; $i -lt 10; $i++) {
+                Start-Sleep -Seconds 1
+                try {
+                    $res = Invoke-RestMethod -Uri "$bridgeUrl/health" -TimeoutSec 2 -ErrorAction Stop
+                    if ($res.connected -eq $true) {
+                        Write-Host "[INFO] WhatsApp Bridge successfully auto-started and connected!" -ForegroundColor Green
+                        $bridgeHealthy = $true
+                        break
+                    }
+                } catch {}
+            }
+        }
+    }
+}
+
 Push-Location $repoRoot
 try {
     dotnet run --project "$repoRoot\SvitloSk.Publisher.Infrastructure" -- $args
@@ -55,3 +89,4 @@ try {
 finally {
     Pop-Location
 }
+
