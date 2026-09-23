@@ -385,13 +385,18 @@ public static class WhatsAppContentFormatter
                 string cleanLine = l.Trim();
                 if (!string.IsNullOrEmpty(cleanLine))
                 {
-                    // Clean inner bold tags
+                    // Convert header with time to clean markdown before replacing general bold
+                    cleanLine = Regex.Replace(cleanLine, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1* • *$2 – $3*");
                     cleanLine = Regex.Replace(cleanLine, @"<b>(.*?)</b>", "*$1*");
                     sbQuote.AppendLine($"> {cleanLine}");
                 }
             }
             return sbQuote.ToString().TrimEnd();
         });
+
+        // Convert headers with time in parentheses directly to avoid nested asterisks:
+        // <b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b> -> *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*
+        result = Regex.Replace(result, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1* • *$2 – $3*");
 
         // Convert HTML tags to WhatsApp Markdown
         result = Regex.Replace(result, @"<b>(.*?)</b>", "*$1*");
@@ -400,6 +405,9 @@ public static class WhatsAppContentFormatter
 
         // Convert (HH:mm–HH:mm) into unified bold badges • *HH:mm – HH:mm*
         result = Regex.Replace(result, @"\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)", "• *$1 – $2*");
+
+        // Clean up any accidental nested bold asterisks: *HEADER • *TIME** -> *HEADER* • *TIME*
+        result = Regex.Replace(result, @"\*([^*\n]+?)\s*•\s*\*([^*\n]+?)\*\*", "*$1* • *$2*");
 
         // Unify time formatting: strip backticks around times and time ranges to keep font size and appearance unified
         result = Regex.Replace(result, @"`(\d{2}:\d{2}(?:\s*(?:–|-|до|по)\s*\d{2}:\d{2})?)`", "*$1*");

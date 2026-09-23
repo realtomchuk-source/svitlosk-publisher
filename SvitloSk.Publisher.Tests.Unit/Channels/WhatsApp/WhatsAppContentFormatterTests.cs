@@ -189,4 +189,16 @@ public class WhatsAppContentFormatterTests
             Assert.DoesNotContain("\n\n\n", chunk);
         }
     }
+
+    [Fact]
+    public void TC_ConvertToWhatsAppMarkdown_AvoidsNestedAsterisksInTimeHeaders()
+    {
+        string input = "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b>\n\n<b>с. Великі Мацевичі</b>\n- вул. Затишна: 2, 4–8";
+        string output = WhatsAppContentFormatter.ConvertToWhatsAppMarkdown(input);
+
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*", output);
+        Assert.DoesNotContain("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ • *", output);
+        Assert.DoesNotContain("**", output);
+    }
 }
+
