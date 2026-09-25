@@ -155,8 +155,11 @@ public static class WhatsAppContentFormatter
             for (int i = 0; i < emergBlocks.Count; i++)
             {
                 var block = emergBlocks[i];
-                string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • *{block.TimeInterval}*" : string.Empty;
-                sb.AppendLine($"> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*{timeBadge}");
+                sb.AppendLine("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*");
+                if (!string.IsNullOrEmpty(block.TimeInterval))
+                {
+                    sb.AppendLine($"> *{block.TimeInterval}*");
+                }
 
                 string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName, isEmergency: true, showVillageIntervals: hasMultipleEmergBlocks);
                 if (!string.IsNullOrWhiteSpace(body))
@@ -199,13 +202,16 @@ public static class WhatsAppContentFormatter
                 for (int i = 0; i < planBlocks.Count; i++)
                 {
                     var block = planBlocks[i];
-                    string timeBadge = !string.IsNullOrEmpty(block.TimeInterval) ? $" • *{block.TimeInterval}*" : string.Empty;
 
                     if (i > 0)
                     {
                         sb.AppendLine();
                     }
-                    sb.AppendLine($"*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*{timeBadge}");
+                    sb.AppendLine("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*");
+                    if (!string.IsNullOrEmpty(block.TimeInterval))
+                    {
+                        sb.AppendLine($"*{block.TimeInterval}*");
+                    }
                     sb.AppendLine();
 
                     string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName, isEmergency: false, showVillageIntervals: false);
@@ -386,17 +392,24 @@ public static class WhatsAppContentFormatter
                 if (!string.IsNullOrEmpty(cleanLine))
                 {
                     // Convert header with time to clean markdown before replacing general bold
-                    cleanLine = Regex.Replace(cleanLine, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1* • *$2 – $3*");
+                    cleanLine = Regex.Replace(cleanLine, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1*\n*$2 – $3*");
                     cleanLine = Regex.Replace(cleanLine, @"<b>(.*?)</b>", "*$1*");
-                    sbQuote.AppendLine($"> {cleanLine}");
+                    foreach (var subLine in cleanLine.Split('\n'))
+                    {
+                        string subTrim = subLine.Trim();
+                        if (!string.IsNullOrEmpty(subTrim))
+                        {
+                            sbQuote.AppendLine($"> {subTrim}");
+                        }
+                    }
                 }
             }
             return sbQuote.ToString().TrimEnd();
         });
 
         // Convert headers with time in parentheses directly to avoid nested asterisks:
-        // <b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b> -> *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*
-        result = Regex.Replace(result, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1* • *$2 – $3*");
+        // <b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b> -> *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*10:00 – 17:00*
+        result = Regex.Replace(result, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1*\n*$2 – $3*");
 
         // Convert HTML tags to WhatsApp Markdown
         result = Regex.Replace(result, @"<b>(.*?)</b>", "*$1*");
@@ -405,6 +418,10 @@ public static class WhatsAppContentFormatter
 
         // Convert (HH:mm–HH:mm) into unified bold badges • *HH:mm – HH:mm*
         result = Regex.Replace(result, @"\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)", "• *$1 – $2*");
+
+        // Convert any remaining inline section headers (e.g. *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*) into two lines
+        result = Regex.Replace(result, @"(?m)^>\s*\*?((?:АВАРІЙНІ|ПЛАНОВІ)\s+ЗНЕСТРУМЛЕННЯ)\*?\s*•\s*\*?(\d{2}:\d{2}\s*(?:–|-|до|по)\s*\d{2}:\d{2})\*?", "> *$1*\n> *$2*");
+        result = Regex.Replace(result, @"(?m)^\*?((?:АВАРІЙНІ|ПЛАНОВІ)\s+ЗНЕСТРУМЛЕННЯ)\*?\s*•\s*\*?(\d{2}:\d{2}\s*(?:–|-|до|по)\s*\d{2}:\d{2})\*?", "*$1*\n*$2*");
 
         // Clean up any accidental nested bold asterisks: *HEADER • *TIME** -> *HEADER* • *TIME*
         result = Regex.Replace(result, @"\*([^*\n]+?)\s*•\s*\*([^*\n]+?)\*\*", "*$1* • *$2*");

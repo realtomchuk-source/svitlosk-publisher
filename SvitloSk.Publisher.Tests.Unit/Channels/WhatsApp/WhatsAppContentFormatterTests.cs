@@ -42,12 +42,12 @@ public class WhatsAppContentFormatterTests
         Assert.Contains("*м. СТАРОКОСТЯНТИНІВ*", output);
 
         // 2. Emergency block with quote callout and unified bold time badge
-        Assert.Contains("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 14:00*", output);
+        Assert.Contains("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*\n> *10:00 – 14:00*", output);
         Assert.Contains("> - вул. Івана Франка: 1–5", output);
         Assert.Contains("> - вул. Попова: 4, 6, 8", output);
 
         // 3. Planned block with time badge and list
-        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *09:00 – 17:00*", output);
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*09:00 – 17:00*", output);
         Assert.Contains("- вул. Миру: 10–14", output);
 
         // 4. Absolute absence of HTML tags
@@ -155,7 +155,7 @@ public class WhatsAppContentFormatterTests
 
         Assert.Contains("*ПРОГНОЗ НА ЗАВТРА* • *20.09.2026*", output);
         Assert.Contains("*ПАШКОВЕЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ*", output);
-        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *09:00 – 17:00*", output);
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*09:00 – 17:00*", output);
         Assert.Contains("- вул. Центральна: 1–3", output);
     }
 
@@ -196,7 +196,7 @@ public class WhatsAppContentFormatterTests
         string input = "<b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b>\n\n<b>с. Великі Мацевичі</b>\n- вул. Затишна: 2, 4–8";
         string output = WhatsAppContentFormatter.ConvertToWhatsAppMarkdown(input);
 
-        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*", output);
+        Assert.Contains("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*10:00 – 17:00*", output);
         Assert.DoesNotContain("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ • *", output);
         Assert.DoesNotContain("**", output);
     }
