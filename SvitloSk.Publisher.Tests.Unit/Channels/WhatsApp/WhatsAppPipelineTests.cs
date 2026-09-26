@@ -51,17 +51,16 @@ public class WhatsAppPipelineTests
         var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.TotalProcessed);
+        Assert.Equal(3, result.TotalProcessed);
         Assert.Equal(3, result.TotalSuccessful);
         Assert.All(result.Results, r => Assert.True(r.IsSuccess));
         Assert.All(result.Results, r => Assert.NotNull(r.ExternalMessageId));
 
-        // Check dry run adapter recorded messages (system_status is virtualized and not dispatched as standalone message)
-        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
+        Assert.Equal(3, dryRunAdapter.DispatchedMessages.Count);
     }
 
     [Fact]
-    public async Task TC_DispatchAsync_VirtualizesTomorrowForecasts_AndSystemStatus()
+    public async Task TC_DispatchAsync_VirtualizesTomorrowForecasts_AndDispatchesSystemStatus()
     {
         var dryRunAdapter = new WhatsAppDryRunAdapter();
         var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
@@ -78,14 +77,113 @@ public class WhatsAppPipelineTests
         var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        // Only journal_header and starokostiantyniv are processed as actual WhatsApp messages
-        Assert.Equal(2, result.TotalProcessed);
+        // journal_header, starokostiantyniv, and system_status are processed as actual WhatsApp messages
+        Assert.Equal(3, result.TotalProcessed);
         Assert.Equal(5, result.TotalSuccessful);
-        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
+        Assert.Equal(3, dryRunAdapter.DispatchedMessages.Count);
         
         var tomorrowRecord = result.Results.First(r => r.TerritoryIdentifier == "tomorrow_krasnosilskyi");
         Assert.Equal("wa_virtual_tomorrow", tomorrowRecord.ExternalMessageId);
         Assert.True(tomorrowRecord.IsSuccess);
+
+        var statusRecord = result.Results.First(r => r.TerritoryIdentifier == "system_status");
+        Assert.NotNull(statusRecord.ExternalMessageId);
+        Assert.StartsWith("wa_mock_", statusRecord.ExternalMessageId);
+    }
+
+    [Fact]
+    public async Task TC_DispatchAsync_DecouplesBannerAndText_ForJournalHeaderWithGraphic()
+    {
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var graphicBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 }; // Mock PNG
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(
+                DecisionResult.Create,
+                PublicationClassification.Persistent,
+                TerritoryIdentifier: "journal_header",
+                TargetHash: "<b>Планові знеструмлення:</b> м. Старокостянтинів",
+                GraphicBytes: graphicBytes
+            )
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.TotalProcessed);
+        Assert.Equal(1, result.TotalSuccessful);
+
+        // 2 messages were sent to WhatsApp: 1 MEDIA (banner) and 1 TEXT (caption/summary)
+        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.StartsWith("[MEDIA]"));
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.StartsWith("[TEXT]"));
+
+        // Result ID points to the TEXT message (which begins with wa_mock_, not wa_mock_media_)
+        Assert.NotNull(result.Results[0].ExternalMessageId);
+        Assert.StartsWith("wa_mock_", result.Results[0].ExternalMessageId);
+        Assert.DoesNotContain("media", result.Results[0].ExternalMessageId);
+    }
+
+    [Fact]
+    public async Task TC_DispatchAsync_InPlaceUpdate_CallsUpdateTextMessageAsync()
+    {
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(
+                DecisionResult.Update,
+                PublicationClassification.Persistent,
+                TerritoryIdentifier: "journal_header",
+                ExternalMessageId: "msg_existing_header_123",
+                TargetHash: "<b>Планові знеструмлення:</b> м. Старокостянтинів, с. Грибенинка"
+            )
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.TotalProcessed);
+        Assert.Equal("msg_existing_header_123", result.Results[0].ExternalMessageId);
+
+        // DryRun recorded UPDATE for that message ID
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.Contains("[UPDATE]") && m.Contains("msg_existing_header_123"));
+    }
+
+    [Fact]
+    public async Task TC_DispatchAsync_SystemStatus_PerformsDeleteAndCreateRollover()
+    {
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(
+                DecisionResult.Delete,
+                PublicationClassification.Ephemeral,
+                TerritoryIdentifier: "system_status",
+                ExternalMessageId: "old_status_msg_999"
+            ),
+            new EditorialDecision(
+                DecisionResult.Create,
+                PublicationClassification.Ephemeral,
+                TerritoryIdentifier: "system_status",
+                TargetHash: "<b>Останнє оновлення:</b> 15:30"
+            )
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.TotalProcessed);
+        Assert.Equal(2, result.TotalSuccessful);
+
+        // DryRun recorded DELETE for old message and TEXT for new message
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.Contains("[DELETE]") && m.Contains("old_status_msg_999"));
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.Contains("[TEXT]"));
     }
 
     [Fact]

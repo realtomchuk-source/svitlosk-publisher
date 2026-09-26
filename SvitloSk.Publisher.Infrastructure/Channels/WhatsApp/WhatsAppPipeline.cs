@@ -60,26 +60,8 @@ public class WhatsAppPipeline : IChannelPipeline
                 await _rateLimiter.ThrottleAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            // 1. Technical system_status is not posted as a standalone spam post on WhatsApp Channels
-            // because WhatsApp Channels (Newsletters) do not support automated message deletion or in-place tail edits.
-            if (string.Equals(decision.TerritoryIdentifier, "system_status", StringComparison.OrdinalIgnoreCase))
-            {
-                results.Add(new DispatchResultRecord(
-                    decision.PublicationId,
-                    decision.TerritoryIdentifier,
-                    decision.DecisionResult.ToString(),
-                    IsSuccess: true,
-                    MessageId: null,
-                    ErrorDescription: null,
-                    PublicationType: decision.Type.ToString(),
-                    ExternalMessageId: decision.ExternalMessageId ?? "wa_virtual_system_status"
-                ));
-                totalSuccessful++;
-                continue;
-            }
-
-            // 2. Ephemeral tomorrow forecasts are not posted to WhatsApp Channels
-            // because WhatsApp Channels (Newsletters) do not support automated message deletion.
+            // Ephemeral tomorrow forecasts are not posted to WhatsApp Channels
+            // because WhatsApp Channels (Newsletters) do not support automated message deletion for previews.
             // Only the official daily journal is posted at the start of the current day.
             if (decision.TerritoryIdentifier != null && decision.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
             {
@@ -194,7 +176,18 @@ public class WhatsAppPipeline : IChannelPipeline
                 case DecisionResult.Create:
                     if (decision.GraphicBytes != null && decision.GraphicBytes.Length > 0)
                     {
-                        result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
+                        if (string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Decouple the static daily banner and the mutable text summary:
+                            // 1. Post the static image banner first.
+                            await _whatsappAdapter.SendMediaMessageAsync(channelId, string.Empty, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
+                            // 2. Post the text summary directly beneath it and record the text message ID for future in-place edits.
+                            result = await _whatsappAdapter.SendTextMessageAsync(channelId, formattedContent, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
+                        }
                     }
                     else
                     {

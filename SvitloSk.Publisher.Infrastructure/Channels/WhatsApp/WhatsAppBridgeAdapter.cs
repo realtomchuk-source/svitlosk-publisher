@@ -73,10 +73,20 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
         string text,
         CancellationToken cancellationToken = default)
     {
-        // WhatsApp Channel protocol does not reliably support inline message mutation over web-sessions.
-        // Returning failure triggers the Pipeline's built-in 30-min Delete+Create rollover fallback.
-        await Task.CompletedTask;
-        return new WhatsAppDispatchResult(false, null, "In-place edit not supported over WhatsApp Web session; falling back to Delete+Create rollover.", false);
+        if (string.IsNullOrWhiteSpace(channelOrChatId))
+            throw new ArgumentException("Channel identifier cannot be null or empty.", nameof(channelOrChatId));
+        if (string.IsNullOrWhiteSpace(messageId))
+            throw new ArgumentException("Message identifier cannot be null or empty.", nameof(messageId));
+
+        var url = $"{_bridgeBaseUrl}/edit";
+        var payload = new
+        {
+            channelOrChatId = channelOrChatId,
+            messageId = messageId,
+            text = text
+        };
+
+        return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<WhatsAppDispatchResult> DeleteMessageAsync(

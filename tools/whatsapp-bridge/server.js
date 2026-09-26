@@ -275,6 +275,39 @@ app.post('/delete', async (req, res) => {
     }
 });
 
+// 6. Edit message
+app.post('/edit', async (req, res) => {
+    if (!isConnected || !sock) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected.' });
+    }
+
+    const { channelOrChatId, messageId, text } = req.body;
+    if (!channelOrChatId || !messageId || !text) {
+        return res.status(400).json({ isSuccess: false, errorDescription: 'channelOrChatId, messageId and text are required.' });
+    }
+
+    try {
+        const jid = await resolveDestinationJid(channelOrChatId);
+        console.log(`[WHATSAPP-BRIDGE] Editing message ${messageId} in ${jid}...`);
+
+        const result = await sock.sendMessage(jid, {
+            text: text,
+            edit: {
+                remoteJid: jid,
+                fromMe: true,
+                id: messageId
+            }
+        });
+
+        const newId = result?.key?.id || messageId;
+        console.log(`[WHATSAPP-BRIDGE] Message ${messageId} edited successfully. ID: ${newId}`);
+        res.json({ isSuccess: true, messageId: newId });
+    } catch (err) {
+        console.error(`[WHATSAPP-BRIDGE] Failed to edit message ${messageId}:`, err);
+        res.status(500).json({ isSuccess: false, errorDescription: err.message });
+    }
+});
+
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`[WHATSAPP-BRIDGE] Service running on http://127.0.0.1:${PORT}`);
     initWhatsApp();
