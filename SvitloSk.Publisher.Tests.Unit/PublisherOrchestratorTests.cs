@@ -897,7 +897,7 @@ public class PublisherOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task TC_PublisherOrchestrator_ExternalChannel_SystemStatus_DeletesPreviousAndCreatesNewAtTail()
+    public async Task TC_PublisherOrchestrator_ExternalChannel_SystemStatus_UpdatesInPlaceWhenNoNewPosts()
     {
         var fakeRegistryStore = new FakeRegistryStore();
         var fakeGitTransport = new FakeGitTransport();
@@ -940,21 +940,16 @@ public class PublisherOrchestratorTests : IDisposable
 
         var result = await orchestrator.RunOrchestrationAsync(_registryPath, "wa_channel_123", input);
 
-        Assert.True(result.IsSuccess);
-        // Verify that system_status resulted in DELETE (of 3EB0AC9C924BCB63BC9519) and CREATE of a new message
-        var delDecision = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
-        Assert.NotNull(delDecision);
-        Assert.Equal("3EB0AC9C924BCB63BC9519", delDecision.ExternalMessageId);
-
-        var createDecision = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
-        Assert.NotNull(createDecision);
+        var updateDecision = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Update");
+        Assert.NotNull(updateDecision);
+        Assert.Equal("3EB0AC9C924BCB63BC9519", updateDecision.ExternalMessageId);
 
         // Registry should only have 1 active system_status record
         var finalReg = await fakeRegistryStore.LoadAsync(_registryPath);
         Assert.NotNull(finalReg);
         var statusRecords = finalReg.Publications.Where(p => p.TerritoryId == "system_status").ToList();
         Assert.Single(statusRecords);
-        Assert.Equal("SENT", statusRecords[0].TransmissionState);
+        Assert.Equal("UPDATED", statusRecords[0].TransmissionState);
     }
 
     [Fact]

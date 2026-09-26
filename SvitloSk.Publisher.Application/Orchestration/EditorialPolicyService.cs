@@ -94,28 +94,9 @@ public class EditorialPolicyService
                 var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
                 if (techUpdate.DecisionResult == DecisionResult.Update)
                 {
-                    if (techMsgId.HasValue)
+                    if (techMsgId.HasValue || !string.IsNullOrEmpty(techExtId))
                     {
                         result.Add(techUpdate with { TelegramMessageId = techMsgId, ExternalMessageId = techExtId, TargetHash = statusContent });
-                    }
-                    else if (hasExistingStatus)
-                    {
-                        // External channels (e.g. WhatsApp): delete previous status and create new one at tail
-                        result.Add(new EditorialDecision(
-                            DecisionResult.Delete,
-                            PublicationClassification.Ephemeral,
-                            existingTechArtifactId ?? existingTechPub?.PublicationId ?? Guid.NewGuid(),
-                            "system_status",
-                            null,
-                            techExtId
-                        ));
-                        result.Add(new EditorialDecision(
-                            DecisionResult.Create,
-                            PublicationClassification.Ephemeral,
-                            Guid.NewGuid(),
-                            "system_status",
-                            statusContent
-                        ));
                     }
                     else
                     {

@@ -156,7 +156,9 @@ public class SequentialDispatcher : IChannelPipeline
                 adapterResult.MessageId,
                 adapterResult.IsSuccess ? decision.TargetHash : adapterResult.ErrorDescription,
                 decision.Type.ToString(),
-                adapterResult.MessageId?.ToString() ?? decision.ExternalMessageId
+                (!string.IsNullOrEmpty(decision.ExternalMessageId) && !decision.TelegramMessageId.HasValue) 
+                    ? decision.ExternalMessageId 
+                    : (adapterResult.MessageId?.ToString() ?? decision.ExternalMessageId)
             ));
 
             if (adapterResult.IsSuccess)
