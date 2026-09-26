@@ -125,6 +125,13 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     "DELETED" => PublicationState.Removed,
                     _ => PublicationState.Created
                 };
+
+                // Virtual records were never dispatched to WhatsApp; treat as Removed so real posts are created
+                if (!string.IsNullOrEmpty(pubRecord.ExternalMessageId) && pubRecord.ExternalMessageId.StartsWith("wa_virtual_"))
+                {
+                    pubState = PublicationState.Removed;
+                }
+
                 PublicationType type = PublicationType.Text;
                 bool isPersistent = true;
 
@@ -328,7 +335,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) && 
                             p.TerritoryId.Equals(pkg.TerritoryId, StringComparison.OrdinalIgnoreCase) &&
                             p.TransmissionState != "DELETED" &&
-                            (p.TelegramMessageId.HasValue || !string.IsNullOrEmpty(p.ExternalMessageId)));
+                            (p.TelegramMessageId.HasValue || (!string.IsNullOrEmpty(p.ExternalMessageId) && !p.ExternalMessageId.StartsWith("wa_virtual_"))));
                         msgId = record?.TelegramMessageId;
                         extId = record?.ExternalMessageId;
                     }

@@ -169,10 +169,8 @@ public class FeedIngestionService
                     {
                         sbTomHeader.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
                     }
-                    sbTomHeader.AppendLine();
-                    sbTomHeader.Append("<i>Інформація оновлюється автоматично протягом доби</i>");
 
-                    packages.Add(new InputTerritoryPackage("tomorrow_header", sbTomHeader.ToString(), null, false));
+                    packages.Add(new InputTerritoryPackage("tomorrow_header", sbTomHeader.ToString().TrimEnd(), null, false));
 
                     // 3. Tomorrow Territory Packages (guarantee Administrative Center *м. Старокостянтинів* first)
                     var sortedTomAggregated = tomAggregated
@@ -207,7 +205,7 @@ public class FeedIngestionService
                 }
 
                 string tomDateFormatted = tomorrowDate.ToString("dd.MM.yyyy");
-                string tomHeader = $"<b>ПРОГНОЗ НА ЗАВТРА</b> • {tomDateFormatted}\n\n<b>Планові знеструмлення:</b> відсутні\n<b>Аварійні знеструмлення:</b> відсутні\n\n<i>Інформація оновлюється автоматично протягом доби</i>";
+                string tomHeader = $"<b>ПРОГНОЗ НА ЗАВТРА</b> • {tomDateFormatted}\n\n<b>Планові знеструмлення:</b> відсутні\n<b>Аварійні знеструмлення:</b> відсутні";
                 packages.Add(new InputTerritoryPackage("tomorrow_header", tomHeader, null, false));
             }
             else
