@@ -60,25 +60,6 @@ public class WhatsAppPipeline : IChannelPipeline
                 await _rateLimiter.ThrottleAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            // Ephemeral tomorrow forecasts are not posted to WhatsApp Channels
-            // because WhatsApp Channels (Newsletters) do not support automated message deletion for previews.
-            // Only the official daily journal is posted at the start of the current day.
-            if (decision.TerritoryIdentifier != null && decision.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
-            {
-                results.Add(new DispatchResultRecord(
-                    decision.PublicationId,
-                    decision.TerritoryIdentifier,
-                    decision.DecisionResult.ToString(),
-                    IsSuccess: true,
-                    MessageId: null,
-                    ErrorDescription: null,
-                    PublicationType: decision.Type.ToString(),
-                    ExternalMessageId: decision.ExternalMessageId ?? "wa_virtual_tomorrow"
-                ));
-                totalSuccessful++;
-                continue;
-            }
-
             if (!IsWhatsAppOperation(decision.DecisionResult))
             {
                 results.Add(new DispatchResultRecord(
@@ -184,6 +165,11 @@ public class WhatsAppPipeline : IChannelPipeline
                             // 2. Post the text summary directly beneath it and record the text message ID for future in-place edits.
                             result = await _whatsappAdapter.SendTextMessageAsync(channelId, formattedContent, cancellationToken).ConfigureAwait(false);
                         }
+                        else if (string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Post the pure image tomorrow banner without caption text
+                            result = await _whatsappAdapter.SendMediaMessageAsync(channelId, string.Empty, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
+                        }
                         else
                         {
                             result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
@@ -271,15 +257,22 @@ public class WhatsAppPipeline : IChannelPipeline
         if (territory.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase))
             return 4;
 
-        if (territory.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+        if (territory.Equals("tomorrow_header", StringComparison.OrdinalIgnoreCase))
             return 5;
 
+        if (territory.Equals("tomorrow_starokostiantyniv", StringComparison.OrdinalIgnoreCase) ||
+            (territory.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) && territory.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase)))
+            return 6; // Tomorrow Administrative Center *м. СТАРОКОСТЯНТИНІВ* (Priority #1 among tomorrow territories!)
+
+        if (territory.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
+            return 7; // Tomorrow rural okruhs
+
         if (d.Type == PublicationType.Graphic)
-            return 6;
+            return 8; // Graphic schedule
 
         if (territory.Equals("system_status", StringComparison.OrdinalIgnoreCase))
-            return 7; // ABSOLUTE TAIL!
+            return 9; // ABSOLUTE TAIL!
 
-        return 8;
+        return 10;
     }
 }

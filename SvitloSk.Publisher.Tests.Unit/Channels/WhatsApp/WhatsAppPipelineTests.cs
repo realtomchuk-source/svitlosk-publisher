@@ -22,6 +22,9 @@ public class WhatsAppPipelineTests
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "journal_header"),
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "starokostiantyniv"),
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_pashkivtsi"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_separator"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_header"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_starokostiantyniv"),
             new EditorialDecision(DecisionResult.Delete, PublicationClassification.Ephemeral, TerritoryIdentifier: "yesterday_cleanup")
         };
 
@@ -30,9 +33,12 @@ public class WhatsAppPipelineTests
         Assert.Equal("yesterday_cleanup", ordered[0].TerritoryIdentifier); // 0. Rollover cleanup
         Assert.Equal("journal_header", ordered[1].TerritoryIdentifier);   // 1. Journal Header
         Assert.Equal("starokostiantyniv", ordered[2].TerritoryIdentifier); // 2. City (Priority #1)
-        Assert.Equal("pashkivtsi", ordered[3].TerritoryIdentifier);       // 3. District
-        Assert.Equal("tomorrow_pashkivtsi", ordered[4].TerritoryIdentifier); // 4. Tomorrow forecast
-        Assert.Equal("system_status", ordered[5].TerritoryIdentifier);    // 5. Tail
+        Assert.Equal("pashkivtsi", ordered[3].TerritoryIdentifier);       // 3. Today District
+        Assert.Equal("tomorrow_separator", ordered[4].TerritoryIdentifier); // 4. Tomorrow Banner
+        Assert.Equal("tomorrow_header", ordered[5].TerritoryIdentifier);   // 5. Tomorrow Summary Text
+        Assert.Equal("tomorrow_starokostiantyniv", ordered[6].TerritoryIdentifier); // 6. Tomorrow City
+        Assert.Equal("tomorrow_pashkivtsi", ordered[7].TerritoryIdentifier); // 7. Tomorrow District
+        Assert.Equal("system_status", ordered[8].TerritoryIdentifier);    // 9. Tail
     }
 
     [Fact]
@@ -60,16 +66,20 @@ public class WhatsAppPipelineTests
     }
 
     [Fact]
-    public async Task TC_DispatchAsync_VirtualizesTomorrowForecasts_AndDispatchesSystemStatus()
+    public async Task TC_DispatchAsync_DispatchesTomorrowForecasts_AndDispatchesSystemStatusAtTail()
     {
         var dryRunAdapter = new WhatsAppDryRunAdapter();
         var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var bannerBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
 
         var decisions = new List<EditorialDecision>
         {
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "journal_header", TargetHash: "<b>Заголовок дня</b>"),
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "starokostiantyniv", TargetHash: "<b>м. Старокостянтинів</b>"),
-            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_separator", TargetHash: "<b>Прогноз на завтра</b>"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_separator", GraphicBytes: bannerBytes, TargetHash: ""),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_header", TargetHash: "<b>ПРОГНОЗ НА ЗАВТРА</b> • 27.09.2026\n\n<b>Планові знеструмлення:</b> відсутні\n<b>Аварійні знеструмлення:</b> відсутні"),
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_starokostiantyniv", TargetHash: "<b>м. Старокостянтинів</b>"),
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "tomorrow_krasnosilskyi", TargetHash: "<b>Красносілка</b>"),
             new EditorialDecision(DecisionResult.Create, PublicationClassification.Ephemeral, TerritoryIdentifier: "system_status", TargetHash: "<b>Останнє оновлення</b>")
         };
@@ -77,18 +87,24 @@ public class WhatsAppPipelineTests
         var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        // journal_header, starokostiantyniv, and system_status are processed as actual WhatsApp messages
-        Assert.Equal(3, result.TotalProcessed);
-        Assert.Equal(5, result.TotalSuccessful);
-        Assert.Equal(3, dryRunAdapter.DispatchedMessages.Count);
+        Assert.Equal(7, result.TotalProcessed);
+        Assert.Equal(7, result.TotalSuccessful);
+        Assert.Equal(7, dryRunAdapter.DispatchedMessages.Count);
         
-        var tomorrowRecord = result.Results.First(r => r.TerritoryIdentifier == "tomorrow_krasnosilskyi");
-        Assert.Equal("wa_virtual_tomorrow", tomorrowRecord.ExternalMessageId);
-        Assert.True(tomorrowRecord.IsSuccess);
+        var tomorrowSeparatorRecord = result.Results.First(r => r.TerritoryIdentifier == "tomorrow_separator");
+        Assert.NotNull(tomorrowSeparatorRecord.ExternalMessageId);
+        Assert.True(tomorrowSeparatorRecord.IsSuccess);
+
+        var tomorrowHeaderRecord = result.Results.First(r => r.TerritoryIdentifier == "tomorrow_header");
+        Assert.NotNull(tomorrowHeaderRecord.ExternalMessageId);
+        Assert.True(tomorrowHeaderRecord.IsSuccess);
 
         var statusRecord = result.Results.First(r => r.TerritoryIdentifier == "system_status");
         Assert.NotNull(statusRecord.ExternalMessageId);
         Assert.StartsWith("wa_mock_", statusRecord.ExternalMessageId);
+
+        // Verification that banner was sent as MEDIA
+        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.StartsWith("[MEDIA]") && m.Contains("Bytes: 4"));
     }
 
     [Fact]

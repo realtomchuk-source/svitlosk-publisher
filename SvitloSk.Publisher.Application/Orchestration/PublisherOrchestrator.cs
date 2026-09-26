@@ -370,8 +370,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
              d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
 
         // 5. Evaluate Tomorrow Visibility
+        bool isTomorrowAvailable = input.TomorrowForecastAvailable || input.Packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase));
         var tomorrowVisibilityDecisions = new List<EditorialDecision>();
-        var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(input.TomorrowForecastAvailable);
+        var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(isTomorrowAvailable);
         if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
         {
             tomorrowVisibilityDecisions.Add(tomorrowDecision);
@@ -464,7 +465,10 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         {
             var precedingJournalDecisions = new List<EditorialDecision>();
             precedingJournalDecisions.AddRange(todayDecisions);
-            precedingJournalDecisions.AddRange(tomorrowDecisions);
+            if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
+            {
+                precedingJournalDecisions.AddRange(tomorrowDecisions);
+            }
 
             string techContent = _transformer.RenderSystemStatus();
             existingPubs.TryGetValue("system_status", out var existingTech);
@@ -480,7 +484,10 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
         decisions.AddRange(todayDecisions);
         decisions.AddRange(tomorrowVisibilityDecisions);
-        decisions.AddRange(tomorrowDecisions);
+        if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
+        {
+            decisions.AddRange(tomorrowDecisions);
+        }
         if (graphicDecisionItem != null)
         {
             decisions.Add(graphicDecisionItem);

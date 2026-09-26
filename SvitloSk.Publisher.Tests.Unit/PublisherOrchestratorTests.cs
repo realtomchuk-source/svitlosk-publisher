@@ -8,6 +8,7 @@ using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Application.Orchestration;
 using SvitloSk.Publisher.Core.Engine;
 using SvitloSk.Publisher.Infrastructure.Channels.Telegram;
+using SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 using Xunit;
 
 namespace SvitloSk.Publisher.Tests.Unit.Orchestration;
@@ -1091,6 +1092,77 @@ public class PublisherOrchestratorTests : IDisposable
         // BUT the registry was saved with the successful creation to prevent orphaned posts!
         Assert.NotNull(store.CurrentModel);
         Assert.Contains(store.CurrentModel.Publications, p => p.ExternalMessageId == "created_id_123" && p.TransmissionState == "SENT");
+    }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_WhatsApp_TomorrowForecast_FullCycle_DecoupledBannerAndCityPriority()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var whatsAppPipeline = new WhatsAppPipeline(dryRunAdapter, "12036304@newsletter");
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            whatsAppPipeline,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        byte[] tomBannerBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x01 };
+
+        // Day 1: Feed with Today and Tomorrow forecast
+        var inputDay1 = new EditorialInput(
+            EditionDate: "2026-09-26",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("journal_header", "<b>Журнал</b>", Array.Empty<byte>(), true),
+                new InputTerritoryPackage("starokostiantyniv", "<b>м. Старокостянтинів</b>", null, true),
+                new InputTerritoryPackage("tomorrow_separator", "", tomBannerBytes, false),
+                new InputTerritoryPackage("tomorrow_header", "<b>ПРОГНОЗ НА ЗАВТРА</b> • 27.09.2026\n\n<b>Планові знеструмлення:</b> відсутні", null, false),
+                new InputTerritoryPackage("tomorrow_starokostiantyniv", "<b>м. Старокостянтинів</b>\nОчікується знеструмлення", null, false),
+                new InputTerritoryPackage("tomorrow_pashkivtsi", "<b>Пашківці</b>", null, false)
+            },
+            TomorrowForecastAvailable: true
+        );
+
+        var resultDay1 = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", inputDay1);
+        Assert.True(resultDay1.IsSuccess);
+
+        var reg1 = fakeRegistryStore.CurrentModel;
+        Assert.NotNull(reg1);
+        Assert.Equal("2026-09-26", reg1.EditionDate);
+
+        // Verify that tomorrow packages were published
+        Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_separator"));
+        Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_header"));
+        Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_starokostiantyniv"));
+        Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_pashkivtsi"));
+        Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "system_status"));
+
+        // Day 2: Midnight Rollover to 2026-09-27
+        var inputDay2 = new EditorialInput(
+            EditionDate: "2026-09-27",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("journal_header", "<b>Новий день</b>", Array.Empty<byte>(), true),
+                new InputTerritoryPackage("starokostiantyniv", "<b>м. Старокостянтинів</b>", null, true)
+            },
+            TomorrowForecastAvailable: false
+        );
+
+        var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", inputDay2);
+        Assert.True(resultDay2.IsSuccess);
+
+        // Verify that all yesterday ephemeral tomorrow posts and system_status were deleted
+        var deleteResults = resultDay2.Results.Where(r => r.DecisionResult == "Delete").ToList();
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_separator");
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_header");
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_starokostiantyniv");
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_pashkivtsi");
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "system_status");
     }
 }
 
