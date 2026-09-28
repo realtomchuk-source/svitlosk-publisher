@@ -440,9 +440,9 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double fbPillX = (canvasWidth - fbPillWidth) / 2.0;
         double fbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{fbPillX:F1}\" y=\"418\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{fbPillX:F1}\" y=\"485\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{fbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{fbCenterX:F1}\" y=\"533\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -523,9 +523,9 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double fbPillX = (canvasWidth - fbPillWidth) / 2.0;
         double fbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{fbPillX:F1}\" y=\"418\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{fbPillX:F1}\" y=\"485\" width=\"{fbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{fbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{fbCenterX:F1}\" y=\"533\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
@@ -597,9 +597,9 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         double tomFbPillX = (canvasWidth - tomFbPillWidth) / 2.0;
         double tomFbCenterX = canvasWidth / 2.0;
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <rect x=\"{tomFbPillX:F1}\" y=\"418\" width=\"{tomFbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
+            $"  <rect x=\"{tomFbPillX:F1}\" y=\"485\" width=\"{tomFbPillWidth:F1}\" height=\"72\" rx=\"20\" fill=\"#0F2942\"/>"));
         sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"  <text x=\"{tomFbCenterX:F1}\" y=\"466\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
+            $"  <text x=\"{tomFbCenterX:F1}\" y=\"533\" font-family=\"Arial, sans-serif\" font-size=\"38\" font-weight=\"800\" text-anchor=\"middle\" fill=\"#FFFFFF\">{EscapeXml(territorialScope)}</text>"));
 
         // Bottom subtle border divider
         sb.AppendLine($"  <line x1=\"0\" y1=\"629\" x2=\"{canvasWidth}\" y2=\"629\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");

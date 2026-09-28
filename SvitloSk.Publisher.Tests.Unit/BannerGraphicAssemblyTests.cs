@@ -182,16 +182,22 @@ public class BannerGraphicAssemblyTests
         var rasterizer = new SvitloSk.Publisher.Infrastructure.Graphics.SvgSkiaRasterizer();
         string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\5c319537-8b33-4b99-945b-4b3866e21113";
 
-        var dayPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookDayHeaderSvg("2026-09-28"), 1200, 630);
+        var daySvg = _assembly.AssembleFacebookDayHeaderSvg("2026-09-28");
+        Assert.Contains("y=\"485\"", Encoding.UTF8.GetString(daySvg));
+        var dayPng = rasterizer.RasterizeSvgToPng(daySvg, 1200, 630);
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_day_header_centered.png"), dayPng);
 
-        var tomPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-29"), 1200, 630);
+        var tomSvg = _assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-29");
+        Assert.Contains("y=\"485\"", Encoding.UTF8.GetString(tomSvg));
+        var tomPng = rasterizer.RasterizeSvgToPng(tomSvg, 1200, 630);
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_tomorrow_centered.png"), tomPng);
 
         var noOutagesPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookNoOutagesSvg("2026-09-28"), 1200, 630);
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_no_outages_centered.png"), noOutagesPng);
 
-        var emergPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookEmergencyHeaderSvg("2026-09-28"), 1200, 630);
+        var emergSvg = _assembly.AssembleFacebookEmergencyHeaderSvg("2026-09-28");
+        Assert.Contains("y=\"485\"", Encoding.UTF8.GetString(emergSvg));
+        var emergPng = rasterizer.RasterizeSvgToPng(emergSvg, 1200, 630);
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_emergency_centered.png"), emergPng);
     }
 }
