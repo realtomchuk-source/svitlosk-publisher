@@ -123,5 +123,76 @@ public class BannerGraphicAssemblyTests
         Assert.Contains("height=\"630\"", svgText);
         Assert.Contains("ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ", svgText);
     }
+
+    [Fact]
+    public void AssembleFacebookDayHeaderSvg_GeneratesFacebook1200x630Svg_WithGradientAndCenteredBulb()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookDayHeaderSvg("2026-09-28");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("linearGradient", svgText);
+        Assert.Contains("stop-color=\"#FFFFFF\"", svgText);
+        Assert.Contains("translate(896.4, 161.7)", svgText);
+    }
+
+    [Fact]
+    public void AssembleFacebookTomorrowHeaderSvg_GeneratesFacebook1200x630Svg_WithGradientAndCenteredBulb()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-29");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("linearGradient", svgText);
+        Assert.Contains("stop-color=\"#FFFFFF\"", svgText);
+        Assert.Contains("translate(896.4, 161.7)", svgText);
+    }
+
+    [Fact]
+    public void AssembleFacebookNoOutagesSvg_GeneratesFacebook1200x630Svg_WithGradientAndCenteredBulb()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookNoOutagesSvg("2026-09-28");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("linearGradient", svgText);
+        Assert.Contains("stop-color=\"#FFFFFF\"", svgText);
+        Assert.Contains("translate(896.4, 161.7)", svgText);
+    }
+
+    [Fact]
+    public void AssembleFacebookEmergencyHeaderSvg_GeneratesFacebook1200x630Svg_WithGradientAndCenteredBulb()
+    {
+        byte[] svgBytes = _assembly.AssembleFacebookEmergencyHeaderSvg("2026-09-28");
+
+        Assert.NotNull(svgBytes);
+        string svgText = Encoding.UTF8.GetString(svgBytes);
+        Assert.Contains("viewBox=\"0 0 1200 630\"", svgText);
+        Assert.Contains("linearGradient", svgText);
+        Assert.Contains("stop-color=\"#FFFFFF\"", svgText);
+        Assert.Contains("translate(896.4, 161.7)", svgText);
+    }
+
+    [Fact]
+    public void ExportRealFacebookBannerArtifacts()
+    {
+        var rasterizer = new SvitloSk.Publisher.Infrastructure.Graphics.SvgSkiaRasterizer();
+        string artifactDir = @"C:\Users\ATom\.gemini\antigravity\brain\5c319537-8b33-4b99-945b-4b3866e21113";
+
+        var dayPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookDayHeaderSvg("2026-09-28"), 1200, 630);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_day_header_centered.png"), dayPng);
+
+        var tomPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookTomorrowHeaderSvg("2026-09-29"), 1200, 630);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_tomorrow_centered.png"), tomPng);
+
+        var noOutagesPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookNoOutagesSvg("2026-09-28"), 1200, 630);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_no_outages_centered.png"), noOutagesPng);
+
+        var emergPng = rasterizer.RasterizeSvgToPng(_assembly.AssembleFacebookEmergencyHeaderSvg("2026-09-28"), 1200, 630);
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(artifactDir, "facebook_emergency_centered.png"), emergPng);
+    }
 }
 
