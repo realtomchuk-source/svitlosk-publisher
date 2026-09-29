@@ -30,9 +30,25 @@ public class EditorialPolicyService
         string statusContent,
         IReadOnlyList<EditorialDecision> precedingDecisions,
         IReadOnlyList<Model.RegistryPublicationRecord>? existingRecords,
-        Publication? existingTechPub)
+        Publication? existingTechPub,
+        bool isDateRollover = false)
     {
         var result = new List<EditorialDecision>();
+
+        if (isDateRollover)
+        {
+            // On date rollover, yesterday's ephemeral system_status is already scheduled for deletion in Pre-Flight barrier.
+            // A fresh system_status must be created at the absolute tail of today's new edition.
+            result.Add(new EditorialDecision(
+                DecisionResult.Create,
+                PublicationClassification.Ephemeral,
+                Guid.NewGuid(),
+                "system_status",
+                statusContent
+            ));
+            return result;
+        }
+
         string techHash = _hashCalculator.ComputeHash(statusContent, null);
 
         var techValidity = _decisionEngine.EvaluatePublicationValidity("system_status", techHash, existingTechPub);

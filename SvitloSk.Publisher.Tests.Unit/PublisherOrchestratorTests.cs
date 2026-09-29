@@ -760,9 +760,12 @@ public class PublisherOrchestratorTests : IDisposable
         // Day 1 generated 4 publications: journal_header, starokostiantyniv, system_status, tomorrow_starokostiantyniv
         var day1City = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "starokostiantyniv");
         var day1Tomorrow = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_starokostiantyniv");
+        var day1Status = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "system_status");
         Assert.NotNull(day1City);
         Assert.NotNull(day1Tomorrow);
+        Assert.NotNull(day1Status);
         var day1CityId = day1City.PublisherArtifactId;
+        var day1StatusId = day1Status.PublisherArtifactId;
 
         // --- DAY 2 (2026-09-08): Date Rollover ---
         string rawFeedDay2 = 
@@ -800,8 +803,89 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.NotEqual(day1CityId, day2City.PublisherArtifactId);
         Assert.Equal("SENT", day2City.TransmissionState);
 
-        // Verify that Day 1's ephemeral tomorrow post was deleted in Telegram (adapter.DeleteCount > 0)
+        // Verify that Day 2 generated a BRAND NEW system_status with a new ArtifactId (NOT updated in-place)
+        var day2Status = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "system_status");
+        Assert.NotNull(day2Status);
+        Assert.NotEqual(day1StatusId, day2Status.PublisherArtifactId);
+        Assert.Equal("SENT", day2Status.TransmissionState);
+
+        // Verify that Day 1's ephemeral posts (tomorrow + system_status) were deleted during Pre-Flight cleanup
+        // Exactly 2 deletes (tomorrow_starokostiantyniv and system_status), no duplicate deletes!
+        Assert.Equal(2, adapter.DeleteCount);
+    }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_DateRollover_EvenWithEmptyDay2Feed_DeletesOldStatus_AndCreatesNewDayStatus()
+    {
+        var store = new FakeRegistryStore();
+        var git = new FakeGitTransport();
+        var adapter = new FakeTelegramAdapter();
+        var delay = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(adapter, delay);
+        var calculator = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var parser = new OutageFeedParser();
+        var transformer = new EditorialContentTransformer();
+        var orchestrator = new PublisherOrchestrator(store, git, calculator, decisionEngine, dispatcher, parser, transformer);
+
+        // Day 1
+        string rawFeedDay1 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 07.09.2026 (понеділок)\n" +
+            "============================================\n" +
+            "--- ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ---\n" +
+            "[Місто Старокостянтинів]\n" +
+            "з 08:00 по 12:00 1 черга\n" +
+            "вул. Миру 14, 16\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay1 = new EditorialInput(
+            EditionDate: "2026-09-07",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", rawFeedDay1, null, true)
+            }
+        );
+
+        var resultDay1 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay1);
+        Assert.True(resultDay1.IsSuccess);
+        var day1Status = store.CurrentModel?.Publications.FirstOrDefault(p => p.TerritoryId == "system_status");
+        Assert.NotNull(day1Status);
+        var day1StatusId = day1Status.PublisherArtifactId;
+
+        // Day 2 with empty feed (no outages today)
+        string emptyFeedDay2 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 08.09.2026 (вівторок)\n" +
+            "============================================\n" +
+            "Відключень не зафіксовано.\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay2 = new EditorialInput(
+            EditionDate: "2026-09-08",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", emptyFeedDay2, null, true)
+            }
+        );
+
+        var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay2);
+        Assert.True(resultDay2.IsSuccess);
+        Assert.NotNull(store.CurrentModel);
+        Assert.Equal("2026-09-08", store.CurrentModel.EditionDate);
+
+        // Day 1's system_status was deleted in Pre-Flight
         Assert.True(adapter.DeleteCount >= 1);
+
+        // Day 2 has a fresh system_status with a new ArtifactId and SENT state
+        var day2Status = store.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "system_status");
+        Assert.NotNull(day2Status);
+        Assert.NotEqual(day1StatusId, day2Status.PublisherArtifactId);
+        Assert.Equal("SENT", day2Status.TransmissionState);
     }
 
     [Fact]

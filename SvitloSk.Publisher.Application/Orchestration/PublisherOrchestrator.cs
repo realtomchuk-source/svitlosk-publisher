@@ -383,7 +383,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         {
             tomorrowVisibilityDecisions.Add(tomorrowDecision);
         }
-        else if (registry != null)
+        else if (registry != null && !isDateRollover)
         {
             foreach (var oldTom in registry.Publications.Where(p => 
                 p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
@@ -478,7 +478,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
             string techContent = _transformer.RenderSystemStatus();
             existingPubs.TryGetValue("system_status", out var existingTech);
-            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, precedingJournalDecisions, registry?.Publications, existingTech);
+            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, precedingJournalDecisions, registry?.Publications, existingTech, isDateRollover);
             techDecisions.AddRange(evaluatedTechDecisions);
         }
 
@@ -580,8 +580,16 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             if (res.DecisionResult == DecisionResult.Create.ToString())
             {
                 var pubId = res.PublicationId ?? Guid.NewGuid();
-                var pkg = input.Packages.FirstOrDefault(p => p.TerritoryId == res.TerritoryIdentifier);
-                string computedHash = pkg != null ? _hashCalculator.ComputeHash(pkg.Content, pkg.GraphicBytes) : "hash-placeholder";
+                string computedHash;
+                if (res.TerritoryIdentifier != null && res.TerritoryIdentifier.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+                {
+                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(), null);
+                }
+                else
+                {
+                    var pkg = input.Packages.FirstOrDefault(p => p.TerritoryId == res.TerritoryIdentifier);
+                    computedHash = pkg != null ? _hashCalculator.ComputeHash(pkg.Content, pkg.GraphicBytes) : "hash-placeholder";
+                }
 
                 var record = new RegistryPublicationRecord(
                     pubId,
@@ -597,8 +605,16 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             else if (res.DecisionResult == DecisionResult.Update.ToString())
             {
                 var pubId = res.PublicationId ?? Guid.Empty;
-                var pkg = input.Packages.FirstOrDefault(p => p.TerritoryId == res.TerritoryIdentifier);
-                string computedHash = pkg != null ? _hashCalculator.ComputeHash(pkg.Content, pkg.GraphicBytes) : "hash-placeholder";
+                string computedHash;
+                if (res.TerritoryIdentifier != null && res.TerritoryIdentifier.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+                {
+                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(), null);
+                }
+                else
+                {
+                    var pkg = input.Packages.FirstOrDefault(p => p.TerritoryId == res.TerritoryIdentifier);
+                    computedHash = pkg != null ? _hashCalculator.ComputeHash(pkg.Content, pkg.GraphicBytes) : "hash-placeholder";
+                }
 
                 var record = new RegistryPublicationRecord(
                     pubId,
@@ -621,7 +637,10 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                     "DELETED",
                     "Text"
                 );
-                updatedPublications.Add(record);
+                if (!updatedPublications.Any(p => p.TerritoryId.Equals(record.TerritoryId, StringComparison.OrdinalIgnoreCase) && p.TransmissionState == "DELETED"))
+                {
+                    updatedPublications.Add(record);
+                }
             }
             else
             {
