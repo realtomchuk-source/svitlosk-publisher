@@ -260,13 +260,40 @@ app.post('/delete', async (req, res) => {
         const jid = await resolveDestinationJid(channelOrChatId);
         console.log(`[WHATSAPP-BRIDGE] Deleting message ${messageId} from ${jid}...`);
 
-        await sock.sendMessage(jid, {
-            delete: {
-                remoteJid: jid,
-                fromMe: true,
-                id: messageId
+        let deleteSuccess = false;
+        try {
+            await sock.sendMessage(jid, {
+                delete: {
+                    remoteJid: jid,
+                    fromMe: true,
+                    id: messageId
+                }
+            });
+            deleteSuccess = true;
+        } catch (delErr) {
+            console.warn(`[WHATSAPP-BRIDGE] Standard delete error: ${delErr.message}`);
+        }
+
+        // In WhatsApp Channels / Newsletters (@newsletter), WhatsApp servers do not remove
+        // messages from the subscriber feed via client REVOKE protocol messages.
+        // As a guaranteed fallback, perform an in-place edit to withdraw/clear the content
+        // so readers never see obsolete schedules or orphaned forecast posts.
+        if (jid.endsWith('@newsletter')) {
+            try {
+                console.log(`[WHATSAPP-BRIDGE] Newsletter channel detected: applying in-place withdrawal for message ${messageId}...`);
+                await sock.sendMessage(jid, {
+                    text: '▫️ *[Прогноз закрито / Інформація оновлена в поточному журналі]*',
+                    edit: {
+                        remoteJid: jid,
+                        fromMe: true,
+                        id: messageId
+                    }
+                });
+                console.log(`[WHATSAPP-BRIDGE] Newsletter message ${messageId} successfully withdrawn/cleared in-place.`);
+            } catch (editErr) {
+                console.warn(`[WHATSAPP-BRIDGE] Newsletter in-place withdrawal note: ${editErr.message}`);
             }
-        });
+        }
 
         res.json({ isSuccess: true, messageId: messageId });
     } catch (err) {

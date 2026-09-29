@@ -169,7 +169,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
                 if (isDateRollover)
                 {
-                    if (!isPersistent && pubState != PublicationState.Removed && !string.IsNullOrEmpty(pubRecord.ExternalMessageId))
+                    if (!isPersistent && pubState != PublicationState.Removed && (!string.IsNullOrEmpty(pubRecord.ExternalMessageId) || pubRecord.TelegramMessageId.HasValue))
                     {
                         rolloverCleanupDecisions.Add(new EditorialDecision(
                             DecisionResult.Delete,
@@ -177,8 +177,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                             pubRecord.PublisherArtifactId,
                             pubRecord.TerritoryId,
                             null,
-                            pubRecord.ExternalMessageId
-                        ));
+                            pubRecord.ExternalMessageId ?? pubRecord.TelegramMessageId?.ToString()
+                        ) { TelegramMessageId = pubRecord.TelegramMessageId });
                     }
                 }
                 else
@@ -282,7 +282,6 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
         // 4. Build Editorial Decisions for Today's Territorial Publications
         var decisions = new List<EditorialDecision>();
-        decisions.AddRange(rolloverCleanupDecisions);
 
         var seenTerritories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var pkg in transformedPackages)
@@ -483,12 +482,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             techDecisions.AddRange(evaluatedTechDecisions);
         }
 
-        // Assemble Final Decisions: Rollover -> Today -> Tomorrow -> Graphic -> System Status (Tail)
+        // Assemble Final Decisions for Current Day: Today -> Tomorrow -> Graphic -> System Status (Tail)
         decisions.Clear();
-        if (rolloverCleanupDecisions.Count > 0)
-        {
-            decisions.AddRange(rolloverCleanupDecisions);
-        }
         decisions.AddRange(todayDecisions);
         decisions.AddRange(tomorrowVisibilityDecisions);
         if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
@@ -524,7 +519,36 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
 
         // 7. Dispatch via IChannelPipeline
-        BatchDispatchResult dispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
+        // PRE-FLIGHT BARRIER: Execute guaranteed cleanup of old day's ephemeral publications first (Forecasts & Status)
+        BatchDispatchResult? cleanupDispatchResult = null;
+        if (isDateRollover && rolloverCleanupDecisions.Count > 0)
+        {
+            cleanupDispatchResult = await _dispatcher.DispatchAsync(rolloverCleanupDecisions, cancellationToken).ConfigureAwait(false);
+            if (!cleanupDispatchResult.IsSuccess)
+            {
+                string fatalCleanupDesc = $"[FATAL][Pre-Flight] Rollover cleanup failed: {cleanupDispatchResult.FatalErrorDescription}";
+                return new BatchDispatchResult(false, cleanupDispatchResult.TotalProcessed, cleanupDispatchResult.TotalSuccessful, fatalCleanupDesc, cleanupDispatchResult.Results);
+            }
+        }
+
+        // Stage 2: Dispatch current day's publications (Today -> Tomorrow -> Graphic -> System Status)
+        BatchDispatchResult todayDispatchResult = await _dispatcher.DispatchAsync(decisions, cancellationToken).ConfigureAwait(false);
+
+        // Combine results for comprehensive registry tracking and audit logging
+        var combinedResults = new List<DispatchResultRecord>();
+        if (cleanupDispatchResult != null)
+        {
+            combinedResults.AddRange(cleanupDispatchResult.Results);
+        }
+        combinedResults.AddRange(todayDispatchResult.Results);
+
+        var dispatchResult = new BatchDispatchResult(
+            todayDispatchResult.IsSuccess,
+            (cleanupDispatchResult?.TotalProcessed ?? 0) + todayDispatchResult.TotalProcessed,
+            (cleanupDispatchResult?.TotalSuccessful ?? 0) + todayDispatchResult.TotalSuccessful,
+            todayDispatchResult.FatalErrorDescription,
+            combinedResults.ToArray()
+        );
 
         // 8. Update Registry Model (process all successful dispatch items to avoid orphaned posts)
         var updatedPublications = new List<RegistryPublicationRecord>();

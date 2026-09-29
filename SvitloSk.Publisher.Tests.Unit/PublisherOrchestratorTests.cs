@@ -98,8 +98,14 @@ public class PublisherOrchestratorTests : IDisposable
             return Task.FromResult(new TelegramDispatchResult(true, messageId, null, false));
         }
 
+        public bool ForceDeleteFatal { get; set; }
+
         public Task<TelegramDispatchResult> DeleteAsync(string chatNameOrId, int messageId, CancellationToken cancellationToken = default)
         {
+            if (ForceDeleteFatal)
+            {
+                return Task.FromResult(new TelegramDispatchResult(false, null, "Simulated delete failure", false));
+            }
             DeleteCount++;
             return Task.FromResult(new TelegramDispatchResult(true, null, null, false));
         }
@@ -796,6 +802,80 @@ public class PublisherOrchestratorTests : IDisposable
 
         // Verify that Day 1's ephemeral tomorrow post was deleted in Telegram (adapter.DeleteCount > 0)
         Assert.True(adapter.DeleteCount >= 1);
+    }
+
+    [Fact]
+    public async Task TC_PublisherOrchestrator_PreFlightBarrier_FailsFast_WhenCleanupFails_DoesNotPublishNewDay()
+    {
+        var store = new FakeRegistryStore();
+        var git = new FakeGitTransport();
+        var adapter = new FakeTelegramAdapter();
+        var delay = new FakeDelayProvider();
+        var dispatcher = new SequentialDispatcher(adapter, delay);
+        var calculator = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var parser = new OutageFeedParser();
+        var transformer = new EditorialContentTransformer();
+        var orchestrator = new PublisherOrchestrator(store, git, calculator, decisionEngine, dispatcher, parser, transformer);
+
+        // Day 1: Create Day 1 with an ephemeral tomorrow forecast
+        string rawFeedDay1 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 07.09.2026 (понеділок)\n" +
+            "============================================\n" +
+            "--- ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ---\n" +
+            "[Місто Старокостянтинів]\n" +
+            "з 08:00 по 12:00 1 черга\n" +
+            "вул. Миру 14, 16\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay1 = new EditorialInput(
+            EditionDate: "2026-09-07",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", rawFeedDay1, null, true),
+                new InputTerritoryPackage("tomorrow_starokostiantyniv", "Прогноз на завтра для міста", null, false)
+            }
+        );
+
+        var resultDay1 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay1);
+        Assert.True(resultDay1.IsSuccess);
+        int day1SendCount = adapter.SendCount;
+
+        // Day 2: Date rollover, but cleanup encounters a fatal failure (e.g. rate limit or channel error)
+        adapter.ForceDeleteFatal = true;
+
+        string rawFeedDay2 = 
+            "============================================\n" +
+            "ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\n" +
+            "Дата: 08.09.2026 (вівторок)\n" +
+            "============================================\n" +
+            "--- ПЛАНОВІ ЗНЕСТРУМЛЕННЯ ---\n" +
+            "[Місто Старокостянтинів]\n" +
+            "з 10:00 по 14:00 2 черга\n" +
+            "вул. Острозького 1\n" +
+            "============================================\n" +
+            "КІНЕЦЬ ДОКУМЕНТУ\n";
+
+        var inputDay2 = new EditorialInput(
+            EditionDate: "2026-09-08",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", rawFeedDay2, null, true)
+            }
+        );
+
+        var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay2);
+
+        // Pre-Flight Barrier guarantee: Orchestration must FAIL FAST and NOT publish new day's posts
+        Assert.False(resultDay2.IsSuccess);
+        Assert.NotNull(resultDay2.FatalErrorDescription);
+        Assert.Contains("Pre-Flight", resultDay2.FatalErrorDescription);
+
+        // No new posts should have been sent for Day 2 because cleanup failed
+        Assert.Equal(day1SendCount, adapter.SendCount);
     }
 
     [Fact]
