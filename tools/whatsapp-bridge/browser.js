@@ -212,24 +212,25 @@ async function ensureChannelOpen(channelIdentifier) {
 
     console.log('[PLAYWRIGHT] Opening SvitloSk channel...');
     // Click Channels icon on left rail
-    const railBtn = await page.$('span[data-icon*="newsletter"], button[aria-label*="Канал"], button[aria-label*="Channel"]');
-    if (railBtn) {
-        await railBtn.click();
-    } else {
-        await page.mouse.click(25, 180);
+    const railBtn = page.locator('button[aria-label="Каналы"], button[aria-label="Канали"], button[aria-label*="Channel"], span[data-icon*="newsletter"]').first();
+    const railVisible = await railBtn.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+    if (railVisible) {
+        await railBtn.click({ force: true });
+        await page.waitForTimeout(1000);
     }
-    await page.waitForTimeout(1500);
 
     // Click SvitloSk channel at top of list
-    const channelItem = page.locator('#pane-side span[title*="SvitloSk"], #pane-side div[role="listitem"]:has-text("SvitloSk")').first();
-    const itemVisible = await channelItem.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+    const channelItem = page.locator('span').filter({ hasText: /^SvitloSk/ }).last();
+    const itemVisible = await channelItem.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
     if (itemVisible) {
         await channelItem.click({ force: true });
-    } else {
-        await page.mouse.click(200, 180);
     }
 
-    await page.waitForTimeout(2000);
+    // Wait for composer to appear
+    const composerLocator = page.locator('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]');
+    await composerLocator.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+
+    await page.waitForTimeout(1000);
     await scrollToBottom();
 }
 
@@ -329,33 +330,30 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         await dismissOverlays();
 
         // 1. Locate and click attachment button (paperclip)
-        let attachBtn = await page.$(
-            'footer span[data-icon="ic-attach-file"], span[data-icon="ic-attach-file"], ' +
-            'footer button:has(span[data-icon="clip"]), button[aria-label*="Прикреп"], button[aria-label*="Вклас"], ' +
-            'button[aria-label*="Attach"], div[role="button"][aria-label*="Attach"]'
-        );
+        const attachSelector = 'footer button[aria-label*="Прикреп"], footer button[aria-label*="Вклас"], footer button[aria-label*="Attach"], footer span[data-icon="ic-attach-file"], footer button:has(span[data-icon="clip"]), button[aria-label*="Attach"], div[role="button"][aria-label*="Attach"]';
+        const attachBtn = page.locator(attachSelector).first();
+        const attachVisible = await attachBtn.waitFor({ state: 'visible', timeout: 7000 }).then(() => true).catch(() => false);
 
-        if (!attachBtn) {
+        if (!attachVisible) {
             throw new Error('Attachment clip button could not be found in composer.');
         }
 
-        await attachBtn.click();
+        await attachBtn.click({ force: true });
         await page.waitForTimeout(600);
 
         // 2. Locate "Photos & videos" option in attachment menu
-        const photoBtn = await page.$(
-            'button[role="menuitem"][aria-label*="Фото"], button[role="menuitem"][aria-label*="Photo"], ' +
-            'li:has-text("Фото"), div[role="button"]:has-text("Фото"), div[role="button"]:has-text("Photo")'
-        );
+        const photoSelector = 'button[role="menuitem"][aria-label*="Фото"], button[role="menuitem"][aria-label*="Photo"], li:has-text("Фото"), div[role="button"]:has-text("Фото"), div[role="button"]:has-text("Photo")';
+        const photoBtn = page.locator(photoSelector).first();
+        const photoVisible = await photoBtn.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
 
-        if (!photoBtn) {
+        if (!photoVisible) {
             throw new Error('"Photos & videos" option could not be found in attachment menu.');
         }
 
         // 3. Trigger native file picker via Playwright filechooser event
         const [fileChooser] = await Promise.all([
             page.waitForEvent('filechooser', { timeout: 10000 }),
-            photoBtn.click()
+            photoBtn.click({ force: true })
         ]);
 
         await fileChooser.setFiles(tempFile);
@@ -429,6 +427,12 @@ async function deleteMessageRow(targetElement) {
     if (!targetElement) return false;
 
     try {
+        await targetElement.scrollIntoViewIfNeeded().catch(() => {});
+        await page.waitForTimeout(400);
+
+        await targetElement.hover().catch(() => {});
+        await page.waitForTimeout(300);
+
         await targetElement.click({ button: 'right' });
         await page.waitForTimeout(600);
 
@@ -509,7 +513,6 @@ async function cleanupStrayStatusMessages(keepLatest = false) {
 // 3. Delete Message via Context Menu
 async function deleteMessage(channelIdentifier, messageId) {
     await ensureChannelOpen(channelIdentifier);
-    await scrollToBottom();
 
     console.log(`[PLAYWRIGHT] Attempting to delete message: ${messageId}...`);
 
@@ -518,6 +521,17 @@ async function deleteMessage(channelIdentifier, messageId) {
     // A. Look by message ID attribute if available
     if (messageId && !messageId.includes('status')) {
         targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
+
+        // If not found in current viewport, scroll up to search virtual list
+        if (!targetElement) {
+            for (let scrollAttempt = 0; scrollAttempt < 8; scrollAttempt++) {
+                await page.mouse.wheel(0, -800);
+                await page.waitForTimeout(400);
+                targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
+                if (targetElement) break;
+            }
+        }
+
         if (targetElement) {
             const rowHandle = await page.evaluateHandle(el => el.closest('div[role="row"], div.message-out') || el, targetElement);
             if (rowHandle && rowHandle.asElement()) {
@@ -528,6 +542,7 @@ async function deleteMessage(channelIdentifier, messageId) {
 
     // B. If not found by direct ID (or if it was a status message), locate by characteristic text at tail
     if (!targetElement) {
+        await scrollToBottom();
         const rows = await page.$$('div[role="row"], div.message-out');
         const tailRows = rows.slice(-5);
         for (let i = tailRows.length - 1; i >= 0; i--) {
@@ -541,6 +556,7 @@ async function deleteMessage(channelIdentifier, messageId) {
 
     // C. Fallback: last sent message if messageId is 'latest' or 'tail'
     if (!targetElement && (messageId === 'latest' || messageId === 'tail')) {
+        await scrollToBottom();
         const rows = await page.$$('div[role="row"], div.message-out');
         if (rows.length > 0) {
             targetElement = rows[rows.length - 1];
