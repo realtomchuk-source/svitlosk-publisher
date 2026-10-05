@@ -31,13 +31,14 @@ public class EditorialPolicyService
         IReadOnlyList<EditorialDecision> precedingDecisions,
         IReadOnlyList<Model.RegistryPublicationRecord>? existingRecords,
         Publication? existingTechPub,
-        bool isDateRollover = false)
+        bool isDateRollover = false,
+        bool isWhatsApp = false)
     {
         var result = new List<EditorialDecision>();
 
         if (isDateRollover)
         {
-            // On date rollover, yesterday's ephemeral system_status is already scheduled for deletion in Pre-Flight barrier.
+            // On date rollover, yesterday's ephemeral system_status is already scheduled for deletion/archive in Pre-Flight barrier.
             // A fresh system_status must be created at the absolute tail of today's new edition.
             result.Add(new EditorialDecision(
                 DecisionResult.Create,
@@ -69,11 +70,21 @@ public class EditorialPolicyService
 
         bool hasExistingStatus = !string.IsNullOrEmpty(techExtId);
         bool anyNewJournalCreates = precedingDecisions.Any(d => d.DecisionResult == DecisionResult.Create);
-        bool isPhysicallyAboveOtherPosts = techMsgId.HasValue && existingRecords != null && existingRecords.Any(p =>
+        int techIndex = -1;
+        int lastOtherIndex = -1;
+        if (isWhatsApp && existingRecords != null)
+        {
+            var recordsList = existingRecords.ToList();
+            techIndex = recordsList.FindLastIndex(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) && p.TransmissionState != "DELETED");
+            lastOtherIndex = recordsList.FindLastIndex(p => !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) && p.TransmissionState != "DELETED");
+        }
+
+        bool isPhysicallyAboveOtherPosts = (techMsgId.HasValue && existingRecords != null && existingRecords.Any(p =>
             !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
             p.TransmissionState != "DELETED" &&
             p.TelegramMessageId.HasValue &&
-            p.TelegramMessageId.Value > techMsgId.Value);
+            p.TelegramMessageId.Value > techMsgId.Value))
+            || (isWhatsApp && techIndex >= 0 && lastOtherIndex > techIndex);
 
         bool shouldRecreateAtTail = (anyNewJournalCreates || isPhysicallyAboveOtherPosts) && hasExistingStatus;
 
@@ -110,7 +121,27 @@ public class EditorialPolicyService
                 var techUpdate = _decisionEngine.EvaluatePublicationUpdate(techValidity);
                 if (techUpdate.DecisionResult == DecisionResult.Update)
                 {
-                    if (techMsgId.HasValue || !string.IsNullOrEmpty(techExtId))
+                    if (isWhatsApp && hasExistingStatus)
+                    {
+                        // In WhatsApp channels, in-place edit is not supported by newsletter servers.
+                        // When status content/timestamp changes, delete previous status and publish fresh at tail.
+                        result.Add(new EditorialDecision(
+                            DecisionResult.Delete,
+                            PublicationClassification.Ephemeral,
+                            existingTechArtifactId ?? existingTechPub?.PublicationId ?? Guid.NewGuid(),
+                            "system_status",
+                            null,
+                            techExtId
+                        ));
+                        result.Add(new EditorialDecision(
+                            DecisionResult.Create,
+                            PublicationClassification.Ephemeral,
+                            Guid.NewGuid(),
+                            "system_status",
+                            statusContent
+                        ));
+                    }
+                    else if (techMsgId.HasValue || !string.IsNullOrEmpty(techExtId))
                     {
                         result.Add(techUpdate with { TelegramMessageId = techMsgId, ExternalMessageId = techExtId, TargetHash = statusContent });
                     }

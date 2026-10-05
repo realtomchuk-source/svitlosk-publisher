@@ -46,6 +46,7 @@ public class FeedIngestionService
         string todayFeedContent = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 20.08.2026\n============================================\nВідключень не зафіксовано.\n============================================\nКІНЕЦЬ ДОКУМЕНТУ\n";
         string? tomorrowFeedContent = null;
         bool tomorrowAvailable = false;
+        DateTime sourceQueryTime = UtcNowProvider().AddHours(3);
 
         string localFeedFallbackPath = @"../ParserAktualVidkl/starokostiantyniv-outages/data/tg_posts/today.txt";
 
@@ -55,7 +56,8 @@ public class FeedIngestionService
             {
                 Console.WriteLine("[INFO] Fetching online today.txt feed from GitHub...");
                 todayFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/today.txt", cancellationToken).ConfigureAwait(false);
-                Console.WriteLine("[INFO] Successfully fetched today.txt online.");
+                sourceQueryTime = UtcNowProvider().AddHours(3);
+                Console.WriteLine($"[INFO] Successfully fetched today.txt online at {sourceQueryTime:HH:mm}.");
             }
             catch (Exception onlineEx)
             {
@@ -63,6 +65,7 @@ public class FeedIngestionService
                 if (File.Exists(localFeedFallbackPath))
                 {
                     todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
+                    sourceQueryTime = UtcNowProvider().AddHours(3);
                 }
             }
 
@@ -123,56 +126,16 @@ public class FeedIngestionService
 
         if (tomorrowAvailable && !string.IsNullOrWhiteSpace(tomorrowFeedContent))
         {
+            var tomorrowTerritoryPackages = new List<InputTerritoryPackage>();
+
+            IReadOnlyList<OutageRecord>? tomRecords = null;
+
             if (tomorrowFeedContent.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || tomorrowFeedContent.Contains("ЗНЕСТРУМЛЕННЯ"))
             {
-                var tomRecords = _parser.Parse(tomorrowFeedContent);
+                tomRecords = _parser.Parse(tomorrowFeedContent);
                 var tomAggregated = TerritoryAggregator.AggregateByTerritory(tomRecords);
                 if (tomAggregated.Count > 0)
                 {
-                    // 1. Tomorrow Separator Banner (image only)
-                    byte[]? tomBannerPng = null;
-                    try
-                    {
-                        byte[] tomBannerSvg = _bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
-                        tomBannerPng = _rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 480);
-                    }
-                    catch (Exception tomEx)
-                    {
-                        Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
-                    }
-
-                    if (tomBannerPng != null && tomBannerPng.Length > 0)
-                    {
-                        packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
-                    }
-
-                    // 2. Tomorrow Summary Header text directly beneath the banner
-                    var tomStats = TerritoryAggregator.CalculateSummaryStats(tomRecords);
-                    string tomDateFormatted = tomorrowDate.ToString("dd.MM.yyyy");
-                    var sbTomHeader = new StringBuilder();
-                    sbTomHeader.AppendLine($"<b>ПРОГНОЗ НА ЗАВТРА</b> • {tomDateFormatted}");
-                    sbTomHeader.AppendLine();
-                    if (tomStats.PlannedSettlements.Count > 0)
-                    {
-                        sbTomHeader.AppendLine($"<b>Планові знеструмлення:</b> {string.Join(", ", tomStats.PlannedSettlements)}");
-                    }
-                    else
-                    {
-                        sbTomHeader.AppendLine("<b>Планові знеструмлення:</b> відсутні");
-                    }
-
-                    if (tomStats.EmergencySettlements.Count > 0)
-                    {
-                        sbTomHeader.AppendLine($"<b>Аварійні знеструмлення:</b> {string.Join(", ", tomStats.EmergencySettlements)}");
-                    }
-                    else
-                    {
-                        sbTomHeader.AppendLine("<b>Аварійні знеструмлення:</b> відсутні");
-                    }
-
-                    packages.Add(new InputTerritoryPackage("tomorrow_header", sbTomHeader.ToString().TrimEnd(), null, false));
-
-                    // 3. Tomorrow Territory Packages (guarantee Administrative Center *м. Старокостянтинів* first)
                     var sortedTomAggregated = tomAggregated
                         .OrderBy(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase) || t.CanonicalName.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                         .ThenBy(t => t.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
@@ -181,61 +144,52 @@ public class FeedIngestionService
                     foreach (var tAgg in sortedTomAggregated)
                     {
                         string formattedTom = _transformer.RenderAggregatedTerritoryPost(tAgg, isTomorrow: true, tomorrowDate: tomorrowLabel);
-                        packages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
+                        tomorrowTerritoryPackages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
                     }
                 }
             }
-            else if (tomorrowFeedContent.Contains("не заплановано") || tomorrowFeedContent.Contains("не зафіксовано"))
-            {
-                // Green checkmark banner (ЕЛЕКТРОПОСТАЧАННЯ СТАБІЛЬНЕ)
-                byte[]? tomBannerPng = null;
-                try
-                {
-                    byte[] tomBannerSvg = _bannerAssembly.AssembleNoOutagesSvg(tomorrowLabel);
-                    tomBannerPng = _rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 600);
-                }
-                catch (Exception tomEx)
-                {
-                    Console.WriteLine($"[WARN] Could not render tomorrow no outages banner: {tomEx.Message}");
-                }
-
-                if (tomBannerPng != null && tomBannerPng.Length > 0)
-                {
-                    packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
-                }
-
-                string tomDateFormatted = tomorrowDate.ToString("dd.MM.yyyy");
-                string tomHeader = $"<b>ПРОГНОЗ НА ЗАВТРА</b> • {tomDateFormatted}\n\n<b>Планові знеструмлення:</b> відсутні\n<b>Аварійні знеструмлення:</b> відсутні";
-                packages.Add(new InputTerritoryPackage("tomorrow_header", tomHeader, null, false));
-            }
-            else
+            else if (!tomorrowFeedContent.Contains("не заплановано", StringComparison.OrdinalIgnoreCase) &&
+                     !tomorrowFeedContent.Contains("не зафіксовано", StringComparison.OrdinalIgnoreCase))
             {
                 string details = _transformer.RenderRecordDetails(tomorrowFeedContent.Trim());
                 if (!string.IsNullOrWhiteSpace(details))
                 {
-                    byte[]? tomBannerPng = null;
-                    try
-                    {
-                        byte[] tomBannerSvg = _bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
-                        tomBannerPng = _rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 480);
-                    }
-                    catch (Exception tomEx)
-                    {
-                        Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
-                    }
-
-                    if (tomBannerPng != null && tomBannerPng.Length > 0)
-                    {
-                        packages.Add(new InputTerritoryPackage("tomorrow_separator", "", tomBannerPng, false));
-                    }
-
-                    string tomDateFormatted = tomorrowDate.ToString("dd.MM.yyyy");
-                    string tomHeader = $"<b>ПРОГНОЗ НА ЗАВТРА</b> • {tomDateFormatted}\n\n<b>Старокостянтинівська міська територіальна громада</b>\n\n<i>Очікується обмеження електропостачання</i>";
-                    packages.Add(new InputTerritoryPackage("tomorrow_header", tomHeader, null, false));
-
                     string formattedTomorrow = $"<b>Старокостянтинівська міська територіальна громада</b>\n\nОчікується обмеження електропостачання.\n\nОрієнтовний графік відключень:\n{details}";
-                    packages.Add(new InputTerritoryPackage("tomorrow_starokostiantyniv", formattedTomorrow, null, false));
+                    tomorrowTerritoryPackages.Add(new InputTerritoryPackage("tomorrow", formattedTomorrow, null, false));
                 }
+            }
+
+            // Add Tomorrow Separator Banner ONLY if there are actual tomorrow forecast posts to display
+            if (tomorrowTerritoryPackages.Count > 0)
+            {
+                byte[]? tomBannerPng = null;
+                try
+                {
+                    byte[] tomBannerSvg = _bannerAssembly.AssembleTomorrowHeaderSvg(tomorrowLabel);
+                    tomBannerPng = _rasterizer.RasterizeSvgToPng(tomBannerSvg, 1080, 480);
+                }
+                catch (Exception tomEx)
+                {
+                    Console.WriteLine($"[WARN] Could not render tomorrow separator banner: {tomEx.Message}");
+                }
+
+                string tomCaption = "";
+                if (tomRecords != null && tomRecords.Count > 0)
+                {
+                    var tomStats = TerritoryAggregator.CalculateSummaryStats(tomRecords);
+                    tomCaption = _transformer.RenderJournalHeader(tomorrowLabel, tomStats);
+                }
+
+                if (tomBannerPng != null && tomBannerPng.Length > 0)
+                {
+                    packages.Add(new InputTerritoryPackage("tomorrow_separator", tomCaption, tomBannerPng, false));
+                }
+                else if (!string.IsNullOrWhiteSpace(tomCaption))
+                {
+                    packages.Add(new InputTerritoryPackage("tomorrow_separator", tomCaption, null, false));
+                }
+
+                packages.AddRange(tomorrowTerritoryPackages);
             }
         }
 
@@ -297,7 +251,8 @@ public class FeedIngestionService
             EditionDate: editionDate,
             Packages: packages,
             TomorrowForecastAvailable: hasActiveTomorrowPackages,
-            GraphicPackage: graphicPackage
+            GraphicPackage: graphicPackage,
+            SourceQueryTime: sourceQueryTime
         );
     }
 

@@ -100,9 +100,21 @@ public class EditorialContentTransformer
         return sb.ToString().TrimEnd();
     }
 
-    public string RenderSystemStatus()
+    public string RenderSystemStatus(DateTime? checkTime = null)
     {
-        return $"<b>Останнє оновлення журналу:</b> {DateTime.UtcNow.AddHours(3):HH:mm}\n<b>Стан моніторингу:</b> активний";
+        var time = checkTime ?? DateTime.UtcNow.AddHours(3);
+        return $"<b>Останнє оновлення журналу:</b> {time:HH:mm}\n<b>Стан моніторингу:</b> активний";
+    }
+
+    public string RenderArchivedSystemStatus(DateTime? lastUpdateTime, string previousDateStr)
+    {
+        var time = lastUpdateTime ?? DateTime.UtcNow.AddHours(3);
+        string formattedDate = previousDateStr;
+        if (DateTime.TryParse(previousDateStr, out var parsedDate))
+        {
+            formattedDate = parsedDate.ToString("d MMMM yyyy 'року'", new System.Globalization.CultureInfo("uk-UA"));
+        }
+        return $"<b>Останнє оновлення журналу:</b> {time:HH:mm}\n{formattedDate}";
     }
 
     public string RenderAggregatedTerritoryPost(AggregatedTerritoryData data, bool isTomorrow = false, string? tomorrowDate = null)

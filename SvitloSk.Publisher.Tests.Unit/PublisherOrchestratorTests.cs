@@ -1294,7 +1294,7 @@ public class PublisherOrchestratorTests : IDisposable
         Assert.NotNull(reg1);
         Assert.Equal("2026-09-26", reg1.EditionDate);
 
-        // Verify that tomorrow packages were published
+        // Verify that tomorrow packages are published for WhatsApp channel (full Telegram parity)
         Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_separator"));
         Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_header"));
         Assert.NotNull(reg1.Publications.FirstOrDefault(p => p.TerritoryId == "tomorrow_starokostiantyniv"));
@@ -1315,13 +1315,224 @@ public class PublisherOrchestratorTests : IDisposable
         var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", inputDay2);
         Assert.True(resultDay2.IsSuccess);
 
-        // Verify that all yesterday ephemeral tomorrow posts and system_status were deleted
+        // Verify that yesterday's system_status was transformed into archived_system_status in rollover
+        var updateResults = resultDay2.Results.Where(r => r.DecisionResult == "Update").ToList();
+        Assert.Contains(updateResults, r => r.TerritoryIdentifier == "archived_system_status");
+
+        // Verify that yesterday's ephemeral tomorrow forecasts were deleted on rollover
         var deleteResults = resultDay2.Results.Where(r => r.DecisionResult == "Delete").ToList();
+        Assert.NotEmpty(deleteResults);
         Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_separator");
-        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_header");
         Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_starokostiantyniv");
-        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_pashkivtsi");
-        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "system_status");
+
+        // Verify that Day 2 registry has a fresh active system_status
+        var reg2 = fakeRegistryStore.CurrentModel;
+        Assert.NotNull(reg2);
+        Assert.Equal("2026-09-27", reg2.EditionDate);
+        Assert.NotNull(reg2.Publications.FirstOrDefault(p => p.TerritoryId == "system_status"));
+    }
+
+    [Fact]
+    public async Task TC_WhatsApp_WhenNewTerritoryAddedMidDay_DeletesPreviousSystemStatusAndCreatesAtTail()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var whatsAppPipeline = new WhatsAppPipeline(dryRunAdapter, "12036304@newsletter");
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            whatsAppPipeline,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        string staroFeed = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 02.10.2026\n============================================\n[Місто Старокостянтинів]\nз 09:00 по 17:00\nвул. Миру 1";
+        string berezFeed = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 02.10.2026\n============================================\n[Березненський старостинський округ]\nз 10:00 по 17:00\nвул. Центральна 1";
+
+        var calc = new ContentHashCalculator();
+        string staroHash = calc.ComputeHash(staroFeed, null);
+
+        // Pre-existing morning edition with starokostiantyniv and system_status
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-10-02",
+            Status: "PLANNED",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "starokostiantyniv", "wa_msg_staro", staroHash, "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", "wa_msg_status_morning", "old-morning-hash", "SENT", "Text")
+            }
+        );
+
+        // Mid-day: new territory bereznenskyi arrives
+        string combinedFeed = staroFeed + "\n\n" + berezFeed;
+        var input = new EditorialInput(
+            EditionDate: "2026-10-02",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", combinedFeed, null, true)
+            },
+            TomorrowForecastAvailable: false,
+            SourceQueryTime: new DateTime(2026, 10, 2, 11, 34, 0)
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", input);
+
+        Assert.True(result.IsSuccess);
+
+        // Verify that old system_status was DELETED
+        var deleteStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.NotNull(deleteStatus);
+        Assert.Equal("wa_msg_status_morning", deleteStatus.ExternalMessageId);
+
+        // Verify that bereznenskyi was CREATED
+        var createBerez = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "bereznenskyi" && r.DecisionResult == "Create");
+        Assert.NotNull(createBerez);
+
+        // Verify that a fresh system_status was CREATED at tail
+        var createStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+        Assert.NotNull(createStatus);
+
+        // Verify registry has 1 active system_status with SENT state
+        Assert.NotNull(fakeRegistryStore.CurrentModel);
+        var activeStatuses = fakeRegistryStore.CurrentModel.Publications.Where(p => p.TerritoryId == "system_status" && p.TransmissionState != "DELETED").ToList();
+        Assert.Single(activeStatuses);
+        Assert.Equal("SENT", activeStatuses[0].TransmissionState);
+    }
+
+    [Fact]
+    public async Task TC_WhatsApp_WhenSourceQueryTimeUpdates_DeletesPreviousSystemStatusAndCreatesAtTail()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var whatsAppPipeline = new WhatsAppPipeline(dryRunAdapter, "12036304@newsletter");
+        var transformer = new EditorialContentTransformer();
+        var calc = new ContentHashCalculator();
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            calc,
+            new EditorialDecisionEngine(),
+            whatsAppPipeline,
+            new OutageFeedParser(),
+            transformer
+        );
+
+        string staroFeed = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 02.10.2026\n============================================\n[Місто Старокостянтинів]\nз 09:00 по 17:00\nвул. Миру 1";
+        string staroHash = calc.ComputeHash(staroFeed, null);
+
+        DateTime morningTime = new DateTime(2026, 10, 2, 8, 33, 0);
+        string morningStatusContent = transformer.RenderSystemStatus(morningTime);
+        string morningStatusHash = calc.ComputeHash(morningStatusContent, null);
+
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-10-02",
+            Status: "PLANNED",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "starokostiantyniv", "wa_msg_staro", staroHash, "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", "wa_msg_status_0833", morningStatusHash, "SENT", "Text")
+            }
+        );
+
+        // Next cycle at 09:03: packages unchanged, but source was queried at 09:03
+        DateTime nextCycleTime = new DateTime(2026, 10, 2, 9, 3, 0);
+        var input = new EditorialInput(
+            EditionDate: "2026-10-02",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", staroFeed, null, true)
+            },
+            TomorrowForecastAvailable: false,
+            SourceQueryTime: nextCycleTime
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", input);
+
+        Assert.True(result.IsSuccess);
+
+        // Since WhatsApp does not support in-place edits in channels, it must Delete + Create fresh status
+        var deleteStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.NotNull(deleteStatus);
+        Assert.Equal("wa_msg_status_0833", deleteStatus.ExternalMessageId);
+
+        var createStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+        Assert.NotNull(createStatus);
+
+        // Newly created status must have hash of 09:03
+        string expectedNewContent = transformer.RenderSystemStatus(nextCycleTime);
+        string expectedNewHash = calc.ComputeHash(expectedNewContent, null);
+
+        Assert.NotNull(fakeRegistryStore.CurrentModel);
+        var activeStatus = fakeRegistryStore.CurrentModel.Publications.FirstOrDefault(p => p.TerritoryId == "system_status" && p.TransmissionState != "DELETED");
+        Assert.NotNull(activeStatus);
+        Assert.Equal(expectedNewHash, activeStatus.ContentHash);
+    }
+
+    [Fact]
+    public async Task TC_WhatsApp_WhenStatusPhysicallyAboveOtherPosts_DeletesAndRecreatesAtTail()
+    {
+        var fakeRegistryStore = new FakeRegistryStore();
+        var fakeGitTransport = new FakeGitTransport();
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var whatsAppPipeline = new WhatsAppPipeline(dryRunAdapter, "12036304@newsletter");
+        var orchestrator = new PublisherOrchestrator(
+            fakeRegistryStore,
+            fakeGitTransport,
+            new ContentHashCalculator(),
+            new EditorialDecisionEngine(),
+            whatsAppPipeline,
+            new OutageFeedParser(),
+            new EditorialContentTransformer()
+        );
+
+        string staroFeed = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 02.10.2026\n============================================\n[Місто Старокостянтинів]\nз 09:00 по 17:00\nвул. Миру 1";
+        string berezFeed = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 02.10.2026\n============================================\n[Березненський старостинський округ]\nз 10:00 по 17:00\nвул. Центральна 1";
+
+        var calc = new ContentHashCalculator();
+        string staroHash = calc.ComputeHash(staroFeed, null);
+        string berezHash = calc.ComputeHash(berezFeed, null);
+
+        // Pre-existing registry where system_status is at index 0 and bereznenskyi is at index 1 (status is stranded above!)
+        fakeRegistryStore.CurrentModel = new RegistryModel(
+            SchemaVersion: 1,
+            EditionDate: "2026-10-02",
+            Status: "PLANNED",
+            Publications: new List<RegistryPublicationRecord>
+            {
+                new RegistryPublicationRecord(Guid.NewGuid(), "system_status", "wa_msg_status_stranded", "old-hash", "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "starokostiantyniv", "wa_msg_staro", staroHash, "SENT", "Text"),
+                new RegistryPublicationRecord(Guid.NewGuid(), "bereznenskyi", "wa_msg_berez", berezHash, "SENT", "Text")
+            }
+        );
+
+        string combinedFeed = staroFeed + "\n\n" + berezFeed;
+        var input = new EditorialInput(
+            EditionDate: "2026-10-02",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new InputTerritoryPackage("Громада", combinedFeed, null, true)
+            },
+            TomorrowForecastAvailable: false,
+            SourceQueryTime: new DateTime(2026, 10, 2, 12, 0, 0)
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", input);
+
+        Assert.True(result.IsSuccess);
+
+        // System status stranded above other posts must be DELETED and CREATED anew at the tail
+        var deleteStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Delete");
+        Assert.NotNull(deleteStatus);
+        Assert.Equal("wa_msg_status_stranded", deleteStatus.ExternalMessageId);
+
+        var createStatus = result.Results.FirstOrDefault(r => r.TerritoryIdentifier == "system_status" && r.DecisionResult == "Create");
+        Assert.NotNull(createStatus);
     }
 }
 

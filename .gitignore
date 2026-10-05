@@ -39,4 +39,8 @@ local/output/
 
 ## Node.js bridge
 tools/whatsapp-bridge/node_modules/
+tools/whatsapp-bridge/scratch/
+
+## Temporary scratch folders
+scratch/
 

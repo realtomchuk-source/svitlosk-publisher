@@ -1,16 +1,14 @@
 {
   "name": "svitlosk-whatsapp-bridge",
-  "version": "1.0.0",
-  "description": "Lightweight local WhatsApp Web bridge for SvitloSk Publisher channels",
+  "version": "2.0.0",
+  "description": "WhatsApp Web Browser Bridge using Playwright for SvitloSk Publisher",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.12",
     "express": "^4.21.2",
-    "pino": "^9.6.0",
-    "qrcode-terminal": "^0.12.0"
+    "playwright": "^1.50.0"
   }
 }

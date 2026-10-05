@@ -241,13 +241,13 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {canvasWidth} {canvasHeight}\" width=\"{canvasWidth}\" height=\"{canvasHeight}\">");
         sb.AppendLine($"  <rect width=\"100%\" height=\"100%\" fill=\"{GraphicAssembly.BackgroundColor}\"/>");
 
-        // Right-Side Background Aesthetic Circular Arcs (Tomorrow Distinct Palette: Soft Slate)
+        // Right-Side Background Aesthetic Circular Arcs (matching standard reference design)
         sb.AppendLine("  <!-- Background Decorative Arcs -->");
         sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"260\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"40\" opacity=\"0.6\"/>");
         sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"200\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");
         sb.AppendLine($"  <circle cx=\"960\" cy=\"240\" r=\"170\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"6\" stroke-dasharray=\"350 400\" stroke-linecap=\"round\" transform=\"rotate(-45 960 240)\"/>");
 
-        // Right-Side Stylized Bulb Accent (Soft Slate #94A3B8 for Tomorrow Forecast, Centered cx=960, cy=240)
+        // Right-Side Stylized Bulb Accent (Soft Slate #94A3B8 for Tomorrow Forecast)
         sb.AppendLine("  <!-- Outlined Soft Slate Gray Bulb matching forecast identity -->");
         sb.AppendLine("  <g transform=\"translate(837.1, 117.4) scale(0.48)\">");
         sb.AppendLine($"    <path d=\"M336 409.33C334.83 508.55 159.82 495.2 176 396H336V409.33Z\" fill=\"none\" stroke=\"#94A3B8\" stroke-width=\"16\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>");
@@ -566,7 +566,7 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
         sb.AppendLine("  </defs>");
         sb.AppendLine("  <rect width=\"100%\" height=\"100%\" fill=\"url(#fbTomorrowBgGrad)\"/>");
 
-        // Background Decorative Arcs (Tomorrow Soft Slate Palette)
+        // Background Decorative Arcs (matching standard reference design)
         sb.AppendLine("  <!-- Background Decorative Arcs -->");
         sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"320\" fill=\"none\" stroke=\"#E2E8F0\" stroke-width=\"48\" opacity=\"0.6\"/>");
         sb.AppendLine($"  <circle cx=\"1050\" cy=\"315\" r=\"250\" fill=\"#F8FAFC\" stroke=\"{GraphicAssembly.TrackBorderColor}\" stroke-width=\"2\"/>");

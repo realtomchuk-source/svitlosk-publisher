@@ -15,6 +15,7 @@ public record EditorialInput(
     string EditionDate,
     IReadOnlyList<InputTerritoryPackage> Packages,
     bool TomorrowForecastAvailable = false,
-    GraphicInputPackage? GraphicPackage = null
+    GraphicInputPackage? GraphicPackage = null,
+    DateTime? SourceQueryTime = null
 );
 

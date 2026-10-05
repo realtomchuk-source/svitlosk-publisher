@@ -157,23 +157,7 @@ public class WhatsAppPipeline : IChannelPipeline
                 case DecisionResult.Create:
                     if (decision.GraphicBytes != null && decision.GraphicBytes.Length > 0)
                     {
-                        if (string.Equals(decision.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Decouple the static daily banner and the mutable text summary:
-                            // 1. Post the static image banner first.
-                            await _whatsappAdapter.SendMediaMessageAsync(channelId, string.Empty, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
-                            // 2. Post the text summary directly beneath it and record the text message ID for future in-place edits.
-                            result = await _whatsappAdapter.SendTextMessageAsync(channelId, formattedContent, cancellationToken).ConfigureAwait(false);
-                        }
-                        else if (string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Post the pure image tomorrow banner without caption text
-                            result = await _whatsappAdapter.SendMediaMessageAsync(channelId, string.Empty, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
-                        }
+                        result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {
@@ -183,7 +167,26 @@ public class WhatsAppPipeline : IChannelPipeline
 
                 case DecisionResult.Update:
                     string? existingId = decision.ExternalMessageId;
-                    if (string.IsNullOrEmpty(existingId))
+                    if (decision.GraphicBytes != null && decision.GraphicBytes.Length > 0)
+                    {
+                        // Media messages cannot be edited in-place in WhatsApp; perform Delete + Resend
+                        if (!string.IsNullOrEmpty(existingId))
+                        {
+                            await _whatsappAdapter.DeleteMessageAsync(channelId, existingId, cancellationToken).ConfigureAwait(false);
+                        }
+                        result = await _whatsappAdapter.SendMediaMessageAsync(channelId, formattedContent, decision.GraphicBytes, "image/png", cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (decision.TerritoryIdentifier.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Technical status in WhatsApp channels MUST always stay at the very tail.
+                        // In-place edits leave status stranded mid-feed above newer posts.
+                        if (!string.IsNullOrEmpty(existingId))
+                        {
+                            await _whatsappAdapter.DeleteMessageAsync(channelId, existingId, cancellationToken).ConfigureAwait(false);
+                        }
+                        result = await _whatsappAdapter.SendTextMessageAsync(channelId, formattedContent, cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (string.IsNullOrEmpty(existingId))
                     {
                         // Fallback to Create if no previous ID exists
                         result = await _whatsappAdapter.SendTextMessageAsync(channelId, formattedContent, cancellationToken).ConfigureAwait(false);
@@ -241,6 +244,10 @@ public class WhatsAppPipeline : IChannelPipeline
             return 0; // Rollover cleanups first
 
         string territory = d.TerritoryIdentifier ?? string.Empty;
+
+        // Rollover archived status (yesterday's status transformed in-place)
+        if (territory.Equals("archived_system_status", StringComparison.OrdinalIgnoreCase))
+            return 0;
 
         if (territory.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
             return 1;

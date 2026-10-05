@@ -108,7 +108,7 @@ public class WhatsAppPipelineTests
     }
 
     [Fact]
-    public async Task TC_DispatchAsync_DecouplesBannerAndText_ForJournalHeaderWithGraphic()
+    public async Task TC_DispatchAsync_SendsBannerWithCaption_ForJournalHeaderWithGraphic()
     {
         var dryRunAdapter = new WhatsAppDryRunAdapter();
         var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
@@ -131,15 +131,13 @@ public class WhatsAppPipelineTests
         Assert.Equal(1, result.TotalProcessed);
         Assert.Equal(1, result.TotalSuccessful);
 
-        // 2 messages were sent to WhatsApp: 1 MEDIA (banner) and 1 TEXT (caption/summary)
-        Assert.Equal(2, dryRunAdapter.DispatchedMessages.Count);
+        // 1 unified message was sent to WhatsApp: MEDIA with caption
+        Assert.Equal(1, dryRunAdapter.DispatchedMessages.Count);
         Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.StartsWith("[MEDIA]"));
-        Assert.Contains(dryRunAdapter.DispatchedMessages, m => m.StartsWith("[TEXT]"));
 
-        // Result ID points to the TEXT message (which begins with wa_mock_, not wa_mock_media_)
+        // Result ID points to the MEDIA message
         Assert.NotNull(result.Results[0].ExternalMessageId);
-        Assert.StartsWith("wa_mock_", result.Results[0].ExternalMessageId);
-        Assert.DoesNotContain("media", result.Results[0].ExternalMessageId);
+        Assert.StartsWith("wa_mock_media_", result.Results[0].ExternalMessageId);
     }
 
     [Fact]

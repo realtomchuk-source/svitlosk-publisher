@@ -1,7 +1,7 @@
 # tools/whatsapp-bridge/run-bridge.ps1
 # Starts the local WhatsApp Web Bridge microservice for SvitloSk Publisher.
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host "==================================================" -ForegroundColor Cyan
@@ -15,5 +15,9 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
-Write-Host "[INFO] Starting WhatsApp Bridge server..." -ForegroundColor Green
-node server.js
+while ($true) {
+    Write-Host "[INFO] Starting WhatsApp Bridge server..." -ForegroundColor Green
+    node server.js
+    Write-Host "[WARN] WhatsApp Bridge exited. Restarting in 3 seconds (Press Ctrl+C to stop)..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+}

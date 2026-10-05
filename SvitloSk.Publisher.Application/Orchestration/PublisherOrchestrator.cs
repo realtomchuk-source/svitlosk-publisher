@@ -64,6 +64,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        DateTime syncTime = input.SourceQueryTime ?? DateTime.UtcNow.AddHours(3);
+        bool isWhatsApp = string.Equals(_dispatcher.ChannelName, "WhatsApp", StringComparison.OrdinalIgnoreCase);
+
         // 1. Load Registry
         RegistryModel? registry = null;
         try
@@ -171,14 +174,31 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 {
                     if (!isPersistent && pubState != PublicationState.Removed && (!string.IsNullOrEmpty(pubRecord.ExternalMessageId) || pubRecord.TelegramMessageId.HasValue))
                     {
-                        rolloverCleanupDecisions.Add(new EditorialDecision(
-                            DecisionResult.Delete,
-                            PublicationClassification.Ephemeral,
-                            pubRecord.PublisherArtifactId,
-                            pubRecord.TerritoryId,
-                            null,
-                            pubRecord.ExternalMessageId ?? pubRecord.TelegramMessageId?.ToString()
-                        ) { TelegramMessageId = pubRecord.TelegramMessageId });
+                        if (isWhatsApp && pubRecord.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // In WhatsApp channel:
+                            // Transform yesterday's technical status into an archived status post with previous date
+                            string archivedContent = _transformer.RenderArchivedSystemStatus(syncTime, registry.EditionDate);
+                            rolloverCleanupDecisions.Add(new EditorialDecision(
+                                DecisionResult.Update,
+                                PublicationClassification.Ephemeral,
+                                pubRecord.PublisherArtifactId,
+                                "archived_system_status",
+                                archivedContent,
+                                pubRecord.ExternalMessageId
+                            ));
+                        }
+                        else
+                        {
+                            rolloverCleanupDecisions.Add(new EditorialDecision(
+                                DecisionResult.Delete,
+                                PublicationClassification.Ephemeral,
+                                pubRecord.PublisherArtifactId,
+                                pubRecord.TerritoryId,
+                                null,
+                                pubRecord.ExternalMessageId ?? pubRecord.TelegramMessageId?.ToString()
+                            ) { TelegramMessageId = pubRecord.TelegramMessageId });
+                        }
                     }
                 }
                 else
@@ -265,6 +285,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 }
             }
         }
+
 
         if (transformedPackages.Count == 0 && input.GraphicPackage == null)
         {
@@ -389,7 +410,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
                 p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase)))
             {
-                if (oldTom.TransmissionState != "DELETED" && !string.IsNullOrEmpty(oldTom.ExternalMessageId))
+                if (oldTom.TransmissionState != "DELETED" && (!string.IsNullOrEmpty(oldTom.ExternalMessageId) || oldTom.TelegramMessageId.HasValue))
                 {
                     tomorrowVisibilityDecisions.Add(new EditorialDecision(
                         DecisionResult.Delete,
@@ -397,8 +418,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                         oldTom.PublisherArtifactId,
                         oldTom.TerritoryId,
                         null,
-                        oldTom.ExternalMessageId
-                    ));
+                        oldTom.ExternalMessageId ?? oldTom.TelegramMessageId?.ToString()
+                    ) { TelegramMessageId = oldTom.TelegramMessageId });
                 }
             }
         }
@@ -467,7 +488,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         // 7. Evaluate System Status via Domain Policy Service (Tail Invariant)
         // Positioned at the absolute tail of all journal publications (today, tomorrow forecasts, and graphic)
         var techDecisions = new List<EditorialDecision>();
-        if (transformedPackages.Count > 0 || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
+        if (transformedPackages.Count > 0 || (registry != null && registry.Publications.Count > 0) || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
         {
             var precedingJournalDecisions = new List<EditorialDecision>();
             precedingJournalDecisions.AddRange(todayDecisions);
@@ -476,9 +497,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 precedingJournalDecisions.AddRange(tomorrowDecisions);
             }
 
-            string techContent = _transformer.RenderSystemStatus();
+            string techContent = _transformer.RenderSystemStatus(syncTime);
             existingPubs.TryGetValue("system_status", out var existingTech);
-            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, precedingJournalDecisions, registry?.Publications, existingTech, isDateRollover);
+            var evaluatedTechDecisions = _policyService.EvaluateSystemStatus(techContent, precedingJournalDecisions, registry?.Publications, existingTech, isDateRollover, isWhatsApp);
             techDecisions.AddRange(evaluatedTechDecisions);
         }
 
@@ -558,6 +579,11 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         {
             if (!res.IsSuccess) continue;
 
+            if (res.TerritoryIdentifier != null && res.TerritoryIdentifier.Equals("archived_system_status", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (res.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
             {
                 var pubId = res.PublicationId ?? Guid.NewGuid();
@@ -583,7 +609,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 string computedHash;
                 if (res.TerritoryIdentifier != null && res.TerritoryIdentifier.Equals("system_status", StringComparison.OrdinalIgnoreCase))
                 {
-                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(), null);
+                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(syncTime), null);
                 }
                 else
                 {
@@ -608,7 +634,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 string computedHash;
                 if (res.TerritoryIdentifier != null && res.TerritoryIdentifier.Equals("system_status", StringComparison.OrdinalIgnoreCase))
                 {
-                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(), null);
+                    computedHash = _hashCalculator.ComputeHash(_transformer.RenderSystemStatus(syncTime), null);
                 }
                 else
                 {

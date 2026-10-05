@@ -119,6 +119,28 @@ public static class WhatsAppContentFormatter
         return CleanOutput(sb.ToString());
     }
 
+    public static string RenderArchivedSystemStatus(DateTime utcTime, string previousDateStr)
+    {
+        var localTime = utcTime.AddHours(3);
+        var sb = new StringBuilder();
+        sb.AppendLine($"Останнє оновлення журналу: *{localTime:HH:mm}*");
+
+        if (DateTime.TryParse(previousDateStr, out var dt) ||
+            DateTime.TryParseExact(previousDateStr, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
+        {
+            string day = dt.Day.ToString();
+            string month = dt.Month >= 1 && dt.Month <= 12 ? UkrainianMonthGenitive[dt.Month] : dt.Month.ToString();
+            string year = dt.Year.ToString();
+            sb.AppendLine($"{day} {month} {year} року");
+        }
+        else
+        {
+            sb.AppendLine(previousDateStr);
+        }
+
+        return CleanOutput(sb.ToString());
+    }
+
     public static string RenderTerritoryPost(AggregatedTerritoryData data, bool isTomorrow = false, string? tomorrowDate = null)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));

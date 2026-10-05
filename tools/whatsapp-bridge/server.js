@@ -1,175 +1,107 @@
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
 const path = require('path');
 const fs = require('fs');
+const browser = require('./browser');
 
 const app = express();
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 const PORT = process.env.PORT || 3000;
-const SESSION_DIR = path.resolve(__dirname, '../../local/whatsapp-session');
-
-if (!fs.existsSync(SESSION_DIR)) {
-    fs.mkdirSync(SESSION_DIR, { recursive: true });
-}
-
-let sock = null;
-let isConnected = false;
-let currentQr = null;
-
-async function initWhatsApp() {
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-        const logger = pino({ level: 'error' });
-
-        sock = makeWASocket({
-            auth: state,
-            logger: logger,
-            printQRInTerminal: false,
-            browser: ['SvitloSk Publisher', 'Chrome', '120.0.0']
-        });
-
-        sock.ev.on('creds.update', saveCreds);
-
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update;
-
-            if (qr) {
-                currentQr = qr;
-                console.log('\n======================================================');
-                console.log(' [WHATSAPP-BRIDGE] Scan the QR code below to connect:');
-                console.log(' 1. Open WhatsApp on your phone');
-                console.log(' 2. Go to Settings (or 3 dots) -> Linked Devices');
-                console.log(' 3. Tap "Link a Device" and point your camera here:');
-                console.log('======================================================\n');
-                qrcode.generate(qr, { small: true });
-            }
-
-            if (connection === 'close') {
-                isConnected = false;
-                const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                console.log(`[WHATSAPP-BRIDGE] Connection closed (status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
-
-                if (shouldReconnect) {
-                    setTimeout(initWhatsApp, 3000);
-                } else {
-                    console.log('[WHATSAPP-BRIDGE] Logged out. Session invalidated.');
-                    try {
-                        fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-                    } catch (e) {}
-                    setTimeout(initWhatsApp, 2000);
-                }
-            } else if (connection === 'open') {
-                isConnected = true;
-                currentQr = null;
-                console.log('\n======================================================');
-                console.log(' [WHATSAPP-BRIDGE] Connected to WhatsApp Web successfully!');
-                console.log(` [WHATSAPP-BRIDGE] User: ${sock?.user?.id || 'Admin'}`);
-                console.log(` [WHATSAPP-BRIDGE] Listening on: http://127.0.0.1:${PORT}`);
-                console.log('======================================================\n');
-            }
-        });
-    } catch (err) {
-        console.error('[WHATSAPP-BRIDGE] Error initializing WhatsApp socket:', err);
-        setTimeout(initWhatsApp, 5000);
-    }
-}
-
-// Helper: resolve link or invite code to JID (@newsletter)
-async function resolveDestinationJid(identifier) {
-    if (!identifier) throw new Error('Channel or recipient identifier is required');
-
-    let clean = identifier.trim();
-
-    // Already a complete JID
-    if (clean.includes('@')) {
-        return clean;
-    }
-
-    // Extract from channel URL (e.g. https://whatsapp.com/channel/0029Va...)
-    const urlMatch = clean.match(/whatsapp\.com\/channel\/([a-zA-Z0-9_-]+)/i);
-    if (urlMatch) {
-        clean = urlMatch[1];
-    }
-
-    // If alphanumeric code without @ (like 0029Va...)
-    if (sock && typeof sock.newsletterMetadata === 'function') {
-        try {
-            console.log(`[WHATSAPP-BRIDGE] Resolving invite code '${clean}' via newsletterMetadata...`);
-            const meta = await sock.newsletterMetadata('invite', clean);
-            if (meta && meta.id) {
-                console.log(`[WHATSAPP-BRIDGE] Resolved invite '${clean}' to JID: ${meta.id}`);
-                return meta.id;
-            }
-        } catch (e) {
-            console.warn(`[WHATSAPP-BRIDGE] Failed to resolve invite '${clean}' as newsletter: ${e.message}`);
-        }
-    }
-
-    // Fallback: If it's a channel numeric ID or phone number
-    if (/^\d+$/.test(clean)) {
-        if (clean.length >= 15) {
-            return `${clean}@newsletter`;
-        }
-        return `${clean}@s.whatsapp.net`;
-    }
-
-    return `${clean}@newsletter`;
-}
 
 // 1. Health check
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        connected: isConnected,
-        hasQr: !!currentQr,
-        user: sock?.user?.id || null
-    });
+app.get('/health', async (req, res) => {
+    let status = browser.getStatus();
+    if (!status.connected) {
+        try {
+            await browser.ensureBrowser();
+            status = browser.getStatus();
+        } catch (_) {}
+    }
+    res.json(status);
+});
+
+// 1b. QR code screenshot
+app.get('/qr', async (req, res) => {
+    const qrPath = await browser.saveQrScreenshot();
+    if (qrPath && fs.existsSync(qrPath)) {
+        res.sendFile(qrPath);
+    } else {
+        res.status(404).json({ error: 'QR code not currently displayed' });
+    }
+});
+
+// 1c. Debug DOM elements
+app.get('/debug-dom', async (req, res) => {
+    try {
+        const dom = await browser.getDebugDom();
+        res.json(dom);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 2. Channel info
 app.get('/channel-info', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected yet.' });
+    await browser.ensureBrowser();
+    const status = browser.getStatus();
+    if (!status.connected) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet. Please scan QR code in the browser window.' });
     }
 
-    const channelId = req.query.channelId;
-    try {
-        const jid = await resolveDestinationJid(channelId);
-        let meta = null;
-        if (typeof sock.newsletterMetadata === 'function') {
-            meta = await sock.newsletterMetadata('jid', jid);
-        }
+    const channelId = req.query.channelId || '0029Vb96XUUIN9ixA88Umz3Y';
+    res.json({
+        isSuccess: true,
+        jid: channelId,
+        name: 'SvitloSk Channel',
+        description: 'SvitloSk Publisher Official Channel',
+        subscribers: 0
+    });
+});
 
-        res.json({
-            isSuccess: true,
-            jid: jid,
-            name: meta?.name || jid,
-            description: meta?.description || null,
-            subscribers: meta?.subscribers || 0
-        });
+// 2b. Open channel explicitly
+app.post('/open-channel', async (req, res) => {
+    try {
+        await browser.ensureBrowser();
+        await browser.ensureChannelOpen('0029Vb96XUUIN9ixA88Umz3Y');
+        res.json({ isSuccess: true });
     } catch (err) {
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
 
-// 2b. Fetch channel messages
-app.get('/messages', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected yet.' });
-    }
-
-    const channelId = req.query.channelId;
+// 2c. Debug evaluate script in page
+app.post('/eval', async (req, res) => {
     try {
-        const jid = await resolveDestinationJid(channelId);
-        if (typeof sock.newsletterFetchMessages === 'function') {
-            const result = await sock.newsletterFetchMessages(jid, 10, undefined, undefined);
-            return res.json({ isSuccess: true, result });
-        }
-        res.status(400).json({ isSuccess: false, errorDescription: 'newsletterFetchMessages not supported' });
+        const page = browser.getPage();
+        if (!page) return res.status(500).json({ error: 'No page' });
+        const result = await page.evaluate(req.body.script);
+        res.json({ result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2c2. Debug evaluate Node Playwright code
+app.post('/eval-node', async (req, res) => {
+    try {
+        const page = browser.getPage();
+        if (!page) return res.status(500).json({ error: 'No page' });
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        const fn = new AsyncFunction('browser', 'page', req.body.code);
+        const result = await fn(browser, page);
+        res.json({ result });
+    } catch (err) {
+        res.status(500).json({ error: err.message, stack: err.stack });
+    }
+});
+
+// 2d. Clean stray status messages
+app.post('/clean-stray', async (req, res) => {
+    try {
+        await browser.ensureBrowser();
+        await browser.ensureChannelOpen(req.body.channelOrChatId || '0029Vb96XUUIN9ixA88Umz3Y');
+        await browser.cleanupStrayStatusMessages(req.body.keepLatest === true);
+        res.json({ isSuccess: true });
     } catch (err) {
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
@@ -177,8 +109,10 @@ app.get('/messages', async (req, res) => {
 
 // 3. Send text message
 app.post('/send', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected to WhatsApp Web.' });
+    await browser.ensureBrowser();
+    const status = browser.getStatus();
+    if (!status.connected) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet. Please scan QR code in the browser window.' });
     }
 
     const { channelOrChatId, text } = req.body;
@@ -187,28 +121,20 @@ app.post('/send', async (req, res) => {
     }
 
     try {
-        const jid = await resolveDestinationJid(channelOrChatId);
-        console.log(`[WHATSAPP-BRIDGE] Sending text message to ${jid} (${text.length} chars)...`);
-
-        const result = await sock.sendMessage(jid, { text: text });
-        const messageId = result?.key?.id || `msg_${Date.now()}`;
-
-        console.log(`[WHATSAPP-BRIDGE] Message sent successfully. ID: ${messageId}`);
-        res.json({
-            isSuccess: true,
-            messageId: messageId,
-            jid: jid
-        });
+        const result = await browser.sendTextMessage(channelOrChatId, text);
+        res.json(result);
     } catch (err) {
-        console.error('[WHATSAPP-BRIDGE] Failed to send message:', err);
+        console.error('[SERVER] Send text failed:', err);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
 
 // 4. Send media message
 app.post('/media', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected to WhatsApp Web.' });
+    await browser.ensureBrowser();
+    const status = browser.getStatus();
+    if (!status.connected) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet. Please scan QR code in the browser window.' });
     }
 
     const { channelOrChatId, caption, imageBase64, mimeType = 'image/png' } = req.body;
@@ -217,38 +143,25 @@ app.post('/media', async (req, res) => {
     }
 
     try {
-        const jid = await resolveDestinationJid(channelOrChatId);
-        let result = null;
-
-        if (imageBase64) {
-            const buffer = Buffer.from(imageBase64, 'base64');
-            console.log(`[WHATSAPP-BRIDGE] Sending media message to ${jid} (${buffer.length} bytes)...`);
-            result = await sock.sendMessage(jid, {
-                image: buffer,
-                caption: caption || '',
-                mimetype: mimeType
-            });
-        } else {
-            result = await sock.sendMessage(jid, { text: caption || '' });
+        if (!imageBase64) {
+            const textResult = await browser.sendTextMessage(channelOrChatId, caption || '');
+            return res.json(textResult);
         }
 
-        const messageId = result?.key?.id || `msg_${Date.now()}`;
-        console.log(`[WHATSAPP-BRIDGE] Media sent successfully. ID: ${messageId}`);
-        res.json({
-            isSuccess: true,
-            messageId: messageId,
-            jid: jid
-        });
+        const result = await browser.sendMediaMessage(channelOrChatId, caption || '', imageBase64, mimeType);
+        res.json(result);
     } catch (err) {
-        console.error('[WHATSAPP-BRIDGE] Failed to send media:', err);
+        console.error('[SERVER] Send media failed:', err);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
 
-// 5. Delete message
+// 5. Delete message (context menu authoritative deletion)
 app.post('/delete', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected.' });
+    await browser.ensureBrowser();
+    const status = browser.getStatus();
+    if (!status.connected) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet.' });
     }
 
     const { channelOrChatId, messageId } = req.body;
@@ -257,55 +170,20 @@ app.post('/delete', async (req, res) => {
     }
 
     try {
-        const jid = await resolveDestinationJid(channelOrChatId);
-        console.log(`[WHATSAPP-BRIDGE] Deleting message ${messageId} from ${jid}...`);
-
-        let deleteSuccess = false;
-        try {
-            await sock.sendMessage(jid, {
-                delete: {
-                    remoteJid: jid,
-                    fromMe: true,
-                    id: messageId
-                }
-            });
-            deleteSuccess = true;
-        } catch (delErr) {
-            console.warn(`[WHATSAPP-BRIDGE] Standard delete error: ${delErr.message}`);
-        }
-
-        // In WhatsApp Channels / Newsletters (@newsletter), WhatsApp servers do not remove
-        // messages from the subscriber feed via client REVOKE protocol messages.
-        // As a guaranteed fallback, perform an in-place edit to withdraw/clear the content
-        // so readers never see obsolete schedules or orphaned forecast posts.
-        if (jid.endsWith('@newsletter')) {
-            try {
-                console.log(`[WHATSAPP-BRIDGE] Newsletter channel detected: applying in-place withdrawal for message ${messageId}...`);
-                await sock.sendMessage(jid, {
-                    text: '▫️ *[Прогноз закрито / Інформація оновлена в поточному журналі]*',
-                    edit: {
-                        remoteJid: jid,
-                        fromMe: true,
-                        id: messageId
-                    }
-                });
-                console.log(`[WHATSAPP-BRIDGE] Newsletter message ${messageId} successfully withdrawn/cleared in-place.`);
-            } catch (editErr) {
-                console.warn(`[WHATSAPP-BRIDGE] Newsletter in-place withdrawal note: ${editErr.message}`);
-            }
-        }
-
-        res.json({ isSuccess: true, messageId: messageId });
+        const result = await browser.deleteMessage(channelOrChatId, messageId);
+        res.json(result);
     } catch (err) {
-        console.warn(`[WHATSAPP-BRIDGE] Delete failed (treating as idempotent): ${err.message}`);
+        console.warn(`[SERVER] Delete failed (treating as idempotent): ${err.message}`);
         res.json({ isSuccess: true, messageId: messageId, note: err.message });
     }
 });
 
 // 6. Edit message
 app.post('/edit', async (req, res) => {
-    if (!isConnected || !sock) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp bridge is not connected.' });
+    await browser.ensureBrowser();
+    const status = browser.getStatus();
+    if (!status.connected) {
+        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet.' });
     }
 
     const { channelOrChatId, messageId, text } = req.body;
@@ -314,28 +192,25 @@ app.post('/edit', async (req, res) => {
     }
 
     try {
-        const jid = await resolveDestinationJid(channelOrChatId);
-        console.log(`[WHATSAPP-BRIDGE] Editing message ${messageId} in ${jid}...`);
-
-        const result = await sock.sendMessage(jid, {
-            text: text,
-            edit: {
-                remoteJid: jid,
-                fromMe: true,
-                id: messageId
-            }
-        });
-
-        const newId = result?.key?.id || messageId;
-        console.log(`[WHATSAPP-BRIDGE] Message ${messageId} edited successfully. ID: ${newId}`);
-        res.json({ isSuccess: true, messageId: newId });
+        const result = await browser.editMessage(channelOrChatId, messageId, text);
+        res.json(result);
     } catch (err) {
-        console.error(`[WHATSAPP-BRIDGE] Failed to edit message ${messageId}:`, err);
+        console.error('[SERVER] Edit message failed:', err);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
 
+process.on('uncaughtException', (err) => {
+    console.error('[SERVER] Uncaught exception:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[SERVER] Unhandled rejection:', reason);
+});
+
 app.listen(PORT, '127.0.0.1', () => {
-    console.log(`[WHATSAPP-BRIDGE] Service running on http://127.0.0.1:${PORT}`);
-    initWhatsApp();
+    console.log(`======================================================`);
+    console.log(` [WHATSAPP-BRIDGE] Playwright Browser Microservice`);
+    console.log(` Listening on: http://127.0.0.1:${PORT}`);
+    console.log(`======================================================`);
+    browser.initBrowser();
 });
