@@ -203,27 +203,40 @@ async function ensureChannelOpen(channelIdentifier) {
         throw new Error('WhatsApp Web is not authenticated yet. Please keep Chromium open and scan QR code if needed.');
     }
 
-    const composer = await page.$('div[data-testid="conversation-compose-box-input"], footer div[contenteditable="true"]');
-    const headerTitle = await page.$('header span[title*="SvitloSk"], header span:has-text("SvitloSk")');
-    if (composer && headerTitle) {
+    const composer = await page.$('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]');
+    const isChannelOpen = await page.evaluate(() => {
+        const headers = Array.from(document.querySelectorAll('header'));
+        const convHeader = headers.length > 1 ? headers[headers.length - 1] : headers[0];
+        return convHeader ? convHeader.innerText.includes('SvitloSk') : false;
+    });
+
+    if (composer && isChannelOpen) {
         await scrollToBottom();
         return;
     }
 
     console.log('[PLAYWRIGHT] Opening SvitloSk channel...');
-    // Click Channels icon on left rail
-    const railBtn = page.locator('button[aria-label="Каналы"], button[aria-label="Канали"], button[aria-label*="Channel"], span[data-icon*="newsletter"]').first();
-    const railVisible = await railBtn.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
-    if (railVisible) {
-        await railBtn.click({ force: true });
-        await page.waitForTimeout(1000);
+    // 1. Click Channels icon on left rail
+    const railHandle = await page.evaluateHandle(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        return btns.find(b => {
+            const label = (b.getAttribute('aria-label') || '').toLowerCase();
+            return label.includes('канал') || label.includes('channel') || b.querySelector('span[data-icon*="newsletter"]');
+        });
+    });
+    if (railHandle && railHandle.asElement()) {
+        await railHandle.asElement().click({ force: true });
+        await page.waitForTimeout(1500);
     }
 
-    // Click SvitloSk channel at top of list
-    const channelItem = page.locator('span').filter({ hasText: /^SvitloSk/ }).last();
-    const itemVisible = await channelItem.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
-    if (itemVisible) {
-        await channelItem.click({ force: true });
+    // 2. Click SvitloSk channel item
+    const itemHandle = await page.evaluateHandle(() => {
+        const spans = Array.from(document.querySelectorAll('span'));
+        return spans.find(s => s.innerText && s.innerText.includes('SvitloSk') && s.getBoundingClientRect().width < 350);
+    });
+    if (itemHandle && itemHandle.asElement()) {
+        await itemHandle.asElement().click({ force: true });
+        await page.waitForTimeout(2000);
     }
 
     // Wait for composer to appear
@@ -585,53 +598,73 @@ async function editMessage(channelIdentifier, messageId, newText) {
 
     let targetElement = null;
     if (messageId) {
-        targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"]`);
+        targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
+        if (!targetElement) {
+            for (let scrollAttempt = 0; scrollAttempt < 8; scrollAttempt++) {
+                await page.mouse.wheel(0, -800);
+                await page.waitForTimeout(400);
+                targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
+                if (targetElement) break;
+            }
+        }
+        if (targetElement) {
+            const rowHandle = await page.evaluateHandle(el => el.closest('div[role="row"], div.message-out') || el, targetElement);
+            if (rowHandle && rowHandle.asElement()) {
+                targetElement = rowHandle.asElement();
+            }
+        }
     }
 
     if (!targetElement) {
-        return { isSuccess: false, errorDescription: 'Message not found for edit (fallback to Delete+Send)' };
+        return { isSuccess: false, errorDescription: 'Message not found for edit' };
     }
 
-    await targetElement.hover();
-    await page.waitForTimeout(500);
+    try {
+        await targetElement.scrollIntoViewIfNeeded().catch(() => {});
+        await page.waitForTimeout(400);
+        await targetElement.hover().catch(() => {});
+        await page.waitForTimeout(300);
 
-    const contextBtn = await targetElement.$('span[data-icon="down-context"], span[data-icon="chevron-down"]');
-    if (!contextBtn) {
-        return { isSuccess: false, errorDescription: 'Context menu not available for edit' };
-    }
+        await targetElement.click({ button: 'right' });
+        await page.waitForTimeout(600);
 
-    await contextBtn.click();
-    await page.waitForTimeout(600);
-
-    const editMenuItem = await page.$('li:has-text("Редагувати"), div[role="button"]:has-text("Редагувати"), li:has-text("Edit"), div[role="button"]:has-text("Edit")');
-    if (!editMenuItem) {
-        await page.keyboard.press('Escape');
-        return { isSuccess: false, errorDescription: 'Edit menu item not available (past window or unsupported)' };
-    }
-
-    await editMenuItem.click();
-    await page.waitForTimeout(800);
-
-    // Edit input box appears
-    const editInput = await page.$('footer div[contenteditable="true"], div[role="textbox"]');
-    if (editInput) {
-        await editInput.focus();
-        await page.keyboard.press('Control+A');
-        await page.keyboard.press('Backspace');
-        await page.keyboard.insertText(newText);
-        await page.waitForTimeout(500);
-
-        const checkBtn = await page.$('span[data-icon="check"], button[aria-label="Підтвердити"], button[aria-label="Confirm"]');
-        if (checkBtn) {
-            await checkBtn.click();
-        } else {
-            await page.keyboard.press('Enter');
+        const editBtn = page.locator('span').filter({ hasText: /^Изменить$|^Редагувати$|^Edit$/ }).last();
+        const editVisible = await editBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+        if (!editVisible) {
+            await page.keyboard.press('Escape');
+            return { isSuccess: false, errorDescription: 'Edit menu item not available (past edit window or unsupported)' };
         }
-        await page.waitForTimeout(1500);
-        return { isSuccess: true, messageId: messageId };
-    }
 
-    return { isSuccess: false, errorDescription: 'Failed to access edit input' };
+        await editBtn.click({ force: true });
+        await page.waitForTimeout(800);
+
+        // Edit input box appears (footer or inline)
+        const editInput = page.locator('footer div[contenteditable="true"], div[role="textbox"]').last();
+        const inputVisible = await editInput.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+        if (inputVisible) {
+            await editInput.click({ force: true });
+            await page.keyboard.press('Control+A');
+            await page.keyboard.press('Backspace');
+            await page.keyboard.insertText(newText);
+            await page.waitForTimeout(500);
+
+            const checkBtn = page.locator('span[data-icon="check"], button[aria-label*="Підтвердити"], button[aria-label*="Готово"], button[aria-label*="Confirm"], button[aria-label*="Сохранить"]').first();
+            const checkVisible = await checkBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
+            if (checkVisible) {
+                await checkBtn.click({ force: true });
+            } else {
+                await page.keyboard.press('Enter');
+            }
+            await page.waitForTimeout(1500);
+            return { isSuccess: true, messageId: messageId };
+        }
+
+        await page.keyboard.press('Escape');
+        return { isSuccess: false, errorDescription: 'Failed to access edit input' };
+    } catch (e) {
+        await dismissOverlays();
+        return { isSuccess: false, errorDescription: e.message };
+    }
 }
 
 // Helper: Get latest message ID from the DOM

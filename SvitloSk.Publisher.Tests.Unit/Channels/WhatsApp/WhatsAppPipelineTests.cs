@@ -226,6 +226,35 @@ public class WhatsAppPipelineTests
         Assert.Equal("wa_new_msg_456", result.Results[0].ExternalMessageId);
     }
 
+    [Fact]
+    public async Task TC_DispatchAsync_JournalHeaderWithGraphic_WhenUpdateFails_RetainsExistingId_WithoutDeleteOrResend()
+    {
+        var mockAdapter = new FallbackMockWhatsAppAdapter();
+        var pipeline = new WhatsAppPipeline(mockAdapter, "test_channel_id");
+
+        var graphicBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(
+                DecisionResult.Update,
+                PublicationClassification.Persistent,
+                TerritoryIdentifier: "journal_header",
+                ExternalMessageId: "wa_existing_header_999",
+                TargetHash: "<b>Планові знеструмлення:</b> оновлений підсумок",
+                GraphicBytes: graphicBytes
+            )
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(mockAdapter.UpdateAttempted);
+        // CRITICAL INVARIANT: Anchor banners MUST NOT be deleted or resent at the bottom of the feed!
+        Assert.False(mockAdapter.DeleteCalled, "Delete must NOT be called for journal_header on failed update to avoid breaking channel order!");
+        Assert.False(mockAdapter.SendCalled, "Send must NOT be called for journal_header on failed update to avoid moving banner to bottom!");
+        Assert.Equal("wa_existing_header_999", result.Results[0].ExternalMessageId);
+    }
+
     private class FallbackMockWhatsAppAdapter : IWhatsAppAdapter
     {
         public bool UpdateAttempted { get; private set; }

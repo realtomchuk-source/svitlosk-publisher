@@ -169,7 +169,31 @@ public class WhatsAppPipeline : IChannelPipeline
                     string? existingId = decision.ExternalMessageId;
                     if (decision.GraphicBytes != null && decision.GraphicBytes.Length > 0)
                     {
-                        // Media messages cannot be edited in-place in WhatsApp; perform Delete + Resend
+                        // Media messages: Header banners (journal_header, tomorrow_separator) anchor sections
+                        // and MUST NEVER be deleted and resent at the bottom of the feed!
+                        // Deleting the top header banner and appending it at the bottom destroys the
+                        // chronological hierarchy of the channel (putting the header AFTER territory posts).
+                        if (!string.IsNullOrEmpty(existingId))
+                        {
+                            result = await _whatsappAdapter.UpdateTextMessageAsync(channelId, existingId, formattedContent, cancellationToken).ConfigureAwait(false);
+                            if (result.IsSuccess)
+                            {
+                                break;
+                            }
+                        }
+
+                        // If in-place caption edit failed or is unavailable, DO NOT delete and resend if it is an anchor banner!
+                        // Preserving the header at position #1 is vital for channel readability.
+                        if (decision.TerritoryIdentifier != null &&
+                            (decision.TerritoryIdentifier.Equals("journal_header", StringComparison.OrdinalIgnoreCase) ||
+                             decision.TerritoryIdentifier.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            Console.WriteLine($"[INFO][WhatsApp] In-place edit for header '{decision.TerritoryIdentifier}' ({existingId}) was not available. Retaining existing header at original position to preserve channel feed order.");
+                            result = new WhatsAppDispatchResult(true, existingId, null, false);
+                            break;
+                        }
+
+                        // For non-anchor media, perform Delete + Resend rollover
                         if (!string.IsNullOrEmpty(existingId))
                         {
                             await _whatsappAdapter.DeleteMessageAsync(channelId, existingId, cancellationToken).ConfigureAwait(false);
