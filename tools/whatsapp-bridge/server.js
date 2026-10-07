@@ -173,8 +173,8 @@ app.post('/delete', async (req, res) => {
         const result = await browser.deleteMessage(channelOrChatId, messageId);
         res.json(result);
     } catch (err) {
-        console.warn(`[SERVER] Delete failed (treating as idempotent): ${err.message}`);
-        res.json({ isSuccess: true, messageId: messageId, note: err.message });
+        console.warn(`[SERVER] Delete failed: ${err.message}`);
+        res.status(500).json({ isSuccess: false, messageId: messageId, errorDescription: err.message });
     }
 });
 

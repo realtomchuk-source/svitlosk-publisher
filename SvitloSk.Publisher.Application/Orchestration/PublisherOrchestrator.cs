@@ -174,31 +174,14 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 {
                     if (!isPersistent && pubState != PublicationState.Removed && (!string.IsNullOrEmpty(pubRecord.ExternalMessageId) || pubRecord.TelegramMessageId.HasValue))
                     {
-                        if (isWhatsApp && pubRecord.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // In WhatsApp channel:
-                            // Transform yesterday's technical status into an archived status post with previous date
-                            string archivedContent = _transformer.RenderArchivedSystemStatus(syncTime, registry.EditionDate);
-                            rolloverCleanupDecisions.Add(new EditorialDecision(
-                                DecisionResult.Update,
-                                PublicationClassification.Ephemeral,
-                                pubRecord.PublisherArtifactId,
-                                "archived_system_status",
-                                archivedContent,
-                                pubRecord.ExternalMessageId
-                            ));
-                        }
-                        else
-                        {
-                            rolloverCleanupDecisions.Add(new EditorialDecision(
-                                DecisionResult.Delete,
-                                PublicationClassification.Ephemeral,
-                                pubRecord.PublisherArtifactId,
-                                pubRecord.TerritoryId,
-                                null,
-                                pubRecord.ExternalMessageId ?? pubRecord.TelegramMessageId?.ToString()
-                            ) { TelegramMessageId = pubRecord.TelegramMessageId });
-                        }
+                        rolloverCleanupDecisions.Add(new EditorialDecision(
+                            DecisionResult.Delete,
+                            PublicationClassification.Ephemeral,
+                            pubRecord.PublisherArtifactId,
+                            pubRecord.TerritoryId,
+                            null,
+                            pubRecord.ExternalMessageId ?? pubRecord.TelegramMessageId?.ToString()
+                        ) { TelegramMessageId = pubRecord.TelegramMessageId });
                     }
                 }
                 else

@@ -269,10 +269,6 @@ public class WhatsAppPipeline : IChannelPipeline
 
         string territory = d.TerritoryIdentifier ?? string.Empty;
 
-        // Rollover archived status (yesterday's status transformed in-place)
-        if (territory.Equals("archived_system_status", StringComparison.OrdinalIgnoreCase))
-            return 0;
-
         if (territory.Equals("journal_header", StringComparison.OrdinalIgnoreCase))
             return 1;
 

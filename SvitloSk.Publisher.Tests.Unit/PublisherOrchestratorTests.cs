@@ -1315,15 +1315,12 @@ public class PublisherOrchestratorTests : IDisposable
         var resultDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "12036304@newsletter", inputDay2);
         Assert.True(resultDay2.IsSuccess);
 
-        // Verify that yesterday's system_status was transformed into archived_system_status in rollover
-        var updateResults = resultDay2.Results.Where(r => r.DecisionResult == "Update").ToList();
-        Assert.Contains(updateResults, r => r.TerritoryIdentifier == "archived_system_status");
-
-        // Verify that yesterday's ephemeral tomorrow forecasts were deleted on rollover
+        // Verify that yesterday's ephemeral publications (tomorrow forecasts & system_status) were deleted on rollover
         var deleteResults = resultDay2.Results.Where(r => r.DecisionResult == "Delete").ToList();
         Assert.NotEmpty(deleteResults);
         Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_separator");
         Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "tomorrow_starokostiantyniv");
+        Assert.Contains(deleteResults, r => r.TerritoryIdentifier == "system_status");
 
         // Verify that Day 2 registry has a fresh active system_status
         var reg2 = fakeRegistryStore.CurrentModel;

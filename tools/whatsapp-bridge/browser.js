@@ -492,7 +492,7 @@ async function cleanupStrayStatusMessages(keepLatest = false) {
         const statusRows = [];
         for (let i = 0; i < rows.length; i++) {
             const text = await rows[i].innerText().catch(() => '');
-            if ((text.includes('Останнє оновлення журналу:') || text.includes('Стан моніторингу:')) && !text.includes('Архівний')) {
+            if (text.includes('Останнє оновлення журналу:') || text.includes('Стан моніторингу:')) {
                 statusRows.push(rows[i]);
             }
         }
@@ -507,7 +507,7 @@ async function cleanupStrayStatusMessages(keepLatest = false) {
             let targetRow = null;
             for (let r = 0; r < currentRows.length; r++) {
                 const t = await currentRows[r].innerText().catch(() => '');
-                if ((t.includes('Останнє оновлення журналу:') || t.includes('Стан моніторингу:')) && !t.includes('Архівний')) {
+                if (t.includes('Останнє оновлення журналу:') || t.includes('Стан моніторингу:')) {
                     targetRow = currentRows[r];
                     break;
                 }
@@ -535,11 +535,14 @@ async function deleteMessage(channelIdentifier, messageId) {
     if (messageId && !messageId.includes('status')) {
         targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
 
-        // If not found in current viewport, scroll up to search virtual list
+        // If not found in current viewport, hover over chat area and scroll up to search virtual list
         if (!targetElement) {
-            for (let scrollAttempt = 0; scrollAttempt < 8; scrollAttempt++) {
-                await page.mouse.wheel(0, -800);
-                await page.waitForTimeout(400);
+            const chatPanel = await page.$('#main, div[data-testid="conversation-panel-messages"]');
+            if (chatPanel) await chatPanel.hover().catch(() => {});
+
+            for (let scrollAttempt = 0; scrollAttempt < 15; scrollAttempt++) {
+                await page.mouse.wheel(0, -900);
+                await page.waitForTimeout(300);
                 targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
                 if (targetElement) break;
             }
@@ -560,7 +563,7 @@ async function deleteMessage(channelIdentifier, messageId) {
         const tailRows = rows.slice(-5);
         for (let i = tailRows.length - 1; i >= 0; i--) {
             const text = await tailRows[i].innerText().catch(() => '');
-            if ((text.includes('Останнє оновлення журналу:') || text.includes('Стан моніторингу:')) && !text.includes('Архівний')) {
+            if (text.includes('Останнє оновлення журналу:') || text.includes('Стан моніторингу:')) {
                 targetElement = tailRows[i];
                 break;
             }
@@ -577,17 +580,16 @@ async function deleteMessage(channelIdentifier, messageId) {
     }
 
     if (!targetElement) {
-        console.warn(`[PLAYWRIGHT] Message ${messageId} was not found on screen. Treating deletion as idempotent.`);
-        return { isSuccess: true, messageId: messageId, note: 'Message not found, already deleted.' };
+        console.warn(`[PLAYWRIGHT] Message ${messageId} was not found on screen.`);
+        return { isSuccess: false, messageId: messageId, errorDescription: 'Message not found on screen' };
     }
 
     const success = await deleteMessageRow(targetElement);
     if (success) {
         console.log(`[PLAYWRIGHT] Confirmed message deletion for ${messageId}.`);
         return { isSuccess: true, messageId: messageId };
-    } else {
-        return { isSuccess: false, errorDescription: 'Failed to delete message via context menu' };
     }
+    return { isSuccess: false, errorDescription: 'Failed to delete message via context menu' };
 }
 
 // 4. Edit Message (In-place edit or fallback signal)
