@@ -45,6 +45,22 @@ public class WhatsAppPipeline : IChannelPipeline
         int totalProcessed = 0;
         int totalSuccessful = 0;
 
+        // Pre-flight sweep: Ensure obsolete tomorrow forecast posts (date <= today) and previous day strays are cleanly purged
+        string? todayDateStr = decisions.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.ScheduleDate))?.ScheduleDate;
+        if (string.IsNullOrEmpty(todayDateStr))
+        {
+            todayDateStr = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-dd");
+        }
+
+        try
+        {
+            await _whatsappAdapter.SweepObsoleteForecastsAsync(_channelId, todayDateStr, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception sweepEx)
+        {
+            Console.WriteLine($"[WARNING][WhatsAppPipeline] Pre-flight sweep failed gracefully: {sweepEx.Message}");
+        }
+
         // Order decisions strictly: Rollover -> Journal Header -> City (Priority #1) -> Okruhs -> Tomorrow -> Graphic -> System Status
         var orderedDecisions = OrderDecisionsWithCityPriority(decisions);
 

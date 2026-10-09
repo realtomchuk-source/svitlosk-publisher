@@ -14,8 +14,10 @@ namespace SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 public class WhatsAppDryRunAdapter : IWhatsAppAdapter
 {
     private readonly ConcurrentBag<string> _dispatchedMessages = new();
+    private readonly ConcurrentBag<string> _sweepOperations = new();
 
     public IReadOnlyCollection<string> DispatchedMessages => _dispatchedMessages;
+    public IReadOnlyCollection<string> SweepOperations => _sweepOperations;
 
     public Task<WhatsAppDispatchResult> SendTextMessageAsync(
         string channelOrChatId,
@@ -68,5 +70,15 @@ public class WhatsAppDryRunAdapter : IWhatsAppAdapter
     {
         Console.WriteLine($"[DryRun][WhatsApp] CheckChannelAccessAsync for '{channelOrChatId}' -> OK");
         return Task.FromResult(new WhatsAppDispatchResult(true, ErrorDescription: $"Connected to WhatsApp Channel '{channelOrChatId}' (DryRun)"));
+    }
+
+    public Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(
+        string channelOrChatId,
+        string todayDate,
+        CancellationToken cancellationToken = default)
+    {
+        _sweepOperations.Add($"[SWEEP] To: {channelOrChatId} | TodayDate: {todayDate}");
+        Console.WriteLine($"[DryRun][WhatsApp] SweepObsoleteForecastsAsync for '{channelOrChatId}' (Date: {todayDate})");
+        return Task.FromResult(new WhatsAppDispatchResult(true, null, "DryRun sweep simulated successfully"));
     }
 }

@@ -289,5 +289,27 @@ public class WhatsAppPipelineTests
         {
             return Task.FromResult(new WhatsAppDispatchResult(true));
         }
+
+        public Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(string channelOrChatId, string todayDate, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new WhatsAppDispatchResult(true));
+        }
+    }
+
+    [Fact]
+    public async Task TC_DispatchAsync_TriggersPreFlightSweep_BeforeDispatchingDecisions()
+    {
+        var dryRunAdapter = new WhatsAppDryRunAdapter();
+        var pipeline = new WhatsAppPipeline(dryRunAdapter, "test_channel_id");
+
+        var decisions = new List<EditorialDecision>
+        {
+            new EditorialDecision(DecisionResult.Create, PublicationClassification.Persistent, TerritoryIdentifier: "journal_header", TargetHash: "<b>Заголовок</b>", ScheduleDate: "2026-10-09")
+        };
+
+        var result = await pipeline.DispatchAsync(decisions, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains(dryRunAdapter.SweepOperations, m => m.Contains("[SWEEP]") && m.Contains("TodayDate: 2026-10-09"));
     }
 }

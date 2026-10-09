@@ -107,6 +107,20 @@ app.post('/clean-stray', async (req, res) => {
     }
 });
 
+// 2e. Pre-flight sweep for obsolete forecasts
+app.post('/sweep-forecasts', async (req, res) => {
+    try {
+        await browser.ensureBrowser();
+        const channelId = req.body.channelOrChatId || '0029Vb96XUUIN9ixA88Umz3Y';
+        const todayDate = req.body.todayDate || new Date().toISOString().slice(0, 10);
+        const result = await browser.sweepObsoleteForecasts(channelId, todayDate);
+        res.json(result);
+    } catch (err) {
+        console.warn(`[SERVER] Sweep forecasts failed: ${err.message}`);
+        res.status(500).json({ isSuccess: false, errorDescription: err.message });
+    }
+});
+
 // 3. Send text message
 app.post('/send', async (req, res) => {
     await browser.ensureBrowser();

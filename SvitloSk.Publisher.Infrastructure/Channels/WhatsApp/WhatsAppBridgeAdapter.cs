@@ -107,6 +107,24 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
         return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(
+        string channelOrChatId,
+        string todayDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelOrChatId))
+            throw new ArgumentException("Channel identifier cannot be null or empty.", nameof(channelOrChatId));
+
+        var url = $"{_bridgeBaseUrl}/sweep-forecasts";
+        var payload = new
+        {
+            channelOrChatId = channelOrChatId,
+            todayDate = todayDate
+        };
+
+        return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<WhatsAppDispatchResult> CheckChannelAccessAsync(
         string channelOrChatId,
         CancellationToken cancellationToken = default)

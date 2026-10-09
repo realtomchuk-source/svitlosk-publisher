@@ -237,6 +237,15 @@ public class WhatsAppCloudApiClient : IWhatsAppAdapter
         }
     }
 
+    public Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(
+        string channelOrChatId,
+        string todayDate,
+        CancellationToken cancellationToken = default)
+    {
+        // WhatsApp Cloud API doesn't support scraping feed; no-op
+        return Task.FromResult(new WhatsAppDispatchResult(true, null, "Cloud API sweep no-op"));
+    }
+
     private async Task<WhatsAppDispatchResult> SendJsonRequestAsync(string url, object payload, CancellationToken cancellationToken)
     {
         try

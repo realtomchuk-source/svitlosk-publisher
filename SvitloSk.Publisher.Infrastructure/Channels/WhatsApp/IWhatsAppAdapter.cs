@@ -44,4 +44,9 @@ public interface IWhatsAppAdapter
     Task<WhatsAppDispatchResult> CheckChannelAccessAsync(
         string channelOrChatId,
         CancellationToken cancellationToken = default);
+
+    Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(
+        string channelOrChatId,
+        string todayDate,
+        CancellationToken cancellationToken = default);
 }

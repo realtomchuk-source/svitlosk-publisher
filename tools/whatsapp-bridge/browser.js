@@ -435,48 +435,60 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
     }
 }
 
-// Helper: Delete a single DOM message element via context menu
-async function deleteMessageRow(targetElement) {
+// Helper: Delete a single DOM message element via context menu or selection bar
+async function deleteMessageRow(targetElement, messageId = null) {
     if (!targetElement) return false;
 
     try {
+        await dismissOverlays();
         await targetElement.scrollIntoViewIfNeeded().catch(() => {});
         await page.waitForTimeout(400);
 
-        await targetElement.hover().catch(() => {});
+        const bubble = await targetElement.$('div[data-testid="msg-container"], div[data-testid="image-thumb"], img') || targetElement;
+        await bubble.hover().catch(() => {});
         await page.waitForTimeout(300);
 
-        await targetElement.click({ button: 'right' });
+        await bubble.click({ button: 'right' });
         await page.waitForTimeout(600);
 
-        const deleteBtn = page.locator('span').filter({ hasText: /^Удалить$|^Видалити$|^Delete$/ }).last();
-        const deleteVisible = await deleteBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
-        if (!deleteVisible) {
+        const delMenuItem = page.locator('button[role="menuitem"], div[role="button"], li').filter({ hasText: /Удалить|Видалити|Delete/i }).last();
+        const isMenuVis = await delMenuItem.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+        if (!isMenuVis) {
             await page.keyboard.press('Escape');
             return false;
         }
 
-        await deleteBtn.click({ force: true });
+        await delMenuItem.click({ force: true });
         await page.waitForTimeout(800);
 
-        // Find trash icon in the bottom selection bar
-        const trashBtn = page.locator('button[aria-label="Удалить"], button[aria-label*="Удалить"], button[aria-label="Видалити"], button[aria-label="Delete"], span[data-icon="delete"]').last();
-        const trashVisible = await trashBtn.waitFor({ state: 'visible', timeout: 2500 }).then(() => true).catch(() => false);
-        if (trashVisible) {
+        // Find trash icon in the bottom selection bar if selection mode was triggered
+        const trashBtn = page.locator('button[aria-label*="Удалить"], button[aria-label*="Видалити"], button[aria-label="Delete"], span[data-icon="delete"]').last();
+        const isTrashVis = await trashBtn.waitFor({ state: 'visible', timeout: 1500 }).then(() => true).catch(() => false);
+        if (isTrashVis) {
             await trashBtn.click({ force: true });
             await page.waitForTimeout(800);
         }
 
-        const confirmBtn = page.locator('button').filter({ hasText: /Удалить у|Видалити для|Delete for everyone|Удалить|Видалити/ }).first();
-        const confirmVisible = await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
-        if (confirmVisible) {
-            await confirmBtn.click({ force: true });
-            await page.waitForTimeout(1500);
-            return true;
-        } else {
+        const confirmBtn = page.locator('div[role="dialog"] button, div[role="alertdialog"] button').filter({ hasText: /Удалить у всех|Видалити для всіх|Delete for everyone|Удалить|Видалити/i }).last();
+        const isConfirmVis = await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+        if (!isConfirmVis) {
             await dismissOverlays();
             return false;
         }
+
+        await confirmBtn.click({ force: true });
+        await page.waitForTimeout(1500);
+
+        // Verification: confirm the element is actually removed from the DOM
+        if (messageId) {
+            const stillPresent = await page.locator(`div[data-id*="${messageId}"], [data-id*="${messageId}"]`).count() > 0;
+            if (stillPresent) {
+                console.warn(`[PLAYWRIGHT] Element '${messageId}' is still present after delete attempt.`);
+                return false;
+            }
+        }
+
+        return true;
     } catch (e) {
         console.warn('[PLAYWRIGHT] deleteMessageRow error:', e.message);
         await dismissOverlays();
@@ -523,6 +535,57 @@ async function cleanupStrayStatusMessages(keepLatest = false) {
     }
 }
 
+// Pre-flight sweep for obsolete tomorrow forecasts (date <= todayDate)
+async function sweepObsoleteForecasts(channelIdentifier, todayDateStr) {
+    await ensureChannelOpen(channelIdentifier);
+    console.log(`[PLAYWRIGHT] Executing pre-flight sweep for obsolete forecast messages (Today: ${todayDateStr})...`);
+
+    await cleanupStrayStatusMessages(false);
+
+    const chatPanel = await page.$('#main, div[data-testid="conversation-panel-messages"]');
+    if (chatPanel) await chatPanel.hover().catch(() => {});
+    for (let s = 0; s < 6; s++) {
+        await page.mouse.wheel(0, -900);
+        await page.waitForTimeout(300);
+    }
+
+    const rows = await page.$$('div[role="row"]');
+    const toDeleteMsgIds = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const text = await rows[i].innerText().catch(() => '');
+        if (!text) continue;
+
+        if (text.includes('ПРОГНОЗ НА ЗАВТРА') || text.includes('ПРОГНОЗ ЗНЕСТРУМЛЕНЬ')) {
+            const match = text.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/);
+            let isObsolete = true;
+            if (match && todayDateStr) {
+                const postDate = `${match[3]}-${match[2]}-${match[1]}`;
+                if (postDate > todayDateStr) {
+                    isObsolete = false;
+                }
+            }
+
+            if (isObsolete) {
+                const dataId = await rows[i].getAttribute('data-id') ||
+                               await rows[i].$eval('[data-id]', el => el.getAttribute('data-id')).catch(() => null);
+                if (dataId) {
+                    toDeleteMsgIds.push(dataId);
+                }
+            }
+        }
+    }
+
+    for (const msgId of toDeleteMsgIds) {
+        console.log(`[PLAYWRIGHT] Pre-flight sweep: deleting obsolete forecast message '${msgId}'...`);
+        await deleteMessage(channelIdentifier, msgId);
+        await page.waitForTimeout(600);
+    }
+
+    await scrollToBottom();
+    return { isSuccess: true, deletedCount: toDeleteMsgIds.length };
+}
+
 // 3. Delete Message via Context Menu
 async function deleteMessage(channelIdentifier, messageId) {
     await ensureChannelOpen(channelIdentifier);
@@ -533,21 +596,19 @@ async function deleteMessage(channelIdentifier, messageId) {
 
     // A. Look by message ID attribute if available
     if (messageId && !messageId.includes('status')) {
-        targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
-
-        // If not found in current viewport, hover over chat area and scroll up to search virtual list
-        if (!targetElement) {
+        const msgLocator = page.locator(`div[data-id*="${messageId}"], [data-id*="${messageId}"]`).first();
+        if (await msgLocator.count() === 0) {
             const chatPanel = await page.$('#main, div[data-testid="conversation-panel-messages"]');
             if (chatPanel) await chatPanel.hover().catch(() => {});
 
             for (let scrollAttempt = 0; scrollAttempt < 15; scrollAttempt++) {
                 await page.mouse.wheel(0, -900);
                 await page.waitForTimeout(300);
-                targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
-                if (targetElement) break;
+                if (await page.locator(`div[data-id*="${messageId}"], [data-id*="${messageId}"]`).count() > 0) break;
             }
         }
 
+        targetElement = await page.$(`div[data-id*="${messageId}"], div[data-id$="${messageId}"], [data-id*="${messageId}"]`);
         if (targetElement) {
             const rowHandle = await page.evaluateHandle(el => el.closest('div[role="row"], div.message-out') || el, targetElement);
             if (rowHandle && rowHandle.asElement()) {
@@ -580,16 +641,16 @@ async function deleteMessage(channelIdentifier, messageId) {
     }
 
     if (!targetElement) {
-        console.warn(`[PLAYWRIGHT] Message ${messageId} was not found on screen.`);
-        return { isSuccess: false, messageId: messageId, errorDescription: 'Message not found on screen' };
+        console.warn(`[PLAYWRIGHT] Message ${messageId} was not found on screen. Treating deletion as idempotent.`);
+        return { isSuccess: true, messageId: messageId, note: 'Message not found, already deleted.' };
     }
 
-    const success = await deleteMessageRow(targetElement);
+    const success = await deleteMessageRow(targetElement, messageId);
     if (success) {
         console.log(`[PLAYWRIGHT] Confirmed message deletion for ${messageId}.`);
         return { isSuccess: true, messageId: messageId };
     }
-    return { isSuccess: false, errorDescription: 'Failed to delete message via context menu' };
+    return { isSuccess: false, messageId: messageId, errorDescription: 'Failed to delete message via context menu' };
 }
 
 // 4. Edit Message (In-place edit or fallback signal)
@@ -746,5 +807,6 @@ module.exports = {
     getStatus,
     getDebugDom,
     cleanupStrayStatusMessages,
+    sweepObsoleteForecasts,
     getPage: () => page
 };
