@@ -250,7 +250,7 @@ async function ensureChannelOpen(channelIdentifier) {
 async function dismissOverlays() {
     try {
         // 1. If there's an open confirmation dialog or modal, check if it has a cancel or reset button
-        const cancelModal = await page.$('div[role="dialog"] button[aria-label*="Отмен"], div[role="dialog"] button:has-text("Отмена"), div[role="dialog"] button:has-text("Скасувати"), div[role="dialog"] button:has-text("Cancel"), button:has-text("Сбросить"), div[role="button"]:has-text("Сбросить"), button:has-text("Скинути")');
+        const cancelModal = await page.$('div[role="dialog"] button[aria-label*="Отмен"], div[role="dialog"] button:has-text("Отмена"), div[role="dialog"] button:has-text("Скасувати"), div[role="dialog"] button:has-text("Cancel")');
         if (cancelModal) {
             console.log('[PLAYWRIGHT] Dismissing open modal dialog...');
             await cancelModal.click({ force: true }).catch(() => {});
@@ -258,27 +258,26 @@ async function dismissOverlays() {
         }
 
         // 2. If in media preview dialog (close via 'x-alt' icon)
-        const closePreview = await page.$('span[data-icon="x-alt"], span[data-icon="x"]');
+        const closePreview = await page.$('div[data-animate-modal-popup] span[data-icon="x-alt"], div[data-animate-modal-popup] span[data-icon="x"]');
         if (closePreview) {
             await closePreview.click({ force: true }).catch(() => {});
-            await page.waitForTimeout(300);
-            const resetBtn = await page.$('button:has-text("Сбросить"), div[role="button"]:has-text("Сбросить"), button:has-text("Скинути")');
-            if (resetBtn) await resetBtn.click({ force: true }).catch(() => {});
             await page.waitForTimeout(300);
         }
 
         // 3. If in message multi-select deletion mode (bottom bar)
-        const cancelSelect = await page.$('button[aria-label*="Отмен"], button[aria-label*="Скасув"], button[aria-label*="Cancel"], button[data-tab="10"][aria-label*="Отменить"], span[data-icon="cancel"], span[data-icon="x"]');
+        const cancelSelect = await page.$('button[aria-label*="Отмен"], button[aria-label*="Скасув"], button[aria-label*="Cancel"], button:has(span[data-icon="cancel"]), button:has(span[data-icon="x"])');
         if (cancelSelect) {
             console.log('[PLAYWRIGHT] Dismissing selection mode...');
             await cancelSelect.click({ force: true }).catch(() => {});
             await page.waitForTimeout(300);
         }
 
-        // 4. Press Escape twice to clear context menus or overlays
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(200);
-        await page.keyboard.press('Escape');
+        // 4. Press Escape ONLY if a context menu or popup menu is active to avoid closing the channel
+        const activeMenu = await page.$('div[role="application"], div[role="menu"], ul[role="menu"], div[data-testid="context-menu"]');
+        if (activeMenu) {
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(200);
+        }
     } catch (_) {}
 }
 
@@ -343,7 +342,7 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         await dismissOverlays();
 
         // 1. Locate and click attachment button (paperclip)
-        const attachSelector = 'footer button[aria-label*="Прикреп"], footer button[aria-label*="Вклас"], footer button[aria-label*="Attach"], footer span[data-icon="ic-attach-file"], footer button:has(span[data-icon="clip"]), button[aria-label*="Attach"], div[role="button"][aria-label*="Attach"]';
+        const attachSelector = 'footer button[aria-label*="Прикреп"], footer button[aria-label*="Вклас"], footer button[aria-label*="Attach"], footer span[data-icon="ic-attach-file"], footer button:has(span[data-icon="clip"]), button:has(span[data-icon="ic-attach-file"]), [data-icon="ic-attach-file"]';
         const attachBtn = page.locator(attachSelector).first();
         const attachVisible = await attachBtn.waitFor({ state: 'visible', timeout: 7000 }).then(() => true).catch(() => false);
 
@@ -354,8 +353,8 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         await attachBtn.click({ force: true });
         await page.waitForTimeout(600);
 
-        // 2. Locate "Photos & videos" option in attachment menu
-        const photoSelector = 'button[role="menuitem"][aria-label*="Фото"], button[role="menuitem"][aria-label*="Photo"], li:has-text("Фото"), div[role="button"]:has-text("Фото"), div[role="button"]:has-text("Photo")';
+        // 2. Locate "Photos & videos" option in attachment menu (first menu item)
+        const photoSelector = 'div[role="menu"] button[role="menuitem"]:has-text("Фото"), div[role="menu"] button[role="menuitem"]:has-text("Photo"), div[role="menu"] button[role="menuitem"]:first-child, button[role="menuitem"][aria-label*="Фото"], button[role="menuitem"][aria-label*="Photo"], button[role="menuitem"]:first-child';
         const photoBtn = page.locator(photoSelector).first();
         const photoVisible = await photoBtn.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
 
@@ -378,12 +377,11 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         if (caption && caption.trim().length > 0) {
             try {
                 console.log(`[PLAYWRIGHT] Setting inline caption on banner (${caption.length} chars)...`);
-                const captionInput = page.locator('div[data-testid="media-caption-input-container"]');
+                const captionSelector = 'div[aria-autocomplete="list"][role="textbox"], div[aria-label*="обновлен"], div[aria-label*="caption"], div[aria-label*="підпис"], div[data-testid="media-caption-input-container"] div[contenteditable="true"], div[data-animate-modal-popup] div[contenteditable="true"]';
+                const captionInput = page.locator(captionSelector).first();
                 await captionInput.waitFor({ state: 'visible', timeout: 7000 });
                 await captionInput.click({ force: true });
-                await page.waitForTimeout(200);
-                await page.keyboard.press('Control+A');
-                await page.keyboard.press('Backspace');
+                await page.waitForTimeout(300);
                 await page.keyboard.insertText(caption);
                 await page.waitForTimeout(400);
 

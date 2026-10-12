@@ -46,7 +46,10 @@ public class WhatsAppPipeline : IChannelPipeline
         int totalSuccessful = 0;
 
         // Pre-flight sweep: Ensure obsolete tomorrow forecast posts (date <= today) and previous day strays are cleanly purged
-        string? todayDateStr = decisions.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.ScheduleDate))?.ScheduleDate;
+        string? todayDateStr = decisions
+            .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.ScheduleDate) &&
+                                 (d.TerritoryIdentifier == null || !d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)))
+            ?.ScheduleDate;
         if (string.IsNullOrEmpty(todayDateStr))
         {
             todayDateStr = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-dd");
