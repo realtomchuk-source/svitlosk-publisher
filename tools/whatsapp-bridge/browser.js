@@ -268,7 +268,7 @@ async function dismissOverlays() {
         }
 
         // 3. If in message multi-select deletion mode (bottom bar)
-        const cancelSelect = await page.$('button[aria-label*="Отмен"], button[aria-label*="Скасув"], button[aria-label*="Cancel"], span[data-icon="cancel"]');
+        const cancelSelect = await page.$('button[aria-label*="Отмен"], button[aria-label*="Скасув"], button[aria-label*="Cancel"], button[data-tab="10"][aria-label*="Отменить"], span[data-icon="cancel"], span[data-icon="x"]');
         if (cancelSelect) {
             console.log('[PLAYWRIGHT] Dismissing selection mode...');
             await cancelSelect.click({ force: true }).catch(() => {});
@@ -458,25 +458,57 @@ async function deleteMessageRow(targetElement, messageId = null) {
             return false;
         }
 
-        await delMenuItem.click({ force: true });
+        const delHandle = await delMenuItem.elementHandle();
+        if (delHandle) {
+            await page.evaluate(el => el.click(), delHandle);
+        } else {
+            await delMenuItem.click({ force: true });
+        }
         await page.waitForTimeout(800);
 
         // Find trash icon in the bottom selection bar if selection mode was triggered
-        const trashBtn = page.locator('button[aria-label*="Удалить"], button[aria-label*="Видалити"], button[aria-label="Delete"], span[data-icon="delete"]').last();
-        const isTrashVis = await trashBtn.waitFor({ state: 'visible', timeout: 1500 }).then(() => true).catch(() => false);
+        const trashBtn = page.locator('button[aria-label="Удалить"], button[aria-label*="Удалить"], button[aria-label*="Видалити"], button[aria-label*="Delete"], button[data-tab="10"]:has(span[data-icon="delete"])').last();
+        const isTrashVis = await trashBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
         if (isTrashVis) {
-            await trashBtn.click({ force: true });
+            const trashHandle = await trashBtn.elementHandle();
+            if (trashHandle) {
+                await page.evaluate(el => el.click(), trashHandle);
+            } else {
+                await trashBtn.click({ force: true });
+            }
             await page.waitForTimeout(800);
         }
 
-        const confirmBtn = page.locator('div[role="dialog"] button, div[role="alertdialog"] button').filter({ hasText: /Удалить у всех|Видалити для всіх|Delete for everyone|Удалить|Видалити/i }).last();
-        const isConfirmVis = await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
-        if (!isConfirmVis) {
-            await dismissOverlays();
+        // Handle confirmation modal (supports non-breaking space \u00a0 e.g. "Удалить у\u00a0всех")
+        const confirmed = await page.evaluate(() => {
+            const dialog = document.querySelector('div[role="dialog"], div[role="alertdialog"], [data-animate-modal-popup]');
+            if (!dialog) return false;
+            const buttons = Array.from(dialog.querySelectorAll('button'));
+            const btn = buttons.find(b => /Удалить.*всех|Видалити.*всіх|Delete.*everyone|Удалить|Видалити|Delete/i.test(b.innerText.replace(/\s+/g, ' ')));
+            if (btn) {
+                btn.click();
+                return true;
+            }
             return false;
+        });
+
+        if (!confirmed) {
+            const confirmBtn = page.locator('div[role="dialog"] button, div[role="alertdialog"] button, [data-animate-modal-popup] button')
+                .filter({ hasText: /Удалить\s*у\s*всех|Видалити\s*для\s*всіх|Delete\s*for\s*everyone|Удалить|Видалити/i })
+                .last();
+            const isConfirmVis = await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+            if (!isConfirmVis) {
+                await dismissOverlays();
+                return false;
+            }
+            const confirmHandle = await confirmBtn.elementHandle();
+            if (confirmHandle) {
+                await page.evaluate(el => el.click(), confirmHandle);
+            } else {
+                await confirmBtn.click({ force: true });
+            }
         }
 
-        await confirmBtn.click({ force: true });
         await page.waitForTimeout(1500);
 
         // Verification: confirm the element is actually removed from the DOM
@@ -535,46 +567,63 @@ async function cleanupStrayStatusMessages(keepLatest = false) {
     }
 }
 
-// Pre-flight sweep for obsolete tomorrow forecasts (date <= todayDate)
+// Pre-flight sweep for obsolete tomorrow forecasts (date <= todayDate or above today's journal)
 async function sweepObsoleteForecasts(channelIdentifier, todayDateStr) {
     await ensureChannelOpen(channelIdentifier);
     console.log(`[PLAYWRIGHT] Executing pre-flight sweep for obsolete forecast messages (Today: ${todayDateStr})...`);
 
     await cleanupStrayStatusMessages(false);
 
-    const chatPanel = await page.$('#main, div[data-testid="conversation-panel-messages"]');
+    const chatPanel = await page.$('div[id="main"], div[data-testid="conversation-panel-messages"]');
     if (chatPanel) await chatPanel.hover().catch(() => {});
-    for (let s = 0; s < 6; s++) {
+    for (let s = 0; s < 8; s++) {
         await page.mouse.wheel(0, -900);
         await page.waitForTimeout(300);
     }
 
-    const rows = await page.$$('div[role="row"]');
-    const toDeleteMsgIds = [];
+    const toDeleteMsgIds = await page.evaluate((targetDate) => {
+        const spans = Array.from(document.querySelectorAll('span'));
+        const todaySpan = spans.find(s => (s.innerText === 'Сегодня' || s.innerText === 'Сьогодні') && s.children.length === 0);
+        const todayY = todaySpan ? todaySpan.getBoundingClientRect().y : null;
 
-    for (let i = 0; i < rows.length; i++) {
-        const text = await rows[i].innerText().catch(() => '');
-        if (!text) continue;
+        const rows = Array.from(document.querySelectorAll('div[role="row"]'));
+        const obsolete = [];
 
-        if (text.includes('ПРОГНОЗ НА ЗАВТРА') || text.includes('ПРОГНОЗ ЗНЕСТРУМЛЕНЬ')) {
-            const match = text.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/);
-            let isObsolete = true;
-            if (match && todayDateStr) {
-                const postDate = `${match[3]}-${match[2]}-${match[1]}`;
-                if (postDate > todayDateStr) {
-                    isObsolete = false;
+        for (const r of rows) {
+            const dataId = r.getAttribute('data-id') || r.querySelector('[data-id]')?.getAttribute('data-id');
+            if (!dataId) continue;
+            const text = r.innerText ? r.innerText.trim() : '';
+            const hasImg = !!r.querySelector('img, div[data-testid="image-thumb"]');
+            const rect = r.getBoundingClientRect();
+
+            // Check 1: Explicit text with "ПРОГНОЗ"
+            if (text.includes('ПРОГНОЗ НА ЗАВТРА') || text.includes('ПРОГНОЗ ЗНЕСТРУМЛЕНЬ')) {
+                const match = text.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/);
+                let isObsolete = true;
+                if (match && targetDate) {
+                    const postDate = `${match[3]}-${match[2]}-${match[1]}`;
+                    if (postDate > targetDate) isObsolete = false;
+                }
+                if (isObsolete) {
+                    obsolete.push(dataId);
+                    continue;
                 }
             }
 
-            if (isObsolete) {
-                const dataId = await rows[i].getAttribute('data-id') ||
-                               await rows[i].$eval('[data-id]', el => el.getAttribute('data-id')).catch(() => null);
-                if (dataId) {
-                    toDeleteMsgIds.push(dataId);
+            // Check 2: Outage posts situated BEFORE "Сегодня" date divider (yesterday's forecast banner or district posts)
+            if (todayY !== null && rect.y < todayY) {
+                const isOutagePost = (hasImg && (text.includes('Планові знеструмлення') || text.includes('Аварійні знеструмлення'))) ||
+                                     (!hasImg && (text.includes('ПЛАНОВІ ЗНЕСТРУМЛЕННЯ') || text.includes('АВАРІЙНІ ЗНЕСТРУМЛЕННЯ') || text.includes('старостинський округ') || text.includes('СТАРОКОСТЯНТИНІВ')));
+                if (isOutagePost) {
+                    obsolete.push(dataId);
+                    continue;
                 }
             }
         }
-    }
+        return obsolete;
+    }, todayDateStr);
+
+    console.log(`[PLAYWRIGHT] Pre-flight sweep identified ${toDeleteMsgIds.length} obsolete forecast message(s).`);
 
     for (const msgId of toDeleteMsgIds) {
         console.log(`[PLAYWRIGHT] Pre-flight sweep: deleting obsolete forecast message '${msgId}'...`);
@@ -598,7 +647,7 @@ async function deleteMessage(channelIdentifier, messageId) {
     if (messageId && !messageId.includes('status')) {
         const msgLocator = page.locator(`div[data-id*="${messageId}"], [data-id*="${messageId}"]`).first();
         if (await msgLocator.count() === 0) {
-            const chatPanel = await page.$('#main, div[data-testid="conversation-panel-messages"]');
+            const chatPanel = await page.$('div[id="main"], div[data-testid="conversation-panel-messages"]');
             if (chatPanel) await chatPanel.hover().catch(() => {});
 
             for (let scrollAttempt = 0; scrollAttempt < 15; scrollAttempt++) {
