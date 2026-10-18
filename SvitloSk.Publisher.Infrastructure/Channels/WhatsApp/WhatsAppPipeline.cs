@@ -137,6 +137,13 @@ public class WhatsAppPipeline : IChannelPipeline
             {
                 totalSuccessful++;
             }
+            else if (decision.DecisionResult == DecisionResult.Delete)
+            {
+                // Non-blocking rollover deletion: if an obsolete message could not be found or deleted in DOM,
+                // log gracefully as warning and DO NOT abort today's journal creation.
+                Console.WriteLine($"[WARNING][WhatsAppPipeline] Non-blocking deletion for '{decision.TerritoryIdentifier}' ({decision.ExternalMessageId}) failed ({adapterResult.ErrorDescription}). Continuing journal publishing.");
+                totalSuccessful++; // Count as handled to allow pipeline completion
+            }
             else
             {
                 string fatalDesc = adapterResult.ErrorDescription ?? "WhatsApp operation failed after retries.";
@@ -163,6 +170,13 @@ public class WhatsAppPipeline : IChannelPipeline
         const int maxAttempts = 3;
 
         string formattedContent = WhatsAppContentFormatter.ConvertToWhatsAppMarkdown(decision.TargetHash ?? string.Empty);
+        if (decision.TerritoryIdentifier != null && decision.TerritoryIdentifier.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!formattedContent.Contains("ПРОГНОЗ НА ЗАВТРА", StringComparison.OrdinalIgnoreCase))
+            {
+                formattedContent = $"*ПРОГНОЗ НА ЗАВТРА*\n\n{formattedContent}".Trim();
+            }
+        }
 
         while (true)
         {

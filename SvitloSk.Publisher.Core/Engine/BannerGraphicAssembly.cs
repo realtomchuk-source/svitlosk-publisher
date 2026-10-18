@@ -225,15 +225,16 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
 
         string formattedDate = tomorrowDate;
         string dayOfWeekStr = "ЗАВТРА";
-        if (DateTime.TryParse(tomorrowDate, out var parsedDate))
-        {
-            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
-            formattedDate = parsedDate.ToString("dd.MM.yyyy");
-        }
-        else if (DateTime.TryParseExact(tomorrowDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
+        string[] formats = { "yyyy-MM-dd", "dd.MM.yyyy", "yyyy/MM/dd", "d.M.yyyy" };
+        if (DateTime.TryParseExact(tomorrowDate, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExact))
         {
             dayOfWeekStr = GetUkrainianDayOfWeek(parsedExact);
             formattedDate = parsedExact.ToString("dd.MM.yyyy");
+        }
+        else if (DateTime.TryParse(tomorrowDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedDate))
+        {
+            dayOfWeekStr = GetUkrainianDayOfWeek(parsedDate);
+            formattedDate = parsedDate.ToString("dd.MM.yyyy");
         }
 
         var sb = new System.Text.StringBuilder();

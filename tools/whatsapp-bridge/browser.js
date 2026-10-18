@@ -87,16 +87,32 @@ async function initBrowser() {
         });
 
         const pages = browserContext.pages();
-        page = pages.length > 0 ? pages[0] : await browserContext.newPage();
+        // Look for existing WhatsApp Web tab
+        let targetPage = pages.find(p => p.url().includes('web.whatsapp.com'));
+        if (!targetPage) {
+            targetPage = pages.length > 0 ? pages[0] : await browserContext.newPage();
+            await targetPage.goto('https://web.whatsapp.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        }
 
+        // Close any superfluous about:blank tabs opened by Chromium launch
+        for (const p of browserContext.pages()) {
+            if (p !== targetPage && p.url() === 'about:blank') {
+                try { await p.close(); } catch (_) {}
+            }
+        }
+
+        page = targetPage;
         page.on('close', () => {
             console.warn('[PLAYWRIGHT] Active page closed.');
-            page = null;
-            isConnected = false;
+            // Re-acquire another page if context is still open
+            const remaining = browserContext ? browserContext.pages() : [];
+            page = remaining.find(p => p.url().includes('web.whatsapp.com')) || (remaining.length > 0 ? remaining[0] : null);
+            if (!page) {
+                isConnected = false;
+            }
         });
 
-        await page.goto('https://web.whatsapp.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        console.log('[PLAYWRIGHT] WhatsApp Web loaded. Monitoring authentication state...');
+        console.log('[PLAYWRIGHT] WhatsApp Web page attached. Monitoring authentication state...');
 
         if (!authInterval) {
             monitorAuthState();
@@ -195,56 +211,98 @@ async function scrollToBottom() {
     } catch (_) {}
 }
 
-// Navigate to channel and wait for message list / composer
-async function ensureChannelOpen(channelIdentifier) {
-    await ensureBrowser();
+// Force restart browser session to recover from stuck DOM or disconnects
+async function restartSession() {
+    console.log('[PLAYWRIGHT] Initiating clean restart of WhatsApp Web browser session...');
+    try {
+        if (browserContext) {
+            await browserContext.close().catch(() => {});
+        }
+    } catch (_) {}
+    browserContext = null;
+    page = null;
+    isConnected = false;
+    hasQr = false;
+    await initBrowser();
+}
 
-    if (!isBrowserAlive() || !isConnected) {
-        throw new Error('WhatsApp Web is not authenticated yet. Please keep Chromium open and scan QR code if needed.');
+// Navigate to channel and wait for message list / composer with retries
+async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
+    let attempt = 0;
+    while (attempt < maxRetries) {
+        attempt++;
+        await ensureBrowser();
+
+        if (!isBrowserAlive() || !isConnected) {
+            if (attempt < maxRetries) {
+                console.warn(`[PLAYWRIGHT] WhatsApp Web not ready (Attempt ${attempt}/${maxRetries}). Waiting 4s before retry...`);
+                await new Promise(r => setTimeout(r, 4000));
+                continue;
+            }
+            throw new Error('WhatsApp Web is not authenticated yet. Please keep Chromium open and scan QR code if needed.');
+        }
+
+        try {
+            // Check if already open and ready
+            const composer = await page.$('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"], footer div[role="textbox"]');
+            const isChannelOpen = await page.evaluate(() => {
+                const headers = Array.from(document.querySelectorAll('header'));
+                const convHeader = headers.length > 1 ? headers[headers.length - 1] : headers[0];
+                return convHeader ? (convHeader.innerText.includes('SvitloSk') || convHeader.innerText.includes('Журнал знеструмлень')) : false;
+            });
+
+            if (composer && isChannelOpen) {
+                await scrollToBottom();
+                return;
+            }
+
+            console.log(`[PLAYWRIGHT] Navigating to SvitloSk channel (Attempt ${attempt}/${maxRetries})...`);
+
+            // 1. Click Channels icon on left rail
+            const railHandle = await page.evaluateHandle(() => {
+                const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+                return btns.find(b => {
+                    const label = (b.getAttribute('aria-label') || '').toLowerCase();
+                    return label.includes('канал') || label.includes('channel') || b.querySelector('span[data-icon*="newsletter"]');
+                });
+            });
+            if (railHandle && railHandle.asElement()) {
+                await railHandle.asElement().click({ force: true });
+                await page.waitForTimeout(1500);
+            }
+
+            // 2. Click SvitloSk channel item in channels list
+            const itemHandle = await page.evaluateHandle(() => {
+                const spans = Array.from(document.querySelectorAll('span'));
+                return spans.find(s => s.innerText && (s.innerText.includes('SvitloSk') || s.innerText.includes('Журнал знеструмлень')) && s.getBoundingClientRect().width < 380);
+            });
+            if (itemHandle && itemHandle.asElement()) {
+                await itemHandle.asElement().click({ force: true });
+                await page.waitForTimeout(2000);
+            }
+
+            // 3. Wait for composer to appear in footer
+            const composerLocator = page.locator('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"], footer div[role="textbox"]').first();
+            await composerLocator.waitFor({ state: 'visible', timeout: 8000 });
+
+            await page.waitForTimeout(1000);
+            await scrollToBottom();
+            console.log('[PLAYWRIGHT] Channel SvitloSk successfully verified and ready for posting.');
+            return;
+        } catch (err) {
+            console.warn(`[PLAYWRIGHT] ensureChannelOpen attempt ${attempt} failed: ${err.message}`);
+            if (attempt >= maxRetries) {
+                // If all regular attempts failed, try a page reload as last resort
+                console.warn('[PLAYWRIGHT] Reloading WhatsApp Web page to clear corrupted UI state...');
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await page.waitForTimeout(5000);
+                } catch (_) {}
+                throw new Error(`Failed to open SvitloSk WhatsApp channel after ${maxRetries} attempts: ${err.message}`);
+            }
+            await page.waitForTimeout(3000);
+        }
     }
-
-    const composer = await page.$('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]');
-    const isChannelOpen = await page.evaluate(() => {
-        const headers = Array.from(document.querySelectorAll('header'));
-        const convHeader = headers.length > 1 ? headers[headers.length - 1] : headers[0];
-        return convHeader ? convHeader.innerText.includes('SvitloSk') : false;
-    });
-
-    if (composer && isChannelOpen) {
-        await scrollToBottom();
-        return;
-    }
-
-    console.log('[PLAYWRIGHT] Opening SvitloSk channel...');
-    // 1. Click Channels icon on left rail
-    const railHandle = await page.evaluateHandle(() => {
-        const btns = Array.from(document.querySelectorAll('button'));
-        return btns.find(b => {
-            const label = (b.getAttribute('aria-label') || '').toLowerCase();
-            return label.includes('канал') || label.includes('channel') || b.querySelector('span[data-icon*="newsletter"]');
-        });
-    });
-    if (railHandle && railHandle.asElement()) {
-        await railHandle.asElement().click({ force: true });
-        await page.waitForTimeout(1500);
-    }
-
-    // 2. Click SvitloSk channel item
-    const itemHandle = await page.evaluateHandle(() => {
-        const spans = Array.from(document.querySelectorAll('span'));
-        return spans.find(s => s.innerText && s.innerText.includes('SvitloSk') && s.getBoundingClientRect().width < 350);
-    });
-    if (itemHandle && itemHandle.asElement()) {
-        await itemHandle.asElement().click({ force: true });
-        await page.waitForTimeout(2000);
-    }
-
-    // Wait for composer to appear
-    const composerLocator = page.locator('footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]');
-    await composerLocator.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
-
-    await page.waitForTimeout(1000);
-    await scrollToBottom();
 }
 
 async function dismissOverlays() {
@@ -570,7 +628,8 @@ async function sweepObsoleteForecasts(channelIdentifier, todayDateStr) {
     await ensureChannelOpen(channelIdentifier);
     console.log(`[PLAYWRIGHT] Executing pre-flight sweep for obsolete forecast messages (Today: ${todayDateStr})...`);
 
-    await cleanupStrayStatusMessages(false);
+    // Clean up duplicate/stray technical status messages, preserving the active one
+    await cleanupStrayStatusMessages(true);
 
     const chatPanel = await page.$('div[id="main"], div[data-testid="conversation-panel-messages"]');
     if (chatPanel) await chatPanel.hover().catch(() => {});
@@ -581,7 +640,10 @@ async function sweepObsoleteForecasts(channelIdentifier, todayDateStr) {
 
     const toDeleteMsgIds = await page.evaluate((targetDate) => {
         const spans = Array.from(document.querySelectorAll('span'));
-        const todaySpan = spans.find(s => (s.innerText === 'Сегодня' || s.innerText === 'Сьогодні') && s.children.length === 0);
+        const todaySpan = spans.find(s => {
+            const txt = (s.innerText || '').trim().toLowerCase();
+            return (txt === 'сегодня' || txt === 'сьогодні' || txt === 'today') && s.children.length === 0;
+        });
         const todayY = todaySpan ? todaySpan.getBoundingClientRect().y : null;
 
         const rows = Array.from(document.querySelectorAll('div[role="row"]'));
@@ -595,7 +657,7 @@ async function sweepObsoleteForecasts(channelIdentifier, todayDateStr) {
             const rect = r.getBoundingClientRect();
 
             // Check 1: Explicit text with "ПРОГНОЗ"
-            if (text.includes('ПРОГНОЗ НА ЗАВТРА') || text.includes('ПРОГНОЗ ЗНЕСТРУМЛЕНЬ')) {
+            if (text.includes('ПРОГНОЗ НА ЗАВТРА') || text.includes('ПРОГНОЗ ЗНЕСТРУМЛЕНЬ') || text.includes('ПРОГНОЗ')) {
                 const match = text.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/);
                 let isObsolete = true;
                 if (match && targetDate) {
@@ -855,5 +917,6 @@ module.exports = {
     getDebugDom,
     cleanupStrayStatusMessages,
     sweepObsoleteForecasts,
+    restartSession,
     getPage: () => page
 };

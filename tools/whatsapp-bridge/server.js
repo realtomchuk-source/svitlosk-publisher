@@ -40,30 +40,48 @@ app.get('/debug-dom', async (req, res) => {
     }
 });
 
-// 2. Channel info
+// 2. Channel info (actively verifies channel availability and composer presence)
 app.get('/channel-info', async (req, res) => {
-    await browser.ensureBrowser();
-    const status = browser.getStatus();
-    if (!status.connected) {
-        return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet. Please scan QR code in the browser window.' });
-    }
+    try {
+        await browser.ensureBrowser();
+        const status = browser.getStatus();
+        if (!status.connected) {
+            return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet. Please scan QR code in the browser window.' });
+        }
 
-    const channelId = req.query.channelId || '0029Vb96XUUIN9ixA88Umz3Y';
-    res.json({
-        isSuccess: true,
-        jid: channelId,
-        name: 'SvitloSk Channel',
-        description: 'SvitloSk Publisher Official Channel',
-        subscribers: 0
-    });
+        const channelId = req.query.channelId || '0029Vb96XUUIN9ixA88Umz3Y';
+        await browser.ensureChannelOpen(channelId);
+
+        res.json({
+            isSuccess: true,
+            jid: channelId,
+            name: 'SvitloSk Channel',
+            description: 'SvitloSk Publisher Official Channel (Verified & Ready)',
+            subscribers: 0
+        });
+    } catch (err) {
+        console.warn(`[SERVER] /channel-info failed: ${err.message}`);
+        res.status(503).json({ isSuccess: false, errorDescription: err.message });
+    }
 });
 
 // 2b. Open channel explicitly
 app.post('/open-channel', async (req, res) => {
     try {
         await browser.ensureBrowser();
-        await browser.ensureChannelOpen('0029Vb96XUUIN9ixA88Umz3Y');
+        const channelId = req.body.channelOrChatId || '0029Vb96XUUIN9ixA88Umz3Y';
+        await browser.ensureChannelOpen(channelId);
         res.json({ isSuccess: true });
+    } catch (err) {
+        res.status(500).json({ isSuccess: false, errorDescription: err.message });
+    }
+});
+
+// 2b2. Restart session
+app.post('/restart-session', async (req, res) => {
+    try {
+        await browser.restartSession();
+        res.json({ isSuccess: true, message: 'Browser session successfully restarted.' });
     } catch (err) {
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
