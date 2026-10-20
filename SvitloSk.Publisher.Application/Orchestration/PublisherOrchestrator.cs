@@ -379,13 +379,27 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             (d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
              d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
 
-        // 5. Evaluate Tomorrow Visibility
+        // 5. Evaluate Tomorrow Visibility & Ordering Invariant (Today -> Tomorrow)
         bool isTomorrowAvailable = input.TomorrowForecastAvailable || input.Packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase));
         var tomorrowVisibilityDecisions = new List<EditorialDecision>();
         var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(isTomorrowAvailable);
         if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
         {
             tomorrowVisibilityDecisions.Add(tomorrowDecision);
+
+            var (repositionDeletes, repositionedTomorrowDecisions) = _policyService.EvaluateTomorrowOrdering(
+                todayDecisions,
+                tomorrowDecisions,
+                input.Packages,
+                input.EditionDate,
+                registry?.Publications,
+                isDateRollover);
+
+            if (repositionDeletes.Count > 0)
+            {
+                tomorrowVisibilityDecisions.AddRange(repositionDeletes);
+                tomorrowDecisions = repositionedTomorrowDecisions.ToList();
+            }
         }
         else if (registry != null && !isDateRollover)
         {
@@ -407,11 +421,11 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // 6. Evaluate Graphic Generation
+        // 6. Evaluate Graphic Generation (Only publish when at least one of the 12 subqueues has outages)
         EditorialDecision? graphicDecisionItem = null;
         RegistryPublicationRecord? unchangedGraphicRecord = null;
 
-        if (input.GraphicPackage != null)
+        if (input.GraphicPackage != null && input.GraphicPackage.HasAnyOutages)
         {
             string graphicScope = input.GraphicPackage.TerritorialScope;
             string graphicHash = _hashCalculator.ComputeGraphicHash(input.GraphicPackage);
@@ -445,7 +459,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
             if (graphicDecision.DecisionResult == DecisionResult.Generate)
             {
-                bool isCreate = existingGraphicPub == null || existingGraphicPub.TransmissionState == "DELETED" || !existingGraphicPub.TelegramMessageId.HasValue;
+                bool isCreate = existingGraphicPub == null || existingGraphicPub.TransmissionState == "DELETED" || (!existingGraphicPub.TelegramMessageId.HasValue && string.IsNullOrEmpty(existingGraphicPub.ExternalMessageId));
                 var artifactId = existingGraphicPub?.PublisherArtifactId ?? Guid.NewGuid();
                 byte[] svgBytes = _graphicAssembly.AssembleSvg(input.GraphicPackage);
 
@@ -478,6 +492,10 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
             {
                 precedingJournalDecisions.AddRange(tomorrowDecisions);
+            }
+            if (graphicDecisionItem != null)
+            {
+                precedingJournalDecisions.Add(graphicDecisionItem);
             }
 
             string techContent = _transformer.RenderSystemStatus(syncTime);
@@ -666,7 +684,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         {
             graphicRegistryUpdates.Add(unchangedGraphicRecord);
         }
-        else if (input.GraphicPackage == null && registry != null)
+        else if ((input.GraphicPackage == null || !input.GraphicPackage.HasAnyOutages) && registry != null)
         {
             foreach (var oldPub in registry.Publications.Where(p => p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase)))
             {
@@ -690,9 +708,24 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
+        // Enforce canonical section ordering in registry: Today -> Tomorrow -> Graphic -> System Status (Tail)
+        updatedPublications = updatedPublications
+            .OrderBy(p => GetRegistryRecordSectionRank(p))
+            .ToList();
+
         foreach (var gRec in graphicRegistryUpdates)
         {
             updatedPublications.Add(gRec);
+        }
+
+        // Move active system_status to the absolute tail of the registry list (after Graphic as well)
+        var statusRecordsToMove = updatedPublications
+            .Where(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (statusRecordsToMove.Count > 0)
+        {
+            updatedPublications.RemoveAll(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase));
+            updatedPublications.AddRange(statusRecordsToMove);
         }
 
         var newRegistry = new RegistryModel(
@@ -724,5 +757,61 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
 
         return dispatchResult;
+    }
+
+    private static int GetRegistryRecordSectionRank(RegistryPublicationRecord record)
+    {
+        string tid = record.TerritoryId ?? string.Empty;
+        if (tid.Equals("journal_header", StringComparison.OrdinalIgnoreCase) ||
+            tid.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        if (tid.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (!tid.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
+            !tid.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) &&
+            !tid.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
+            !record.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (tid.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase))
+        {
+            return 4;
+        }
+
+        if (tid.Equals("tomorrow_header", StringComparison.OrdinalIgnoreCase))
+        {
+            return 5;
+        }
+
+        if (tid.Equals("tomorrow_starokostiantyniv", StringComparison.OrdinalIgnoreCase))
+        {
+            return 6;
+        }
+
+        if (tid.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+            tid.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))
+        {
+            return 7;
+        }
+
+        if (record.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
+        {
+            return 8;
+        }
+
+        if (tid.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+        {
+            return 9;
+        }
+
+        return 10;
     }
 }

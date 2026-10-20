@@ -400,7 +400,7 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         await dismissOverlays();
 
         // 1. Locate and click attachment button (paperclip)
-        const attachSelector = 'footer button[aria-label*="Прикреп"], footer button[aria-label*="Вклас"], footer button[aria-label*="Attach"], footer span[data-icon="ic-attach-file"], footer button:has(span[data-icon="clip"]), button:has(span[data-icon="ic-attach-file"]), [data-icon="ic-attach-file"]';
+        const attachSelector = 'footer button[aria-haspopup="menu"], footer button[aria-label*="Прикреп"], footer button[aria-label*="Вклас"], footer button[aria-label*="Attach"], footer span[data-icon="ic-attach-file"], footer button:has(span[data-icon="clip"]), button:has(span[data-icon="ic-attach-file"]), [data-icon="ic-attach-file"]';
         const attachBtn = page.locator(attachSelector).first();
         const attachVisible = await attachBtn.waitFor({ state: 'visible', timeout: 7000 }).then(() => true).catch(() => false);
 
@@ -408,8 +408,12 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
             throw new Error('Attachment clip button could not be found in composer.');
         }
 
-        await attachBtn.click({ force: true });
-        await page.waitForTimeout(600);
+        // Only click attachBtn if the attachment menu is not already open
+        const menuAlreadyOpen = await page.locator('div[role="menu"] button[role="menuitem"]').first().isVisible().catch(() => false);
+        if (!menuAlreadyOpen) {
+            await attachBtn.click();
+            await page.waitForTimeout(600);
+        }
 
         // 2. Locate "Photos & videos" option in attachment menu (first menu item)
         const photoSelector = 'div[role="menu"] button[role="menuitem"]:has-text("Фото"), div[role="menu"] button[role="menuitem"]:has-text("Photo"), div[role="menu"] button[role="menuitem"]:first-child, button[role="menuitem"][aria-label*="Фото"], button[role="menuitem"][aria-label*="Photo"], button[role="menuitem"]:first-child';
@@ -420,14 +424,20 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
             throw new Error('"Photos & videos" option could not be found in attachment menu.');
         }
 
-        // 3. Trigger native file picker via Playwright filechooser event
-        const [fileChooser] = await Promise.all([
-            page.waitForEvent('filechooser', { timeout: 10000 }),
-            photoBtn.click({ force: true })
-        ]);
-
-        await fileChooser.setFiles(tempFile);
-        console.log(`[PLAYWRIGHT] Media file staged via file chooser: ${tempFile}`);
+        // 3. Trigger native file picker via Playwright filechooser event (or fallback to injected file input)
+        try {
+            const [fileChooser] = await Promise.all([
+                page.waitForEvent('filechooser', { timeout: 6000 }),
+                photoBtn.click()
+            ]);
+            await fileChooser.setFiles(tempFile);
+            console.log(`[PLAYWRIGHT] Media file staged via file chooser: ${tempFile}`);
+        } catch (fcErr) {
+            console.warn(`[PLAYWRIGHT] filechooser event timed out (${fcErr.message}), falling back to input[type="file"]...`);
+            const fileInput = page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="image"]').last();
+            await fileInput.setInputFiles(tempFile);
+            console.log(`[PLAYWRIGHT] Media file staged via input[type="file"]: ${tempFile}`);
+        }
         await page.waitForTimeout(1500);
 
         // 4. Fill inline caption in preview modal if provided

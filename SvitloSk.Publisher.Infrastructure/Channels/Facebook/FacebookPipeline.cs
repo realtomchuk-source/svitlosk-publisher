@@ -154,6 +154,7 @@ public class FacebookPipeline : IChannelPipeline
             {
                 if (!string.IsNullOrEmpty(decision.ExternalMessageId))
                 {
+                    reconciledPostIds.Add(decision.ExternalMessageId);
                     var delRes = await _facebookAdapter.DeletePostAsync(decision.ExternalMessageId, cancellationToken).ConfigureAwait(false);
                     if (delRes.IsSuccess) totalSuccessful++;
 

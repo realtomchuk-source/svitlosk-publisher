@@ -431,6 +431,36 @@ public class FacebookPipelineTests
         Assert.Equal(1, adapter.PublishCount);
         Assert.Equal("new_graphic_id", result.Results[0].ExternalMessageId);
     }
+
+    [Fact]
+    public async Task DispatchAsync_WhenDeletePrecedesCreate_MarksDeletedPostIdReconciled_SoCreatePublishesNewPost()
+    {
+        var adapter = new TestFacebookAdapter
+        {
+            RecentPosts = new List<FacebookPostSummary>
+            {
+                new("old_fb_tomorrow_123", "ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА\n21.10.2026\nСтарокостянтинів")
+            }
+        };
+
+        var pipeline = new FacebookPipeline(adapter, "test_page_123", new TestGraphicRasterizer());
+
+        var decisions = new List<EditorialDecision>
+        {
+            new(DecisionResult.Delete, PublicationClassification.Ephemeral, Guid.NewGuid(), "fb_tomorrow", null, ExternalMessageId: "old_fb_tomorrow_123"),
+            new(DecisionResult.Create, PublicationClassification.Ephemeral, Guid.NewGuid(), "fb_tomorrow", "ПРОГНОЗ ЗНЕСТРУМЛЕНЬ НА ЗАВТРА\n21.10.2026\nСтарокостянтинів", ScheduleDate: "2026-10-21")
+        };
+
+        var result = await pipeline.DispatchAsync(decisions);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, adapter.DeleteCount);
+        Assert.Equal("old_fb_tomorrow_123", adapter.LastDeletedPostId);
+        // Must publish a brand new post, NOT try to update the deleted post!
+        Assert.Equal(1, adapter.PublishCount);
+        Assert.Equal(0, adapter.UpdateCount);
+        Assert.Equal("new_graphic_id", result.Results[1].ExternalMessageId);
+    }
 }
 
 
