@@ -34,6 +34,20 @@ public class GraphicAssembly : IGraphicAssembly
         };
     }
 
+    private static double MeasureUppercase28pxBoldWidth(string text)
+    {
+        double width = 0;
+        foreach (char c in text)
+        {
+            if (c == ' ' || c == '.' || c == '\'') width += 9.0;
+            else if (c == 'І' || c == 'I' || c == '1') width += 10.5;
+            else if (c == 'М' || c == 'Ш' || c == 'Щ' || c == 'Ю' || c == 'Ж') width += 24.5;
+            else if (c == 'Д' || c == 'Л' || c == 'Ф' || c == 'Ц') width += 21.0;
+            else width += 19.5;
+        }
+        return width;
+    }
+
     public byte[] AssembleSvg(GraphicInputPackage inputPackage)
     {
         if (inputPackage == null)
@@ -82,14 +96,18 @@ public class GraphicAssembly : IGraphicAssembly
         sb.AppendLine($"      <text x=\"80\" y=\"51\" font-family=\"Arial, sans-serif\" font-size=\"52\" font-weight=\"900\" letter-spacing=\"-0.5\"><tspan fill=\"{PoweredColor}\">Svitlo</tspan><tspan fill=\"{OutageColor}\">Sk</tspan></text>");
         sb.AppendLine("    </g>");
 
-        // Right Top Header: Single line uppercase header with orange day of week
-        double titleStartX = 386;
-        double dayStartX = 740;
-        double dateStartX = 896;
+        // Right Top Header: Single line uppercase header with orange day of week, right-aligned to x=1040
+        // Date (dd.MM.yyyy, 28px bold) ends at 1040 and takes ~144px -> starts around 896.
+        // Day of week ends at 880 (text-anchor="end"), growing leftwards so any day length never overlaps the date!
+        // Title ends at (880 - dayWidth - 18) with text-anchor="end".
+        double dateEndX = 1040;
+        double dayEndX = 878;
+        double dayWidth = MeasureUppercase28pxBoldWidth(dayOfWeekStr);
+        double titleEndX = dayEndX - dayWidth - 18;
 
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{titleStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PrimaryTextColor}\">ГРАФІК ЗНЕСТРУМЛЕНЬ</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dayStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PoweredColor}\">{dayOfWeekStr}</text>"));
-        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dateStartX}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" fill=\"{PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{titleEndX:F1}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PrimaryTextColor}\">ГРАФІК ЗНЕСТРУМЛЕНЬ</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dayEndX:F1}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PoweredColor}\">{dayOfWeekStr}</text>"));
+        sb.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"    <text x=\"{dateEndX:F1}\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" text-anchor=\"end\" fill=\"{PrimaryTextColor}\">{EscapeXml(formattedDate)}</text>"));
         sb.AppendLine($"    <text x=\"1040\" y=\"88\" font-family=\"Arial, sans-serif\" font-size=\"16\" font-weight=\"500\" text-anchor=\"end\" fill=\"{MutedTextColor}\">Старокостянтинівська територіальна громада</text>");
         sb.AppendLine("  </g>");
 

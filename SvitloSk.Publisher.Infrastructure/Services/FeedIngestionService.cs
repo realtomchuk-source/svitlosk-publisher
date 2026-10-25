@@ -194,56 +194,8 @@ public class FeedIngestionService
         }
 
         // Ingestion of 12-subqueue graphic schedule from SvitloSk parser repository or local fixture
-        GraphicInputPackage? graphicPackage = null;
-        string? graphicJsonContent = null;
-
-        if (!isDryRun)
-        {
-            // Priority 1: Check if tomorrow's graphic schedule JSON is published
-            string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
-            try
-            {
-                Console.WriteLine($"[INFO] Fetching graphic schedule JSON for tomorrow from {onlineGraphicTomorrowUrl}...");
-                graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
-                Console.WriteLine($"[INFO] Successfully fetched tomorrow's graphic schedule JSON ({tomorrowLabel}).");
-            }
-            catch
-            {
-                // Priority 2: Fallback to today's graphic schedule JSON
-                string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
-                try
-                {
-                    Console.WriteLine($"[INFO] Tomorrow's graphic not found. Checking today's graphic schedule from {onlineGraphicTodayUrl}...");
-                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cancellationToken).ConfigureAwait(false);
-                    Console.WriteLine($"[INFO] Successfully fetched today's graphic schedule JSON ({editionDate}).");
-                }
-                catch (Exception gEx)
-                {
-                    Console.WriteLine($"[INFO] Online graphic JSON for {tomorrowLabel} / {editionDate} is not published ({gEx.Message}). Graphic schedule skipped.");
-                }
-            }
-        }
-        else
-        {
-            string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
-            if (File.Exists(sampleFixture))
-            {
-                graphicJsonContent = await File.ReadAllTextAsync(sampleFixture, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(graphicJsonContent))
-        {
-            try
-            {
-                graphicPackage = _parser.ParseLegacyGraphicJson(graphicJsonContent, "Старокостянтинівська МТГ");
-                Console.WriteLine("[INFO] Successfully parsed 12-subqueue graphic package.");
-            }
-            catch (Exception parseEx)
-            {
-                Console.WriteLine($"[WARN] Failed to parse graphic schedule JSON: {parseEx.Message}");
-            }
-        }
+        // Only publish if at least one of the 12 subqueues has scheduled outages (HasAnyOutages == true).
+        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "", cancellationToken).ConfigureAwait(false);
 
         bool hasActiveTomorrowPackages = packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase));
 
@@ -359,48 +311,8 @@ public class FeedIngestionService
             }
         }
 
-        // 4. Ingestion of 12-subqueue graphic schedule (if available)
-        GraphicInputPackage? graphicPackage = null;
-        string? graphicJsonContent = null;
-
-        if (!isDryRun)
-        {
-            string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
-            try
-            {
-                graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
-                try
-                {
-                    graphicJsonContent = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cancellationToken).ConfigureAwait(false);
-                }
-                catch { }
-            }
-        }
-        else
-        {
-            string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
-            if (File.Exists(sampleFixture))
-            {
-                graphicJsonContent = await File.ReadAllTextAsync(sampleFixture, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(graphicJsonContent))
-        {
-            try
-            {
-                graphicPackage = _parser.ParseLegacyGraphicJson(graphicJsonContent, "Старокостянтинівська МТГ");
-                Console.WriteLine("[INFO][Facebook] Successfully parsed 12-subqueue graphic package.");
-            }
-            catch (Exception parseEx)
-            {
-                Console.WriteLine($"[WARN][Facebook] Failed to parse graphic schedule JSON: {parseEx.Message}");
-            }
-        }
+        // 4. Ingestion of 12-subqueue graphic schedule (only if it has outages across at least one subqueue)
+        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[Facebook]", cancellationToken).ConfigureAwait(false);
 
         bool hasTomorrow = packages.Any(p => p.TerritoryId == "fb_tomorrow");
 
@@ -410,6 +322,83 @@ public class FeedIngestionService
             TomorrowForecastAvailable: hasTomorrow,
             GraphicPackage: graphicPackage
         );
+    }
+
+    private async Task<GraphicInputPackage?> FetchActiveGraphicScheduleAsync(
+        HttpClient httpClient,
+        string tomorrowLabel,
+        string editionDate,
+        bool isDryRun,
+        string logPrefix,
+        CancellationToken cancellationToken)
+    {
+        if (isDryRun)
+        {
+            string sampleFixture = "local/fixtures/sample_graphic_schedule.json";
+            if (File.Exists(sampleFixture))
+            {
+                try
+                {
+                    string fixtureJson = await File.ReadAllTextAsync(sampleFixture, cancellationToken).ConfigureAwait(false);
+                    var parsedFixture = _parser.ParseLegacyGraphicJson(fixtureJson, "Старокостянтинівська МТГ");
+                    if (parsedFixture.HasAnyOutages)
+                    {
+                        return parsedFixture;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WARN]{logPrefix} Failed to parse dry-run graphic fixture: {ex.Message}");
+                }
+            }
+            return null;
+        }
+
+        // Priority 1: Check tomorrow's graphic schedule JSON (e.g., published in the evening for tomorrow)
+        string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
+        try
+        {
+            Console.WriteLine($"[INFO]{logPrefix} Checking graphic schedule JSON for tomorrow ({tomorrowLabel})...");
+            string tomJson = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(tomJson))
+            {
+                var tomPkg = _parser.ParseLegacyGraphicJson(tomJson, "Старокостянтинівська МТГ");
+                if (tomPkg.HasAnyOutages)
+                {
+                    Console.WriteLine($"[INFO]{logPrefix} Active 12-subqueue graphic schedule found for tomorrow ({tomorrowLabel}).");
+                    return tomPkg;
+                }
+                Console.WriteLine($"[INFO]{logPrefix} Tomorrow's graphic JSON ({tomorrowLabel}) has no outages across all 12 subqueues. Skipping tomorrow graphic.");
+            }
+        }
+        catch
+        {
+            // Tomorrow's graphic JSON not found (404), proceed to check today's graphic
+        }
+
+        // Priority 2: Fallback to today's graphic schedule JSON
+        string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
+        try
+        {
+            Console.WriteLine($"[INFO]{logPrefix} Checking graphic schedule JSON for today ({editionDate})...");
+            string todayJson = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(todayJson))
+            {
+                var todayPkg = _parser.ParseLegacyGraphicJson(todayJson, "Старокостянтинівська МТГ");
+                if (todayPkg.HasAnyOutages)
+                {
+                    Console.WriteLine($"[INFO]{logPrefix} Active 12-subqueue graphic schedule found for today ({editionDate}).");
+                    return todayPkg;
+                }
+                Console.WriteLine($"[INFO]{logPrefix} Today's graphic JSON ({editionDate}) is clean (no outages across all 12 subqueues). Skipping graphic publication.");
+            }
+        }
+        catch (Exception gEx)
+        {
+            Console.WriteLine($"[INFO]{logPrefix} Online graphic JSON for {tomorrowLabel} / {editionDate} is not available ({gEx.Message}). Graphic schedule skipped.");
+        }
+
+        return null;
     }
 
     private async Task<IReadOnlyList<OutageRecord>> GetCumulativeTodayRecordsAsync(

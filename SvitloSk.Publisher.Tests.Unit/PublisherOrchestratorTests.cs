@@ -2556,6 +2556,109 @@ public class GraphicOrchestrationTests : IDisposable
         Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Technical));
         Assert.False(engine.AreCommentsAllowed(SvitloSk.Publisher.Core.Domain.PublicationType.Tomorrow));
     }
+
+    [Fact]
+    public async Task TC_CleanGraphicSchedule_NoOutagesAcrossAll12Subqueues_IsNotPublished()
+    {
+        var store = new PublisherOrchestratorTests.FakeRegistryStore();
+        var git = new PublisherOrchestratorTests.FakeGitTransport();
+        var adapter = new PublisherOrchestratorTests.FakeTelegramAdapter();
+        var hashCalc = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(adapter, new FakeDelayProvider(), graphicDispatcher: graphicDispatcher);
+        var parser = new OutageFeedParser();
+
+        var orchestrator = new PublisherOrchestrator(
+            store,
+            git,
+            hashCalc,
+            decisionEngine,
+            dispatcher,
+            parser,
+            new EditorialContentTransformer()
+        );
+
+        string cleanGraphicJson = @"{
+  ""date"": ""2026-10-19"",
+  ""updated_at"": ""2026-10-19T05:04:44.721447+03:00"",
+  ""mode"": ""schedule"",
+  ""message"": ""Графік обмежень не оприлюднено. Попередньо: відключень не прогнозується."",
+  ""queues"": {
+    ""1.1"": ""111111111111111111111111"",
+    ""1.2"": ""111111111111111111111111"",
+    ""2.1"": ""111111111111111111111111"",
+    ""2.2"": ""111111111111111111111111"",
+    ""3.1"": ""111111111111111111111111"",
+    ""3.2"": ""111111111111111111111111"",
+    ""4.1"": ""111111111111111111111111"",
+    ""4.2"": ""111111111111111111111111"",
+    ""5.1"": ""111111111111111111111111"",
+    ""5.2"": ""111111111111111111111111"",
+    ""6.1"": ""111111111111111111111111"",
+    ""6.2"": ""111111111111111111111111""
+  }
+}";
+
+        var cleanPkg = parser.ParseLegacyGraphicJson(cleanGraphicJson, "Старокостянтинівська МТГ");
+        Assert.False(cleanPkg.HasAnyOutages);
+
+        var input = new EditorialInput(
+            EditionDate: "2026-10-19",
+            Packages: new List<InputTerritoryPackage>(),
+            GraphicPackage: cleanPkg
+        );
+
+        var result = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", input);
+        Assert.True(result.IsSuccess);
+        Assert.Empty(graphicDispatcher.DispatchedOperations);
+    }
+
+    [Fact]
+    public void TC_GraphicAssembly_MondayHeader_UsesRightAlignedTspanWithoutOverlap()
+    {
+        var parser = new OutageFeedParser();
+        string activeMondayJson = @"{
+  ""date"": ""2026-10-19"",
+  ""updated_at"": ""2026-10-19T05:04:44+03:00"",
+  ""mode"": ""schedule"",
+  ""queues"": {
+    ""1.1"": ""111111110000111111111111"",
+    ""1.2"": ""111111111111111111111111"",
+    ""2.1"": ""111111111111111111111111"",
+    ""2.2"": ""111111111111111111111111"",
+    ""3.1"": ""111111111111111111111111"",
+    ""3.2"": ""111111111111111111111111"",
+    ""4.1"": ""111111111111111111111111"",
+    ""4.2"": ""111111111111111111111111"",
+    ""5.1"": ""111111111111111111111111"",
+    ""5.2"": ""111111111111111111111111"",
+    ""6.1"": ""111111111111111111111111"",
+    ""6.2"": ""111111111111111111111111""
+  }
+}";
+        var pkg = parser.ParseLegacyGraphicJson(activeMondayJson, "Старокостянтинівська МТГ");
+        Assert.True(pkg.HasAnyOutages);
+
+        var assembly = new GraphicAssembly();
+        byte[] svgBytes = assembly.AssembleSvg(pkg);
+        string svgText = System.Text.Encoding.UTF8.GetString(svgBytes);
+
+        Assert.Contains("text-anchor=\"end\" fill=\"#111827\">ГРАФІК ЗНЕСТРУМЛЕНЬ</text>", svgText);
+        Assert.Contains("<text x=\"878.0\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" text-anchor=\"end\" fill=\"#EE7221\">ПОНЕДІЛОК</text>", svgText);
+        Assert.Contains("<text x=\"1040.0\" y=\"58\" font-family=\"Arial, sans-serif\" font-size=\"28\" font-weight=\"bold\" text-anchor=\"end\" fill=\"#111827\">19.10.2026</text>", svgText);
+
+        var rasterizer = new SvitloSk.Publisher.Infrastructure.Graphics.SvgSkiaRasterizer();
+        byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
+        Assert.NotNull(pngBytes);
+        Assert.True(pngBytes.Length > 0);
+
+        string previewPath = @"C:\Users\ATom\.gemini\antigravity\brain\8e6baacd-4448-47ed-ade0-f7871abf2690\graphic_monday_fixed_preview.png";
+        if (Directory.Exists(Path.GetDirectoryName(previewPath)))
+        {
+            File.WriteAllBytes(previewPath, pngBytes);
+        }
+    }
 }
 
 

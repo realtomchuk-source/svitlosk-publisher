@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace SvitloSk.Publisher.Core.Engine;
 
@@ -65,7 +66,10 @@ public record GraphicInputPackage(
     GraphicMetadata Metadata,
     string TerritorialScope,
     IReadOnlyList<QueueSchedule> Queues
-);
+)
+{
+    public bool HasAnyOutages => Queues != null && Queues.Any(q => q?.Subqueues != null && q.Subqueues.Any(sq => sq?.Intervals != null && sq.Intervals.Count > 0));
+}
 
 public interface IGraphicRasterizer
 {
