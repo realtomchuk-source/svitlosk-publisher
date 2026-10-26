@@ -1,3 +1,4 @@
+using SvitloSk.Publisher.Core.Engine;
 using System;
 using System.Text;
 using SvitloSk.Publisher.Core.Domain;
@@ -41,7 +42,7 @@ public static class TelegramRenderer
     /// </summary>
     public static string RenderSystemStatus(SystemStatusModel model)
     {
-        var localTime = model.LastUpdatedUtc.AddHours(3);
+        var localTime = KyivClock.ToKyiv(model.LastUpdatedUtc);
         return $"<b>Останнє оновлення журналу:</b> {localTime:HH:mm}\n<b>Стан моніторингу:</b> {model.MonitoringState}";
     }
 

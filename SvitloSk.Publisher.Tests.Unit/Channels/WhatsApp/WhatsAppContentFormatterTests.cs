@@ -200,5 +200,48 @@ public class WhatsAppContentFormatterTests
         Assert.DoesNotContain("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ • *", output);
         Assert.DoesNotContain("**", output);
     }
+
+    [Fact]
+    public void TC_FormatMarker_And_TryExtractMarkerFromText_RoundtripPlainText()
+    {
+        string markerT = WhatsAppContentFormatter.FormatMarker('T', "2026-10-26", 1);
+        Assert.Equal("T · 26.10 · 01", markerT);
+
+        string markerF = WhatsAppContentFormatter.FormatMarker('F', "2026-10-27", 0);
+        Assert.Equal("F · 27.10 · 00", markerF);
+
+        string markerG = WhatsAppContentFormatter.FormatMarker('G', "2026-10-26");
+        Assert.Equal("G · 26.10", markerG);
+
+        string markerS = WhatsAppContentFormatter.FormatMarker('S', "2026-10-26");
+        Assert.Equal("S · 26.10", markerS);
+
+        string body = "*м. СТАРОКОСТЯНТИНІВ*\n\n*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*09:00 – 17:00*\n- вул. Миру: 1–10";
+        string withMarker = WhatsAppContentFormatter.AppendMarker(body, markerT);
+
+        Assert.EndsWith("\n\nT · 26.10 · 01", withMarker);
+        Assert.DoesNotContain("_T ·", withMarker);
+
+        bool found = WhatsAppContentFormatter.TryExtractMarkerFromText(withMarker, out var extracted);
+        Assert.True(found);
+        Assert.NotNull(extracted);
+        Assert.Equal('T', extracted!.Type);
+        Assert.Equal("26.10", extracted.DateDdMm);
+        Assert.Equal(1, extracted.SequenceNumber);
+        Assert.Equal("T · 26.10 · 01", extracted.Marker);
+
+        string stripped = WhatsAppContentFormatter.StripMarker(withMarker);
+        Assert.Equal(body, stripped);
+    }
+
+    [Fact]
+    public void TC_ResolveTerritoryIdFromPostText_IdentifiesCityAndOkruhs()
+    {
+        Assert.Equal("journal_header", WhatsAppContentFormatter.ResolveTerritoryIdFromPostText("*ЖУРНАЛ ЗНЕСТРУМЛЕНЬ | СТАРОКОСТЯНТИНІВСЬКА МТГ*\n26 жовтня"));
+        Assert.Equal("starokostiantyniv", WhatsAppContentFormatter.ResolveTerritoryIdFromPostText("*м. СТАРОКОСТЯНТИНІВ*\n\n*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*"));
+        Assert.Equal("pashkovetskyi", WhatsAppContentFormatter.ResolveTerritoryIdFromPostText("*ПАШКОВЕЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ*\n\n*с. Пашківці*"));
+        Assert.Equal("tomorrow_velykomatsevytskyi", WhatsAppContentFormatter.ResolveTerritoryIdFromPostText("*ПРОГНОЗ НА ЗАВТРА* • *27.10.2026*\n\n*ВЕЛИКОМАЦЕВИЦЬКИЙ СТАРОСТИНСЬКИЙ ОКРУГ*", isTomorrow: true));
+        Assert.Equal("system_status", WhatsAppContentFormatter.ResolveTerritoryIdFromPostText("Останнє оновлення журналу: *14:00*\nСтан моніторингу: активний"));
+    }
 }
 

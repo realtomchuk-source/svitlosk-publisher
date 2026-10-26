@@ -63,28 +63,33 @@ if (-not [string]::IsNullOrWhiteSpace($env:WHATSAPP_CHANNEL_ID)) {
     }
 
     if (-not $bridgeHealthy) {
-        Write-Host "[INFO] WhatsApp Bridge is not running on $bridgeUrl. Auto-starting bridge in background..." -ForegroundColor Yellow
-        $bridgeScript = Join-Path $repoRoot "tools\whatsapp-bridge\run-bridge.ps1"
-        if (Test-Path $bridgeScript) {
-            Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$bridgeScript`"" -WindowStyle Minimized
-            for ($i = 0; $i -lt 10; $i++) {
-                Start-Sleep -Seconds 1
-                try {
-                    $res = Invoke-RestMethod -Uri "$bridgeUrl/health" -TimeoutSec 2 -ErrorAction Stop
-                    if ($res.connected -eq $true) {
-                        Write-Host "[INFO] WhatsApp Bridge successfully auto-started and connected!" -ForegroundColor Green
-                        $bridgeHealthy = $true
-                        break
-                    }
-                } catch {}
+        $port3000Listening = $null -ne (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)
+        if ($port3000Listening) {
+            Write-Host "[INFO] WhatsApp Bridge is listening on port 3000 and initializing browser/channel..." -ForegroundColor Cyan
+        } else {
+            Write-Host "[INFO] WhatsApp Bridge is not running on $bridgeUrl. Auto-starting bridge in background..." -ForegroundColor Yellow
+            $bridgeScript = Join-Path $repoRoot "tools\whatsapp-bridge\run-bridge.ps1"
+            if (Test-Path $bridgeScript) {
+                Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$bridgeScript`"" -WindowStyle Minimized
             }
+        }
+        for ($i = 0; $i -lt 25; $i++) {
+            Start-Sleep -Seconds 1
+            try {
+                $res = Invoke-RestMethod -Uri "$bridgeUrl/health" -TimeoutSec 2 -ErrorAction Stop
+                if ($res.connected -eq $true) {
+                    Write-Host "[INFO] WhatsApp Bridge is ready and connected!" -ForegroundColor Green
+                    $bridgeHealthy = $true
+                    break
+                }
+            } catch {}
         }
     }
 }
 
 Push-Location $repoRoot
 try {
-    dotnet run --project "$repoRoot\SvitloSk.Publisher.Infrastructure" -- $args
+    dotnet run --no-restore --project "$repoRoot\SvitloSk.Publisher.Infrastructure" -- $args
 }
 finally {
     Pop-Location

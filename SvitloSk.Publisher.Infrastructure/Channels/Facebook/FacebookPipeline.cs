@@ -81,7 +81,14 @@ public class FacebookPipeline : IChannelPipeline
                  string.Equals(d.TerritoryIdentifier, "journal_header", StringComparison.OrdinalIgnoreCase)) &&
                 !string.IsNullOrWhiteSpace(d.ScheduleDate))?.ScheduleDate;
 
-            DateTime todayDate = DateTime.TryParse(todayDateStr, out var parsedToday) ? parsedToday.Date : DateTime.UtcNow.Date;
+            string? tomorrowDateStr = decisions.FirstOrDefault(d =>
+                (string.Equals(d.TerritoryIdentifier, "fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(d.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(d.ScheduleDate))?.ScheduleDate;
+
+            DateTime todayDate = DateTime.TryParse(todayDateStr, out var parsedToday)
+                ? parsedToday.Date
+                : (DateTime.TryParse(tomorrowDateStr, out var parsedTom) ? parsedTom.Date.AddDays(-1) : KyivClock.Now.Date);
 
             foreach (var post in recentPagePosts)
             {
@@ -191,7 +198,7 @@ public class FacebookPipeline : IChannelPipeline
 
                 if (decision.Type == PublicationType.Graphic)
                 {
-                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
+                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? KyivClock.Now.ToString("dd.MM.yyyy"));
 
                     // Pre-flight check: if matching graphic post already exists on page for this date, delete old one to prevent duplicates
                     var existingPost = FindMatchingPost(recentPagePosts, reconciledPostIds, decision, caption);
@@ -256,7 +263,7 @@ public class FacebookPipeline : IChannelPipeline
 
                 if (decision.Type == PublicationType.Graphic)
                 {
-                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? DateTime.UtcNow.ToString("dd.MM.yyyy"));
+                    string caption = FacebookContentFormatter.FormatGraphicCaption(decision.ScheduleDate ?? KyivClock.Now.ToString("dd.MM.yyyy"));
 
                     // Graphic schedule photo must be replaced: delete old and create new
                     if (!string.IsNullOrEmpty(decision.ExternalMessageId))
@@ -397,7 +404,7 @@ public class FacebookPipeline : IChannelPipeline
 
             if (string.Equals(decision.TerritoryIdentifier, "fb_emergency", StringComparison.OrdinalIgnoreCase))
             {
-                byte[] svg = _bannerAssembly.AssembleFacebookEmergencyHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+                byte[] svg = _bannerAssembly.AssembleFacebookEmergencyHeaderSvg(decision.ScheduleDate ?? KyivClock.Now.ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
             }
 
@@ -406,15 +413,15 @@ public class FacebookPipeline : IChannelPipeline
             {
                 bool isNoOutages = IsNoOutagesPost(decision.TargetHash);
                 byte[] svg = isNoOutages
-                    ? _bannerAssembly.AssembleFacebookNoOutagesSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"))
-                    : _bannerAssembly.AssembleFacebookDayHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+                    ? _bannerAssembly.AssembleFacebookNoOutagesSvg(decision.ScheduleDate ?? KyivClock.Now.ToString("yyyy-MM-dd"))
+                    : _bannerAssembly.AssembleFacebookDayHeaderSvg(decision.ScheduleDate ?? KyivClock.Now.ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
             }
 
             if (string.Equals(decision.TerritoryIdentifier, "fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(decision.TerritoryIdentifier, "tomorrow_separator", StringComparison.OrdinalIgnoreCase))
             {
-                byte[] svg = _bannerAssembly.AssembleFacebookTomorrowHeaderSvg(decision.ScheduleDate ?? DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd"));
+                byte[] svg = _bannerAssembly.AssembleFacebookTomorrowHeaderSvg(decision.ScheduleDate ?? KyivClock.Now.AddDays(1).ToString("yyyy-MM-dd"));
                 return _rasterizer.RasterizeSvgToPng(svg, 1200, 630);
             }
 

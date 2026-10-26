@@ -113,7 +113,7 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(pngContent, "photo", "graphic_schedule.png");
         content.Add(new StringContent("HTML"), "parse_mode");
 
-        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? KyivClock.Now.ToString("yyyy-MM-dd"));
         string caption = TelegramRenderer.FormatGraphicScheduleCaption(formattedDate);
         content.Add(new StringContent(caption), "caption");
 
@@ -129,7 +129,7 @@ public class TelegramGraphicPublisherDispatcher : IGraphicPublisherDispatcher
         content.Add(new StringContent(payload.ChatNameOrId), "chat_id");
         content.Add(new StringContent(payload.TelegramMessageId!.Value.ToString()), "message_id");
 
-        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd"));
+        string formattedDate = EditorialContentTransformer.FormatDate(payload.ScheduleDate ?? KyivClock.Now.ToString("yyyy-MM-dd"));
         string caption = TelegramRenderer.FormatGraphicScheduleCaption(formattedDate);
 
         var mediaObj = new

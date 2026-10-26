@@ -64,7 +64,7 @@ public class PublisherOrchestrator : IPublisherOrchestrator
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTime syncTime = input.SourceQueryTime ?? DateTime.UtcNow.AddHours(3);
+        DateTime syncTime = input.SourceQueryTime ?? KyivClock.Now;
         bool isWhatsApp = string.Equals(_dispatcher.ChannelName, "WhatsApp", StringComparison.OrdinalIgnoreCase);
 
         // 1. Load Registry

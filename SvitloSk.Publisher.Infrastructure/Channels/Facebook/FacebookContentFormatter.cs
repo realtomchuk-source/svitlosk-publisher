@@ -93,7 +93,7 @@ public static class FacebookContentFormatter
             }
         }
 
-        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        var localTime = KyivClock.ToKyiv(lastUpdatedUtc ?? DateTime.UtcNow);
         sb.AppendLine($"🕒 Останнє оновлення: {localTime:HH:mm}");
         sb.AppendLine(DefaultHashtags);
 
@@ -260,7 +260,7 @@ public static class FacebookContentFormatter
         }
 
         // Technical footer
-        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        var localTime = KyivClock.ToKyiv(lastUpdatedUtc ?? DateTime.UtcNow);
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
         sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();
@@ -421,7 +421,7 @@ public static class FacebookContentFormatter
         }
 
         // Technical footer
-        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        var localTime = KyivClock.ToKyiv(lastUpdatedUtc ?? DateTime.UtcNow);
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
         sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();
@@ -520,7 +520,7 @@ public static class FacebookContentFormatter
         }
 
         // Technical footer
-        var localTime = (lastUpdatedUtc ?? DateTime.UtcNow).AddHours(3);
+        var localTime = KyivClock.ToKyiv(lastUpdatedUtc ?? DateTime.UtcNow);
         sb.AppendLine($"Останнє оновлення журналу: {localTime:HH:mm}");
         sb.AppendLine("Стан моніторингу: активний");
         sb.AppendLine();

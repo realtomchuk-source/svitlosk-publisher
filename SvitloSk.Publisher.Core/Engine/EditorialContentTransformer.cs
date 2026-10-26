@@ -102,13 +102,13 @@ public class EditorialContentTransformer
 
     public string RenderSystemStatus(DateTime? checkTime = null)
     {
-        var time = checkTime ?? DateTime.UtcNow.AddHours(3);
+        var time = checkTime ?? KyivClock.Now;
         return $"<b>Останнє оновлення журналу:</b> {time:HH:mm}\n<b>Стан моніторингу:</b> активний";
     }
 
     public string RenderArchivedSystemStatus(DateTime? lastUpdateTime, string previousDateStr)
     {
-        var time = lastUpdateTime ?? DateTime.UtcNow.AddHours(3);
+        var time = lastUpdateTime ?? KyivClock.Now;
         string formattedDate = previousDateStr;
         if (DateTime.TryParse(previousDateStr, out var parsedDate))
         {

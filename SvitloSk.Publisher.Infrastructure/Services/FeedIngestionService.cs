@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using SvitloSk.Publisher.Application.Model;
 using SvitloSk.Publisher.Core.Engine;
 using SvitloSk.Publisher.Infrastructure.Channels.Facebook;
+using SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 
 namespace SvitloSk.Publisher.Infrastructure.Services;
 
@@ -46,7 +47,7 @@ public class FeedIngestionService
         string todayFeedContent = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 20.08.2026\n============================================\nВідключень не зафіксовано.\n============================================\nКІНЕЦЬ ДОКУМЕНТУ\n";
         string? tomorrowFeedContent = null;
         bool tomorrowAvailable = false;
-        DateTime sourceQueryTime = UtcNowProvider().AddHours(3);
+        DateTime sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
 
         string localFeedFallbackPath = @"../ParserAktualVidkl/starokostiantyniv-outages/data/tg_posts/today.txt";
 
@@ -56,7 +57,7 @@ public class FeedIngestionService
             {
                 Console.WriteLine("[INFO] Fetching online today.txt feed from GitHub...");
                 todayFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/today.txt", cancellationToken).ConfigureAwait(false);
-                sourceQueryTime = UtcNowProvider().AddHours(3);
+                sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
                 Console.WriteLine($"[INFO] Successfully fetched today.txt online at {sourceQueryTime:HH:mm}.");
             }
             catch (Exception onlineEx)
@@ -65,11 +66,11 @@ public class FeedIngestionService
                 if (File.Exists(localFeedFallbackPath))
                 {
                     todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
-                    sourceQueryTime = UtcNowProvider().AddHours(3);
+                    sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
                 }
             }
 
-            bool isTomorrowTimeGateOpen = isDryRun || UtcNowProvider().AddHours(3).Hour >= 12;
+            bool isTomorrowTimeGateOpen = isDryRun || KyivClock.ToKyiv(UtcNowProvider()).Hour >= 12;
 
             if (isTomorrowTimeGateOpen)
             {
@@ -324,6 +325,205 @@ public class FeedIngestionService
         );
     }
 
+    public async Task<EditorialInput> IngestWhatsAppEditorialInputAsync(
+        HttpClient httpClient,
+        bool isDryRun,
+        IReadOnlyList<string>? historicalTerritoryIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        string todayFeedContent = "============================================\nДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ\nДата: 20.08.2026\n============================================\nВідключень не зафіксовано.\n============================================\nКІНЕЦЬ ДОКУМЕНТУ\n";
+        string? tomorrowFeedContent = null;
+        bool tomorrowAvailable = false;
+        DateTime sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
+
+        string localFeedFallbackPath = @"../ParserAktualVidkl/starokostiantyniv-outages/data/tg_posts/today.txt";
+
+        if (!isDryRun)
+        {
+            try
+            {
+                Console.WriteLine("[INFO][WhatsApp] Fetching online today.txt feed from GitHub...");
+                todayFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/today.txt", cancellationToken).ConfigureAwait(false);
+                sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
+                Console.WriteLine($"[INFO][WhatsApp] Successfully fetched today.txt online at {sourceQueryTime:HH:mm}.");
+            }
+            catch (Exception onlineEx)
+            {
+                Console.WriteLine($"[WARN][WhatsApp] Could not fetch today.txt online ({onlineEx.Message}). Falling back to local today.txt.");
+                if (File.Exists(localFeedFallbackPath))
+                {
+                    todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
+                    sourceQueryTime = KyivClock.ToKyiv(UtcNowProvider());
+                }
+            }
+
+            bool isTomorrowTimeGateOpen = isDryRun || KyivClock.ToKyiv(UtcNowProvider()).Hour >= 12;
+            if (isTomorrowTimeGateOpen)
+            {
+                try
+                {
+                    Console.WriteLine("[INFO][WhatsApp] Fetching online tomorrow.txt forecast from GitHub...");
+                    tomorrowFeedContent = await httpClient.GetStringAsync("https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/tg_posts/tomorrow.txt", cancellationToken).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(tomorrowFeedContent) && !tomorrowFeedContent.Contains("404"))
+                    {
+                        tomorrowAvailable = true;
+                        Console.WriteLine("[INFO][WhatsApp] Successfully fetched tomorrow.txt online.");
+                    }
+                }
+                catch
+                {
+                    Console.WriteLine("[INFO][WhatsApp] Tomorrow forecast not found or unavailable online.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[INFO][WhatsApp] Tomorrow forecast time gate is closed (< 12:00 Kyiv time). Skipping tomorrow.txt fetch.");
+            }
+        }
+        else if (File.Exists(localFeedFallbackPath))
+        {
+            todayFeedContent = await File.ReadAllTextAsync(localFeedFallbackPath, cancellationToken).ConfigureAwait(false);
+        }
+
+        var dateMatch = Regex.Match(todayFeedContent, @"Дата:\s*(\d{2})\.(\d{2})\.(\d{4})");
+        if (!dateMatch.Success)
+        {
+            throw new InvalidOperationException("[FATAL][WhatsApp] Malformed or missing Date in feed metadata. Fail-Closed.");
+        }
+
+        string editionDate = $"{dateMatch.Groups[3].Value}-{dateMatch.Groups[2].Value}-{dateMatch.Groups[1].Value}";
+        Console.WriteLine($"[INFO][WhatsApp] Parsed EditionDate from feed: {editionDate}");
+
+        var packages = new List<InputTerritoryPackage>();
+        var rawTodayRecords = _parser.Parse(todayFeedContent);
+        var parsedTodayRecords = await GetCumulativeTodayRecordsAsync(httpClient, editionDate, rawTodayRecords, isDryRun, cancellationToken).ConfigureAwait(false);
+
+        var activeTerritoryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in parsedTodayRecords)
+        {
+            if (!string.IsNullOrWhiteSpace(r.TerritoryName))
+            {
+                try { activeTerritoryIds.Add(TerritoryRegistry.MapRawTerritoryName(r.TerritoryName)); }
+                catch { activeTerritoryIds.Add(r.TerritoryName); }
+            }
+        }
+
+        var historicalSettlements = new List<string>();
+        if (historicalTerritoryIds != null)
+        {
+            foreach (var tid in historicalTerritoryIds)
+            {
+                if (activeTerritoryIds.Contains(tid)) continue;
+                var canon = TerritoryRegistry.Territories.FirstOrDefault(t => t.TerritoryId.Equals(tid, StringComparison.OrdinalIgnoreCase));
+                if (canon != null)
+                {
+                    string prefix = canon.Type == TerritoryType.CITY ? "м." : "с.";
+                    string settlementName = $"{prefix} {canon.CenterSettlement}";
+                    if (!historicalSettlements.Contains(settlementName))
+                    {
+                        historicalSettlements.Add(settlementName);
+                    }
+                }
+            }
+        }
+
+        bool hasAnyOutagesToday = parsedTodayRecords.Count > 0 || historicalSettlements.Count > 0;
+        if (!hasAnyOutagesToday)
+        {
+            string noOutagesText = WhatsAppContentFormatter.RenderNoOutagesPost(editionDate);
+            byte[] noOutagesSvg = _bannerAssembly.AssembleWhatsAppNoOutagesSvg(editionDate);
+            byte[] noOutagesPng = _rasterizer.RasterizeSvgToPng(noOutagesSvg, 1080, 600);
+            packages.Add(new InputTerritoryPackage("journal_header", noOutagesText, noOutagesPng, true));
+        }
+        else
+        {
+            var stats = parsedTodayRecords.Count > 0
+                ? TerritoryAggregator.CalculateSummaryStats(parsedTodayRecords)
+                : new JournalSummaryStats(0, Array.Empty<string>(), Array.Empty<string>());
+
+            var combinedPlanned = new List<string>(stats.PlannedSettlements);
+            foreach (var hs in historicalSettlements)
+            {
+                if (!combinedPlanned.Contains(hs) && !stats.EmergencySettlements.Contains(hs))
+                {
+                    combinedPlanned.Add(hs);
+                }
+            }
+
+            var cumulativeStats = new JournalSummaryStats(
+                Math.Max(stats.TotalTerritories, combinedPlanned.Count + stats.EmergencySettlements.Count),
+                combinedPlanned,
+                stats.EmergencySettlements
+            );
+
+            string headerText = WhatsAppContentFormatter.RenderJournalHeader(editionDate, cumulativeStats);
+            byte[] daySvg = _bannerAssembly.AssembleWhatsAppDayHeaderSvg(editionDate);
+            byte[] dayPng = _rasterizer.RasterizeSvgToPng(daySvg, 1080, 480);
+            packages.Add(new InputTerritoryPackage("journal_header", headerText, dayPng, true));
+
+            if (parsedTodayRecords.Count > 0)
+            {
+                var aggregatedToday = TerritoryAggregator.AggregateByTerritory(parsedTodayRecords)
+                    .OrderBy(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase) || t.CanonicalName.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                    .ThenBy(t => t.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+
+                foreach (var agg in aggregatedToday)
+                {
+                    string waTerritoryText = WhatsAppContentFormatter.RenderTerritoryPost(agg, isTomorrow: false);
+                    packages.Add(new InputTerritoryPackage(agg.TerritoryId, waTerritoryText, null, true));
+                }
+            }
+        }
+
+        DateTime parsedToday = DateTime.Parse(editionDate);
+        string tomorrowLabel = parsedToday.AddDays(1).ToString("yyyy-MM-dd");
+
+        if (tomorrowAvailable && !string.IsNullOrWhiteSpace(tomorrowFeedContent))
+        {
+            if (tomorrowFeedContent.Contains("ДАНІ ПРО ВІДКЛЮЧЕННЯ ЕЛЕКТРОЕНЕРГІЇ") || tomorrowFeedContent.Contains("ЗНЕСТРУМЛЕННЯ"))
+            {
+                var tomRecords = _parser.Parse(tomorrowFeedContent);
+                var tomAggregated = TerritoryAggregator.AggregateByTerritory(tomRecords);
+                if (tomAggregated.Count > 0)
+                {
+                    var sortedTom = tomAggregated
+                        .OrderBy(t => t.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase) || t.CanonicalName.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                        .ThenBy(t => t.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList();
+
+                    var tomStats = TerritoryAggregator.CalculateSummaryStats(tomRecords);
+                    string tomBannerCaption = WhatsAppContentFormatter.RenderJournalHeader(tomorrowLabel, tomStats);
+                    if (!tomBannerCaption.StartsWith("*ПРОГНОЗ НА ЗАВТРА*", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tomBannerCaption = $"*ПРОГНОЗ НА ЗАВТРА*\n\n{tomBannerCaption}";
+                    }
+
+                    byte[] tomSvg = _bannerAssembly.AssembleWhatsAppTomorrowHeaderSvg(tomorrowLabel);
+                    byte[] tomPng = _rasterizer.RasterizeSvgToPng(tomSvg, 1080, 480);
+                    packages.Add(new InputTerritoryPackage("tomorrow_separator", tomBannerCaption, tomPng, false));
+
+                    foreach (var tAgg in sortedTom)
+                    {
+                        string waTomText = WhatsAppContentFormatter.RenderTerritoryPost(tAgg, isTomorrow: true, tomorrowDate: tomorrowLabel);
+                        packages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", waTomText, null, false));
+                    }
+                }
+            }
+        }
+
+        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[WhatsApp]", cancellationToken).ConfigureAwait(false);
+        bool hasActiveTomorrow = packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase));
+
+        return new EditorialInput(
+            EditionDate: editionDate,
+            Packages: packages,
+            TomorrowForecastAvailable: hasActiveTomorrow,
+            GraphicPackage: graphicPackage,
+            SourceQueryTime: sourceQueryTime
+        );
+    }
+
     private async Task<GraphicInputPackage?> FetchActiveGraphicScheduleAsync(
         HttpClient httpClient,
         string tomorrowLabel,
@@ -426,7 +626,7 @@ public class FeedIngestionService
                 var loaded = System.Text.Json.JsonSerializer.Deserialize<List<OutageRecord>>(json);
                 if (loaded != null && loaded.Count > 0)
                 {
-                    cumulativeRecords.AddRange(loaded);
+                    cumulativeRecords = MergeRecords(cumulativeRecords, loaded);
                 }
             }
             catch (Exception ex)
@@ -520,10 +720,16 @@ public class FeedIngestionService
             bool alreadyExists = merged.Any(e =>
                 string.Equals(e.TerritoryName, inc.TerritoryName, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(e.OutageType, inc.OutageType, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(e.Details.Trim(), inc.Details.Trim(), StringComparison.OrdinalIgnoreCase));
+                (string.Equals(e.Details.Trim(), inc.Details.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                 e.Details.Length >= inc.Details.Length));
 
             if (!alreadyExists)
             {
+                merged.RemoveAll(e =>
+                    string.Equals(e.TerritoryName, inc.TerritoryName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(e.OutageType, inc.OutageType, StringComparison.OrdinalIgnoreCase) &&
+                    e.Details.Length < inc.Details.Length);
+
                 merged.Add(inc);
             }
         }

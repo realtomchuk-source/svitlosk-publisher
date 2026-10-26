@@ -13,6 +13,10 @@ public interface IBannerGraphicAssembly
     byte[] AssembleFacebookEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleFacebookTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
     byte[] AssembleFacebookNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleWhatsAppDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleWhatsAppEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleWhatsAppTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
+    byte[] AssembleWhatsAppNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада");
 }
 
 public class BannerGraphicAssembly : IBannerGraphicAssembly
@@ -689,6 +693,11 @@ public class BannerGraphicAssembly : IBannerGraphicAssembly
 
         return System.Text.Encoding.UTF8.GetBytes(sb.ToString());
     }
+
+    public byte[] AssembleWhatsAppDayHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада") => AssembleDayHeaderSvg(editionDate, territorialScope);
+    public byte[] AssembleWhatsAppEmergencyHeaderSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада") => AssembleEmergencyHeaderSvg(editionDate, territorialScope);
+    public byte[] AssembleWhatsAppTomorrowHeaderSvg(string tomorrowDate, string territorialScope = "Старокостянтинівська міська територіальна громада") => AssembleTomorrowHeaderSvg(tomorrowDate, territorialScope);
+    public byte[] AssembleWhatsAppNoOutagesSvg(string editionDate, string territorialScope = "Старокостянтинівська міська територіальна громада") => AssembleNoOutagesSvg(editionDate, territorialScope);
 
     private static string EscapeXml(string? unescaped)
     {

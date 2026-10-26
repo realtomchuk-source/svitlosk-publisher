@@ -1,5 +1,4 @@
 const express = require('express');
-const path = require('path');
 const fs = require('fs');
 const browser = require('./browser');
 
@@ -7,6 +6,17 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 
 const PORT = process.env.PORT || 3000;
+
+// Kyiv (Europe/Kyiv) calendar date in yyyy-MM-dd, DST-aware (never UTC date).
+function kyivTodayIso() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+function kyivTodayDdMm() {
+    const iso = kyivTodayIso(); // yyyy-MM-dd
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}.${parts[1]}` : iso;
+}
 
 // 1. Health check
 app.get('/health', async (req, res) => {
@@ -40,7 +50,7 @@ app.get('/debug-dom', async (req, res) => {
     }
 });
 
-// 2. Channel info (actively verifies channel availability and composer presence)
+// 2. Channel info (actively verifies channel availability and composer presence in #main)
 app.get('/channel-info', async (req, res) => {
     try {
         await browser.ensureBrowser();
@@ -60,8 +70,29 @@ app.get('/channel-info', async (req, res) => {
             subscribers: 0
         });
     } catch (err) {
-        console.warn(`[SERVER] /channel-info failed: ${err.message}`);
+        browser.logBridge('WARN', `/channel-info failed: ${err.message}`);
         res.status(503).json({ isSuccess: false, errorDescription: err.message });
+    }
+});
+
+// 2a. Read channel tail state (for WhatsAppReconciler)
+app.get('/tail-state', async (req, res) => {
+    try {
+        await browser.ensureBrowser();
+        const status = browser.getStatus();
+        if (!status.connected) {
+            return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet.' });
+        }
+
+        const channelId = req.query.channelId || '0029Vb96XUUIN9ixA88Umz3Y';
+        const todayDdMm = req.query.todayDdMm || kyivTodayDdMm();
+        const maxScreens = parseInt(req.query.maxScreens || '6', 10);
+
+        const state = await browser.getTailState(channelId, todayDdMm, maxScreens);
+        res.json(state);
+    } catch (err) {
+        browser.logBridge('ERROR', `/tail-state failed: ${err.message}`);
+        res.status(500).json({ isSuccess: false, errorDescription: err.message, messages: [] });
     }
 });
 
@@ -130,11 +161,11 @@ app.post('/sweep-forecasts', async (req, res) => {
     try {
         await browser.ensureBrowser();
         const channelId = req.body.channelOrChatId || '0029Vb96XUUIN9ixA88Umz3Y';
-        const todayDate = req.body.todayDate || new Date().toISOString().slice(0, 10);
+        const todayDate = req.body.todayDate || kyivTodayIso();
         const result = await browser.sweepObsoleteForecasts(channelId, todayDate);
         res.json(result);
     } catch (err) {
-        console.warn(`[SERVER] Sweep forecasts failed: ${err.message}`);
+        browser.logBridge('WARN', `Sweep forecasts failed: ${err.message}`);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
@@ -154,9 +185,12 @@ app.post('/send', async (req, res) => {
 
     try {
         const result = await browser.sendTextMessage(channelOrChatId, text);
+        if (!result.isSuccess) {
+            return res.status(500).json(result);
+        }
         res.json(result);
     } catch (err) {
-        console.error('[SERVER] Send text failed:', err);
+        browser.logBridge('ERROR', `Send text failed: ${err.message}`);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
@@ -177,13 +211,17 @@ app.post('/media', async (req, res) => {
     try {
         if (!imageBase64) {
             const textResult = await browser.sendTextMessage(channelOrChatId, caption || '');
+            if (!textResult.isSuccess) return res.status(500).json(textResult);
             return res.json(textResult);
         }
 
         const result = await browser.sendMediaMessage(channelOrChatId, caption || '', imageBase64, mimeType);
+        if (!result.isSuccess) {
+            return res.status(500).json(result);
+        }
         res.json(result);
     } catch (err) {
-        console.error('[SERVER] Send media failed:', err);
+        browser.logBridge('ERROR', `Send media failed: ${err.message}`);
         res.status(500).json({ isSuccess: false, errorDescription: err.message });
     }
 });
@@ -196,17 +234,20 @@ app.post('/delete', async (req, res) => {
         return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet.' });
     }
 
-    const { channelOrChatId, messageId } = req.body;
-    if (!channelOrChatId || !messageId) {
-        return res.status(400).json({ isSuccess: false, errorDescription: 'channelOrChatId and messageId are required.' });
+    const { channelOrChatId, messageId, marker } = req.body;
+    if (!channelOrChatId || (!messageId && !marker)) {
+        return res.status(400).json({ isSuccess: false, errorDescription: 'channelOrChatId and (messageId or marker) are required.' });
     }
 
     try {
-        const result = await browser.deleteMessage(channelOrChatId, messageId);
+        const result = await browser.deleteMessage(channelOrChatId, messageId, marker);
+        if (!result.isSuccess) {
+            return res.status(500).json(result);
+        }
         res.json(result);
     } catch (err) {
-        console.warn(`[SERVER] Delete failed: ${err.message}`);
-        res.status(500).json({ isSuccess: false, messageId: messageId, errorDescription: err.message });
+        browser.logBridge('WARN', `Delete failed: ${err.message}`);
+        res.status(500).json({ isSuccess: false, status: 'failed', messageId: messageId, errorDescription: err.message });
     }
 });
 
@@ -218,31 +259,34 @@ app.post('/edit', async (req, res) => {
         return res.status(503).json({ isSuccess: false, errorDescription: 'WhatsApp Web is not authenticated yet.' });
     }
 
-    const { channelOrChatId, messageId, text } = req.body;
-    if (!channelOrChatId || !messageId || !text) {
-        return res.status(400).json({ isSuccess: false, errorDescription: 'channelOrChatId, messageId and text are required.' });
+    const { channelOrChatId, messageId, text, marker } = req.body;
+    if (!channelOrChatId || (!messageId && !marker) || !text) {
+        return res.status(400).json({ isSuccess: false, errorDescription: 'channelOrChatId, (messageId or marker) and text are required.' });
     }
 
     try {
-        const result = await browser.editMessage(channelOrChatId, messageId, text);
+        const result = await browser.editMessage(channelOrChatId, messageId, text, marker);
+        if (!result.isSuccess) {
+            return res.status(422).json(result);
+        }
         res.json(result);
     } catch (err) {
-        console.error('[SERVER] Edit message failed:', err);
-        res.status(500).json({ isSuccess: false, errorDescription: err.message });
+        browser.logBridge('ERROR', `Edit message failed: ${err.message}`);
+        res.status(500).json({ isSuccess: false, status: 'failed', errorDescription: err.message });
     }
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('[SERVER] Uncaught exception:', err.message);
+    browser.logBridge('ERROR', `Uncaught exception: ${err.message}`);
 });
 process.on('unhandledRejection', (reason) => {
-    console.error('[SERVER] Unhandled rejection:', reason);
+    browser.logBridge('ERROR', `Unhandled rejection: ${reason}`);
 });
 
 app.listen(PORT, '127.0.0.1', () => {
-    console.log(`======================================================`);
-    console.log(` [WHATSAPP-BRIDGE] Playwright Browser Microservice`);
-    console.log(` Listening on: http://127.0.0.1:${PORT}`);
-    console.log(`======================================================`);
-    browser.initBrowser();
+    browser.logBridge('INFO', `======================================================`);
+    browser.logBridge('INFO', ` [WHATSAPP-BRIDGE] Playwright Browser Microservice`);
+    browser.logBridge('INFO', ` Listening on: http://127.0.0.1:${PORT}`);
+    browser.logBridge('INFO', `======================================================`);
+    browser.ensureBrowser();
 });

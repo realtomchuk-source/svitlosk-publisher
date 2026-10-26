@@ -269,8 +269,8 @@ public class OutageFeedParser : IOutageFeedParser
         if (string.IsNullOrWhiteSpace(targetDate))
         {
             targetDate = root.TryGetProperty("date", out var dateElem) 
-                ? dateElem.GetString() ?? DateTime.UtcNow.ToString("yyyy-MM-dd") 
-                : DateTime.UtcNow.ToString("yyyy-MM-dd");
+                ? dateElem.GetString() ?? KyivClock.Now.ToString("yyyy-MM-dd") 
+                : KyivClock.Now.ToString("yyyy-MM-dd");
         }
 
         if (string.IsNullOrWhiteSpace(genTimestamp))

@@ -8,6 +8,13 @@ using SvitloSk.Publisher.Core.Engine;
 
 namespace SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 
+public record ParsedWhatsAppMarker(
+    string Marker,
+    char Type,
+    string DateDdMm,
+    int? SequenceNumber
+);
+
 /// <summary>
 /// Formats publication content specifically for the WhatsApp Messenger Channel:
 /// - Strictly adheres to WhatsApp Markdown (*bold*, > quote, `code`, - list, _italic_).
@@ -49,6 +56,203 @@ public static class WhatsAppContentFormatter
     public static string FormatShortDate(string dateStr)
     {
         return EditorialContentTransformer.FormatDate(dateStr);
+    }
+
+    /// <summary>
+    /// Formats a date string (yyyy-MM-dd or dd.MM.yyyy) into short marker date "dd.MM".
+    /// </summary>
+    public static string FormatMarkerDate(string dateStr)
+    {
+        if (string.IsNullOrWhiteSpace(dateStr)) return dateStr;
+
+        if (DateTime.TryParseExact(dateStr, new[] { "yyyy-MM-dd", "dd.MM.yyyy", "d.M.yyyy" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt) ||
+            DateTime.TryParse(dateStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
+        {
+            return dt.ToString("dd.MM");
+        }
+
+        var match = Regex.Match(dateStr, @"(\d{2})\.(\d{2})");
+        if (match.Success)
+        {
+            return $"{match.Groups[1].Value}.{match.Groups[2].Value}";
+        }
+
+        return dateStr;
+    }
+
+    /// <summary>
+    /// Builds a plain-text WhatsApp reconciliation marker:
+    /// - Type 'T' or 'F': "{type} · dd.MM · NN" (e.g., "T · 26.10 · 01")
+    /// - Type 'G' or 'S': "{type} · dd.MM"      (e.g., "S · 26.10")
+    /// </summary>
+    public static string FormatMarker(char type, string dateStr, int? sequenceNumber = null)
+    {
+        char upperType = char.ToUpperInvariant(type);
+        string ddMm = FormatMarkerDate(dateStr);
+        if ((upperType == 'T' || upperType == 'F') && sequenceNumber.HasValue)
+        {
+            return $"{upperType} · {ddMm} · {sequenceNumber.Value:D2}";
+        }
+
+        return $"{upperType} · {ddMm}";
+    }
+
+    /// <summary>
+    /// Appends the plain-text marker as the final line of a WhatsApp post (replacing any previous trailing marker).
+    /// </summary>
+    public static string AppendMarker(string content, string marker)
+    {
+        if (string.IsNullOrWhiteSpace(marker)) return content ?? string.Empty;
+        string body = StripMarker(content ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return marker.Trim();
+        }
+
+        return $"{body.TrimEnd()}\n\n{marker.Trim()}";
+    }
+
+    /// <summary>
+    /// Strips any trailing WhatsApp marker line from the post text for clean content hashing/comparison.
+    /// </summary>
+    public static string StripMarker(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return string.Empty;
+        var lines = content.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n').ToList();
+        while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+        {
+            lines.RemoveAt(lines.Count - 1);
+        }
+
+        if (lines.Count > 0 && TryParseMarkerLine(lines[^1], out _))
+        {
+            lines.RemoveAt(lines.Count - 1);
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+            {
+                lines.RemoveAt(lines.Count - 1);
+            }
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    public static bool TryParseMarkerLine(string? line, out ParsedWhatsAppMarker? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        string clean = line.Trim().Trim('_', '*', '`').Trim();
+        var tfMatch = Regex.Match(clean, @"^([TF])\s*[·•]\s*(\d{2}\.\d{2})\s*[·•]\s*(\d{2})$");
+        if (tfMatch.Success)
+        {
+            char t = tfMatch.Groups[1].Value[0];
+            string d = tfMatch.Groups[2].Value;
+            int seq = int.Parse(tfMatch.Groups[3].Value);
+            parsed = new ParsedWhatsAppMarker($"{t} · {d} · {seq:D2}", t, d, seq);
+            return true;
+        }
+
+        var gsMatch = Regex.Match(clean, @"^([GS])\s*[·•]\s*(\d{2}\.\d{2})$");
+        if (gsMatch.Success)
+        {
+            char t = gsMatch.Groups[1].Value[0];
+            string d = gsMatch.Groups[2].Value;
+            parsed = new ParsedWhatsAppMarker($"{t} · {d}", t, d, null);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool TryExtractMarkerFromText(string? fullText, out ParsedWhatsAppMarker? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(fullText)) return false;
+
+        var lines = fullText.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+        for (int i = lines.Length - 1; i >= 0; i--)
+        {
+            if (TryParseMarkerLine(lines[i], out parsed))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves a canonical TerritoryId from the first line / title of a WhatsApp territory post
+    /// (enables self-healing mapping between sequence numbers NN and territories directly from channel DOM).
+    /// </summary>
+    public static string? ResolveTerritoryIdFromPostText(string? postText, bool isTomorrow = false)
+    {
+        if (string.IsNullOrWhiteSpace(postText)) return null;
+
+        var lines = postText.Replace("\r\n", "\n").Replace("\r", "\n")
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToList();
+
+        if (lines.Count == 0) return null;
+
+        if (lines[0].Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
+        {
+            return isTomorrow ? "tomorrow_separator" : "journal_header";
+        }
+
+        if (lines[0].Contains("ГРАФІК ПОГОДИННИХ", StringComparison.OrdinalIgnoreCase) ||
+            lines[0].Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Старокостянтинівська МТГ";
+        }
+
+        if (lines[0].Contains("Останнє оновлення журналу:", StringComparison.OrdinalIgnoreCase))
+        {
+            return "system_status";
+        }
+
+        foreach (var line in lines.Take(3))
+        {
+            string cleanTitle = line.Trim('*', '_', ' ', '•', '>');
+            if (cleanTitle.StartsWith("ПРОГНОЗ НА ЗАВТРА", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (cleanTitle.Contains("СТАРОКОСТЯНТИНІВ", StringComparison.OrdinalIgnoreCase) &&
+                !cleanTitle.Contains("МТГ", StringComparison.OrdinalIgnoreCase) &&
+                !cleanTitle.Contains("ГРОМАДА", StringComparison.OrdinalIgnoreCase))
+            {
+                return isTomorrow ? "tomorrow_starokostiantyniv" : "starokostiantyniv";
+            }
+
+            foreach (var canon in TerritoryRegistry.Territories)
+            {
+                if (cleanTitle.Equals(canon.CanonicalName, StringComparison.OrdinalIgnoreCase) ||
+                    cleanTitle.Contains(canon.CenterSettlement, StringComparison.OrdinalIgnoreCase))
+                {
+                    return isTomorrow ? $"tomorrow_{canon.TerritoryId}" : canon.TerritoryId;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static string RenderGraphicScheduleCaption(string targetDateStr, string territorialScope = "Старокостянтинівська МТГ")
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"*ГРАФІК ПОГОДИННИХ ВІДКЛЮЧЕНЬ | {territorialScope.ToUpperInvariant()}*");
+        string fullDate = FormatFullUkrainianDate(targetDateStr);
+        if (!string.IsNullOrWhiteSpace(fullDate))
+        {
+            sb.AppendLine($"*{fullDate}*");
+        }
+        sb.AppendLine();
+        sb.AppendLine("_Графік застосовується за розпорядженням НЕК «Укренерго» для 12 підчерг громади_");
+        return CleanOutput(sb.ToString());
     }
 
     public static string RenderJournalHeader(string rawDate, JournalSummaryStats stats)
@@ -112,7 +316,7 @@ public static class WhatsAppContentFormatter
 
     public static string RenderSystemStatus(DateTime utcTime, string monitoringState = "активний")
     {
-        var localTime = utcTime.AddHours(3);
+        var localTime = KyivClock.ToKyiv(utcTime);
         var sb = new StringBuilder();
         sb.AppendLine($"Останнє оновлення журналу: *{localTime:HH:mm}*");
         sb.AppendLine($"Стан моніторингу: {monitoringState}");
@@ -121,7 +325,7 @@ public static class WhatsAppContentFormatter
 
     public static string RenderArchivedSystemStatus(DateTime utcTime, string previousDateStr)
     {
-        var localTime = utcTime.AddHours(3);
+        var localTime = KyivClock.ToKyiv(utcTime);
         var sb = new StringBuilder();
         sb.AppendLine($"Останнє оновлення журналу: *{localTime:HH:mm}*");
 

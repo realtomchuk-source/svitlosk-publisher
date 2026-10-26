@@ -86,6 +86,8 @@ public class Program
             string? registryPath = Environment.GetEnvironmentVariable("REGISTRY_PATH")
                 ?? Environment.GetEnvironmentVariable("REGISTRY_PATH", EnvironmentVariableTarget.User);
 
+
+
             if (isDryRun)
             {
                 botToken ??= "dry_run_token";
@@ -120,6 +122,8 @@ public class Program
             string? fbRegistryPath = Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH")
                 ?? Environment.GetEnvironmentVariable("FACEBOOK_REGISTRY_PATH", EnvironmentVariableTarget.User);
 
+
+
             if (isDryRun)
             {
                 fbPageId ??= "fb_dryrun_page";
@@ -132,6 +136,15 @@ public class Program
             }
 
             // 1.2 WhatsApp Environment & Configuration
+            string? waJournalPath = Environment.GetEnvironmentVariable("WHATSAPP_JOURNAL_PATH")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_JOURNAL_PATH", EnvironmentVariableTarget.User);
+            string? waReconcileFlag = Environment.GetEnvironmentVariable("WHATSAPP_RECONCILE_ENABLED")
+                ?? Environment.GetEnvironmentVariable("WHATSAPP_RECONCILE_ENABLED", EnvironmentVariableTarget.User);
+            bool waReconcileEnabled = !string.Equals(waReconcileFlag, "false", StringComparison.OrdinalIgnoreCase)
+                                   && !string.Equals(waReconcileFlag, "0", StringComparison.OrdinalIgnoreCase);
+            waJournalPath = isDryRun
+                ? Path.Combine(Path.GetTempPath(), "svitlosk_dry_run_whatsapp_post_journal.json")
+                : (waJournalPath ?? "local/registry/whatsapp_post_journal.json");
             string? waChannelId = Environment.GetEnvironmentVariable("WHATSAPP_CHANNEL_ID")
                 ?? Environment.GetEnvironmentVariable("WHATSAPP_CHANNEL_ID", EnvironmentVariableTarget.User);
             string? waToken = Environment.GetEnvironmentVariable("WHATSAPP_ACCESS_TOKEN")
@@ -140,6 +153,8 @@ public class Program
                 ?? Environment.GetEnvironmentVariable("WHATSAPP_BRIDGE_URL", EnvironmentVariableTarget.User);
             string? waRegistryPath = Environment.GetEnvironmentVariable("WHATSAPP_REGISTRY_PATH")
                 ?? Environment.GetEnvironmentVariable("WHATSAPP_REGISTRY_PATH", EnvironmentVariableTarget.User);
+
+
 
             if (isDryRun)
             {
@@ -150,6 +165,7 @@ public class Program
             else
             {
                 waRegistryPath ??= "local/registry/whatsapp_registry.json";
+
             }
 
             // 2. Composition Root
@@ -326,7 +342,7 @@ public class Program
 
                 var emptyReg = new RegistryModel(
                     SchemaVersion: 1,
-                    EditionDate: DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                    EditionDate: KyivClock.Now.ToString("yyyy-MM-dd"),
                     Status: "PLANNED",
                     Publications: Array.Empty<RegistryPublicationRecord>()
                 );
@@ -422,7 +438,19 @@ public class Program
                 Console.WriteLine($"[INFO] WhatsApp Registry: '{waRegistryPath}', Channel ID: '{waChannelId}'");
 
                 var waIngestionService = new FeedIngestionService(parser, bannerAssembly, rasterizer, transformer);
-                var waInput = await waIngestionService.IngestEditorialInputAsync(httpClient, isDryRun, cts.Token);
+                IReadOnlyList<string>? waHistoricalIds = null;
+                if (File.Exists(waRegistryPath))
+                {
+                    var existingWaReg = await registryStore.LoadAsync(waRegistryPath!, cts.Token);
+                    if (existingWaReg != null && string.Equals(existingWaReg.EditionDate, KyivClock.TodayIso, StringComparison.Ordinal))
+                    {
+                        waHistoricalIds = existingWaReg.Publications
+                            .Select(p => p.TerritoryId)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToList();
+                    }
+                }
+                var waInput = await waIngestionService.IngestWhatsAppEditorialInputAsync(httpClient, isDryRun, waHistoricalIds, cts.Token);
 
                 if (whatsAppPipeline == null)
                 {
@@ -440,7 +468,23 @@ public class Program
                 );
 
                 var waWatch = Stopwatch.StartNew();
-                var waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath!, waChannelId, waInput, null, cts.Token).ConfigureAwait(false);
+                SvitloSk.Publisher.Application.Model.BatchDispatchResult waResult;
+                if (waReconcileEnabled && !isDryRun)
+                {
+                    var waReconciler = new WhatsAppReconciler(
+                        whatsAppAdapter,
+                        registryStore,
+                        new WhatsAppPostJournalStore(atomicWriter),
+                        hashCalculator,
+                        new GraphicAssembly(),
+                        rasterizer,
+                        delayProvider);
+                    waResult = await waReconciler.ReconcileAsync(waChannelId, waRegistryPath!, waJournalPath!, waInput, cts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath!, waChannelId, waInput, null, cts.Token).ConfigureAwait(false);
+                }
                 waWatch.Stop();
 
                 int waCreate = waResult.Results.Count(r => r.DecisionResult == "Create");
@@ -572,7 +616,36 @@ public class Program
                         );
 
                         var waWatch = Stopwatch.StartNew();
-                        var waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath, waChannelId, input, null, cts.Token).ConfigureAwait(false);
+                        IReadOnlyList<string>? waHistoricalIds = null;
+                        if (File.Exists(waRegistryPath))
+                        {
+                            var existingWaReg = await registryStore.LoadAsync(waRegistryPath, cts.Token);
+                            if (existingWaReg != null && string.Equals(existingWaReg.EditionDate, KyivClock.TodayIso, StringComparison.Ordinal))
+                            {
+                                waHistoricalIds = existingWaReg.Publications
+                                    .Select(p => p.TerritoryId)
+                                    .Distinct(StringComparer.Ordinal)
+                                    .ToList();
+                            }
+                        }
+                        var waInput = await ingestionService.IngestWhatsAppEditorialInputAsync(httpClient, isDryRun, waHistoricalIds, cts.Token);
+                        SvitloSk.Publisher.Application.Model.BatchDispatchResult waResult;
+                        if (waReconcileEnabled && !isDryRun && whatsAppAdapter != null)
+                        {
+                            var waReconciler = new WhatsAppReconciler(
+                                whatsAppAdapter,
+                                registryStore,
+                                new WhatsAppPostJournalStore(atomicWriter),
+                                hashCalculator,
+                                new GraphicAssembly(),
+                                rasterizer,
+                                delayProvider);
+                            waResult = await waReconciler.ReconcileAsync(waChannelId, waRegistryPath, waJournalPath!, waInput, cts.Token).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            waResult = await waOrchestrator.RunOrchestrationAsync(waRegistryPath, waChannelId, waInput, null, cts.Token).ConfigureAwait(false);
+                        }
                         waWatch.Stop();
 
                         int waCreate = waResult.Results.Count(r => r.DecisionResult == "Create");

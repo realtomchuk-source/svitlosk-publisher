@@ -52,7 +52,7 @@ public class WhatsAppPipeline : IChannelPipeline
             ?.ScheduleDate;
         if (string.IsNullOrEmpty(todayDateStr))
         {
-            todayDateStr = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-dd");
+            todayDateStr = KyivClock.Now.ToString("yyyy-MM-dd");
         }
 
         try

@@ -36,7 +36,7 @@ public class PublisherDiagnosticsService
         {
             var cleanRegistry = new RegistryModel(
                 SchemaVersion: 1,
-                EditionDate: DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                EditionDate: KyivClock.Now.ToString("yyyy-MM-dd"),
                 Status: "ACTIVE",
                 Publications: new List<RegistryPublicationRecord>()
             );

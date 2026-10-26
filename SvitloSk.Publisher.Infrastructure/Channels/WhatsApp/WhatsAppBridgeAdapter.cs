@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 namespace SvitloSk.Publisher.Infrastructure.Channels.WhatsApp;
 
 /// <summary>
-/// HTTP adapter for local WhatsApp Bridge microservice (Baileys / Node.js).
+/// HTTP adapter for local WhatsApp Bridge microservice (Playwright / Node.js).
 /// Connects SvitloSk Publisher to WhatsApp Channels via authenticated local bridge.
 /// </summary>
 public class WhatsAppBridgeAdapter : IWhatsAppAdapter
@@ -78,12 +79,19 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
         if (string.IsNullOrWhiteSpace(messageId))
             throw new ArgumentException("Message identifier cannot be null or empty.", nameof(messageId));
 
+        string? marker = null;
+        if (WhatsAppContentFormatter.TryExtractMarkerFromText(text, out var parsedMarker) && parsedMarker != null)
+        {
+            marker = parsedMarker.Marker;
+        }
+
         var url = $"{_bridgeBaseUrl}/edit";
         var payload = new
         {
             channelOrChatId = channelOrChatId,
             messageId = messageId,
-            text = text
+            text = text,
+            marker = marker
         };
 
         return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
@@ -95,7 +103,7 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(messageId))
-            return new WhatsAppDispatchResult(true, null, "No message ID specified for deletion", false);
+            return new WhatsAppDispatchResult(true, null, "No message ID specified for deletion", false, OperationStatus: "notFound");
 
         var url = $"{_bridgeBaseUrl}/delete";
         var payload = new
@@ -105,6 +113,101 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
         };
 
         return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<WhatsAppDispatchResult> DeleteMessageByMarkerAsync(
+        string channelOrChatId,
+        string? messageId,
+        string? marker,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(messageId) && string.IsNullOrWhiteSpace(marker))
+            return new WhatsAppDispatchResult(true, null, "No message ID or marker specified for deletion", false, OperationStatus: "notFound");
+
+        var url = $"{_bridgeBaseUrl}/delete";
+        var payload = new
+        {
+            channelOrChatId = channelOrChatId,
+            messageId = messageId,
+            marker = marker
+        };
+
+        return await PostJsonAsync(url, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<WhatsAppTailStateResult> GetTailStateAsync(
+        string channelOrChatId,
+        string? todayDdMm = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(channelOrChatId))
+            throw new ArgumentException("Channel identifier cannot be null or empty.", nameof(channelOrChatId));
+
+        try
+        {
+            string query = $"channelId={Uri.EscapeDataString(channelOrChatId)}";
+            if (!string.IsNullOrWhiteSpace(todayDdMm))
+            {
+                query += $"&todayDdMm={Uri.EscapeDataString(todayDdMm)}";
+            }
+
+            var url = $"{_bridgeBaseUrl}/tail-state?{query}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            using var res = await _httpClient.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            string body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                return new WhatsAppTailStateResult(false, Array.Empty<WhatsAppTailMessage>(), $"Bridge /tail-state HTTP {(int)res.StatusCode}: {body}");
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            bool isSuccess = !doc.RootElement.TryGetProperty("isSuccess", out var sProp) || sProp.GetBoolean();
+            if (!isSuccess)
+            {
+                string err = doc.RootElement.TryGetProperty("errorDescription", out var eProp) ? eProp.GetString() ?? body : body;
+                return new WhatsAppTailStateResult(false, Array.Empty<WhatsAppTailMessage>(), err);
+            }
+
+            var list = new List<WhatsAppTailMessage>();
+            if (doc.RootElement.TryGetProperty("messages", out var msgsElem) && msgsElem.ValueKind == JsonValueKind.Array)
+            {
+                int idx = 0;
+                foreach (var item in msgsElem.EnumerateArray())
+                {
+                    int order = item.TryGetProperty("order", out var oProp) && oProp.TryGetInt32(out int oVal) ? oVal : idx;
+                    string msgId = item.TryGetProperty("messageId", out var idProp) ? idProp.GetString() ?? string.Empty : string.Empty;
+                    string? fullId = item.TryGetProperty("fullDataId", out var fProp) ? fProp.GetString() : null;
+                    string? marker = item.TryGetProperty("marker", out var mProp) && mProp.ValueKind != JsonValueKind.Null ? mProp.GetString() : null;
+                    string? mType = item.TryGetProperty("markerType", out var mtProp) && mtProp.ValueKind != JsonValueKind.Null ? mtProp.GetString() : null;
+                    string? mDate = item.TryGetProperty("markerDate", out var mdProp) && mdProp.ValueKind != JsonValueKind.Null ? mdProp.GetString() : null;
+                    int? mSeq = item.TryGetProperty("markerSeq", out var msProp) && msProp.ValueKind == JsonValueKind.Number && msProp.TryGetInt32(out int seqVal) ? seqVal : null;
+                    string titleLine = item.TryGetProperty("titleLine", out var tlProp) ? tlProp.GetString() ?? string.Empty : string.Empty;
+                    string textWithoutMarker = item.TryGetProperty("textWithoutMarker", out var txProp) ? txProp.GetString() ?? string.Empty : string.Empty;
+                    bool hasImage = item.TryGetProperty("hasImage", out var imgProp) && imgProp.ValueKind == JsonValueKind.True;
+
+                    list.Add(new WhatsAppTailMessage(
+                        order,
+                        msgId,
+                        fullId,
+                        marker,
+                        mType,
+                        mDate,
+                        mSeq,
+                        titleLine,
+                        textWithoutMarker,
+                        hasImage
+                    ));
+                    idx++;
+                }
+            }
+
+            return new WhatsAppTailStateResult(true, list);
+        }
+        catch (Exception ex)
+        {
+            return new WhatsAppTailStateResult(false, Array.Empty<WhatsAppTailMessage>(), $"Failed to read tail-state from bridge: {ex.Message}");
+        }
     }
 
     public async Task<WhatsAppDispatchResult> SweepObsoleteForecastsAsync(
@@ -201,34 +304,41 @@ public class WhatsAppBridgeAdapter : IWhatsAppAdapter
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-            if (response.IsSuccessStatusCode)
-            {
-                string? messageId = null;
-                try
-                {
-                    using var doc = JsonDocument.Parse(responseBody);
-                    if (doc.RootElement.TryGetProperty("messageId", out var idElem))
-                    {
-                        messageId = idElem.GetString();
-                    }
-                }
-                catch { }
+            string? messageId = null;
+            string? opStatus = null;
+            string? errDesc = null;
+            bool? bodyIsSuccess = null;
 
-                return new WhatsAppDispatchResult(true, MessageId: messageId);
-            }
-
-            string err = responseBody;
             try
             {
                 using var doc = JsonDocument.Parse(responseBody);
-                if (doc.RootElement.TryGetProperty("errorDescription", out var dElem))
+                if (doc.RootElement.TryGetProperty("messageId", out var idElem) && idElem.ValueKind == JsonValueKind.String)
                 {
-                    err = dElem.GetString() ?? responseBody;
+                    messageId = idElem.GetString();
+                }
+                if (doc.RootElement.TryGetProperty("status", out var stElem) && stElem.ValueKind == JsonValueKind.String)
+                {
+                    opStatus = stElem.GetString();
+                }
+                if (doc.RootElement.TryGetProperty("errorDescription", out var dElem) && dElem.ValueKind == JsonValueKind.String)
+                {
+                    errDesc = dElem.GetString();
+                }
+                if (doc.RootElement.TryGetProperty("isSuccess", out var isElem) && (isElem.ValueKind == JsonValueKind.True || isElem.ValueKind == JsonValueKind.False))
+                {
+                    bodyIsSuccess = isElem.GetBoolean();
                 }
             }
             catch { }
 
-            return new WhatsAppDispatchResult(false, null, $"Bridge error: {err}", false);
+            if (response.IsSuccessStatusCode && (bodyIsSuccess ?? true))
+            {
+                return new WhatsAppDispatchResult(true, MessageId: messageId, ErrorDescription: errDesc, OperationStatus: opStatus);
+            }
+
+            string err = errDesc ?? responseBody;
+            bool isRetryable = opStatus != "windowExpired";
+            return new WhatsAppDispatchResult(false, messageId, $"Bridge error: {err}", isRetryable, OperationStatus: opStatus);
         }
         catch (HttpRequestException ex)
         {
