@@ -578,47 +578,51 @@ async function expandVisibleReadMoreButtons() {
     } catch (_) {}
 }
 
-// Wait until a newly posted message appears in #main (verified by marker or new data-id)
-async function waitForNewMessageConfirmation(knownIdsSet, expectedMarker, timeoutMs = 25000) {
+// Wait until a newly posted message appears in #main (verified by marker or new data-id, and optionally media image presence)
+async function waitForNewMessageConfirmation(knownIdsSet, expectedMarker, timeoutMs = 30000, requireImage = false) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(600);
         await expandVisibleReadMoreButtons();
         try {
-            const found = await page.evaluate(({ knownIds, markerStr }) => {
+            const found = await page.evaluate(({ knownIds, markerStr, mustHaveImage }) => {
                 const main = document.querySelector('#main') || document;
                 const rows = Array.from(main.querySelectorAll('div[role="row"], div[data-id]'));
                 for (let i = rows.length - 1; i >= 0; i--) {
                     const r = rows[i];
                     const dataId = r.getAttribute('data-id') || r.querySelector('[data-id]')?.getAttribute('data-id');
                     if (!dataId) continue;
+                    const hasImg = !!r.querySelector('img[src^="blob:"], div[data-testid="image-thumb"], div[role="button"] img, img[src^="data:image"]');
+                    if (mustHaveImage && !hasImg) continue;
+
                     const text = (r.innerText || '').trim();
                     const isNewId = !knownIds.includes(dataId);
 
                     if (markerStr) {
                         if (text.includes(markerStr)) {
-                            return { dataId, matchedByMarker: true, isNewId };
+                            return { dataId, matchedByMarker: true, isNewId, hasImg };
                         }
                     }
                     // Also accept a newly appeared data-id at the bottom of #main if it wasn't in knownIds before sending
-                    if (isNewId && text.length > 0) {
-                        return { dataId, matchedByMarker: false, isNewId: true };
+                    if (!markerStr && isNewId && (text.length > 0 || hasImg)) {
+                        return { dataId, matchedByMarker: false, isNewId: true, hasImg };
                     }
                 }
                 return null;
-            }, { knownIds: Array.from(knownIdsSet), markerStr: expectedMarker });
+            }, { knownIds: Array.from(knownIdsSet), markerStr: expectedMarker, mustHaveImage: requireImage });
 
             if (found && found.dataId) {
                 return {
                     confirmed: true,
                     fullDataId: found.dataId,
                     messageId: normalizeShortId(found.dataId),
-                    matchedByMarker: found.matchedByMarker
+                    matchedByMarker: found.matchedByMarker,
+                    hasImage: found.hasImg
                 };
             }
         } catch (_) {}
     }
-    return { confirmed: false, fullDataId: null, messageId: null, matchedByMarker: false };
+    return { confirmed: false, fullDataId: null, messageId: null, matchedByMarker: false, hasImage: false };
 }
 
 // Read the tail of the channel feed from bottom up (GET /tail-state)
@@ -875,38 +879,124 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
         }
 
         // 3. Trigger native file picker via Playwright filechooser event (or fallback to input[type="file"])
+        //    Wait generously (up to 15s) for the media preview modal to render its blob image / editor.
+        //    If the first attempt does not open the preview modal, retry via input[type="file"].
+        const isMediaPreviewOpen = async () => {
+            return await page.evaluate(() => {
+                const footer = document.querySelector('#main footer');
+                const chatHistory = document.querySelector('#main div[data-testid="conversation-panel-messages"]');
+                // Check for a blob preview image outside the chat history rows
+                const imgs = Array.from(document.querySelectorAll('img[src^="blob:"], img[src^="data:image"]'));
+                const previewImg = imgs.find(img => {
+                    if (chatHistory && chatHistory.contains(img)) return false;
+                    if (img.closest('div[role="row"]')) return false;
+                    const r = img.getBoundingClientRect();
+                    return r.width > 60 && r.height > 60;
+                });
+                if (previewImg) return true;
+
+                // Or check for an active contenteditable caption box outside #main footer
+                const editables = Array.from(document.querySelectorAll('div[contenteditable="true"]'));
+                const previewInput = editables.find(el => {
+                    if (footer && footer.contains(el)) return false;
+                    if (el.closest('#side')) return false;
+                    const r = el.getBoundingClientRect();
+                    return r.width > 50 && r.height > 10;
+                });
+                return !!previewInput;
+            }).catch(() => false);
+        };
+
+        const waitForMediaPreviewModal = async (timeoutMs = 15000) => {
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+                if (await isMediaPreviewOpen()) {
+                    // Allow an extra 1.5s settle time so the modal animations and caption box are 100% ready
+                    await page.waitForTimeout(1500);
+                    return true;
+                }
+                await page.waitForTimeout(500);
+            }
+            return false;
+        };
+
         try {
             const [fileChooser] = await Promise.all([
-                page.waitForEvent('filechooser', { timeout: 6000 }),
+                page.waitForEvent('filechooser', { timeout: 8000 }),
                 photoBtn.click()
             ]);
             await fileChooser.setFiles(tempFile);
-            logBridge('INFO', `Media file staged via filechooser: ${path.basename(tempFile)}`);
+            logBridge('INFO', `Media file staged via filechooser: ${path.basename(tempFile)}. Waiting for media preview modal...`);
         } catch (fcErr) {
             logBridge('WARN', `filechooser event timed out (${fcErr.message}), falling back to input[type="file"]...`);
             const fileInput = page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="image"]').last();
             await fileInput.setInputFiles(tempFile);
-            logBridge('INFO', `Media file staged via input[type="file"]: ${path.basename(tempFile)}`);
+            logBridge('INFO', `Media file staged via input[type="file"]: ${path.basename(tempFile)}. Waiting for media preview modal...`);
         }
-        await page.waitForTimeout(1500);
 
-        // 4. Fill inline caption in preview modal if provided
+        let previewOpened = await waitForMediaPreviewModal(12000);
+        if (!previewOpened) {
+            logBridge('WARN', 'Media preview modal did not open within 12s after first attempt. Retrying via input[type="file"]...');
+            try {
+                const fileInput = page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="image"]').last();
+                await fileInput.setInputFiles(tempFile);
+                previewOpened = await waitForMediaPreviewModal(15000);
+            } catch (retryErr) {
+                logBridge('WARN', `Fallback input[type="file"] retry error: ${retryErr.message}`);
+            }
+        }
+
+        if (!previewOpened) {
+            logBridge('ERROR', 'Media preview modal failed to open after staging image file. Aborting media send to avoid sending text-only post.');
+            await dismissOverlays();
+            return {
+                isSuccess: false,
+                messageId: null,
+                errorDescription: 'Media preview modal failed to open after staging image file.'
+            };
+        }
+
+        // 4. Fill inline caption in preview modal if provided (strictly excluding #main footer composer!)
         if (caption && caption.trim().length > 0) {
-            const captionSelector =
-                'div[data-animate-modal-popup] div[contenteditable="true"], ' +
-                'div[data-testid="media-caption-input-container"] div[contenteditable="true"], ' +
-                'div[aria-autocomplete="list"][role="textbox"], ' +
-                'div[aria-label*="обновлен" i][contenteditable="true"], ' +
-                'div[aria-label*="caption" i][contenteditable="true"], ' +
-                'div[aria-label*="підпис" i][contenteditable="true"], ' +
-                'div[aria-placeholder*="підпис" i][contenteditable="true"], ' +
-                'div[aria-placeholder*="caption" i][contenteditable="true"], ' +
-                'div[aria-placeholder*="подпись" i][contenteditable="true"]';
-            const captionInput = page.locator(captionSelector).first();
-            const captionVisible = await captionInput.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+            const findModalCaptionHandle = async (timeoutMs = 12000) => {
+                const start = Date.now();
+                while (Date.now() - start < timeoutMs) {
+                    const handle = await page.evaluateHandle(() => {
+                        const footer = document.querySelector('#main footer');
+                        const candidates = Array.from(document.querySelectorAll(
+                            'div[data-animate-modal-popup] div[contenteditable="true"], ' +
+                            'div[data-testid="media-caption-input-container"] div[contenteditable="true"], ' +
+                            'div[aria-label*="caption" i][contenteditable="true"], ' +
+                            'div[aria-label*="підпис" i][contenteditable="true"], ' +
+                            'div[aria-label*="подпись" i][contenteditable="true"], ' +
+                            'div[aria-placeholder*="підпис" i][contenteditable="true"], ' +
+                            'div[aria-placeholder*="caption" i][contenteditable="true"], ' +
+                            'div[aria-placeholder*="подпись" i][contenteditable="true"], ' +
+                            'div[contenteditable="true"][role="textbox"]'
+                        ));
+                        for (const el of candidates) {
+                            // NEVER select the normal bottom channel composer inside #main footer or #side search!
+                            if (footer && footer.contains(el)) continue;
+                            if (el.closest('#side')) continue;
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 50 && r.height > 10) {
+                                return el;
+                            }
+                        }
+                        return null;
+                    }).catch(() => null);
 
-            if (!captionVisible) {
-                logBridge('ERROR', 'Caption input box not found in media preview modal. Cancelling upload to prevent un-marked media post.');
+                    if (handle && handle.asElement()) {
+                        return handle.asElement();
+                    }
+                    await page.waitForTimeout(500);
+                }
+                return null;
+            };
+
+            const captionElement = await findModalCaptionHandle(12000);
+            if (!captionElement) {
+                logBridge('ERROR', 'Caption input box not found in media preview modal (outside #main footer). Cancelling upload to prevent un-marked media post.');
                 await dismissOverlays();
                 return {
                     isSuccess: false,
@@ -915,14 +1005,14 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
                 };
             }
 
-            await captionInput.click({ force: true });
-            await page.waitForTimeout(250);
+            await captionElement.click({ force: true });
+            await page.waitForTimeout(500);
             await page.keyboard.press('Control+A');
             await page.keyboard.press('Backspace');
             await page.keyboard.insertText(caption);
-            await page.waitForTimeout(400);
+            await page.waitForTimeout(800);
 
-            const textInBox = await captionInput.innerText().catch(() => '');
+            const textInBox = await page.evaluate(el => el.innerText || '', captionElement).catch(() => '');
             const markerVerifiedInBox = !expectedMarker || textInBox.includes(expectedMarker);
             if (!textInBox || textInBox.trim().length === 0 || !markerVerifiedInBox) {
                 logBridge('ERROR', `Caption verification failed in preview modal (length=${textInBox.length}, markerVerified=${markerVerifiedInBox}). Cancelling upload.`);
@@ -936,24 +1026,36 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
             logBridge('INFO', `Inline caption verified in preview modal (${textInBox.length} chars, marker='${expectedMarker || 'none'}').`);
         }
 
-        // 5. Click send button in media preview
-        const sendMediaBtn = await page.$(
-            'div[data-animate-modal-popup] span[data-icon="wds-ic-send-filled"], ' +
-            'div[data-animate-modal-popup] span[data-icon="send"], ' +
-            'span[data-icon="wds-ic-send-filled"], span[data-icon="send"], ' +
-            'div[role="button"][aria-label*="Send" i], div[role="button"][aria-label*="Надіслати" i], div[role="button"][aria-label*="Отправить" i], ' +
-            'button[aria-label*="Send" i], button[aria-label*="Надіслати" i], button[aria-label*="Отправить" i]'
-        );
-        if (sendMediaBtn) {
-            await sendMediaBtn.click();
-        } else {
+        // 5. Click send button in media preview (strictly outside #main footer so we never trigger text-only composer send)
+        const clickedSend = await page.evaluate(() => {
+            const footer = document.querySelector('#main footer');
+            const icons = Array.from(document.querySelectorAll(
+                'div[data-animate-modal-popup] span[data-icon="wds-ic-send-filled"], ' +
+                'div[data-animate-modal-popup] span[data-icon="send"], ' +
+                'span[data-icon="wds-ic-send-filled"], span[data-icon="send"], ' +
+                'div[role="button"][aria-label*="Send" i], div[role="button"][aria-label*="Надіслати" i], div[role="button"][aria-label*="Отправить" i], ' +
+                'button[aria-label*="Send" i], button[aria-label*="Надіслати" i], button[aria-label*="Отправить" i]'
+            ));
+            for (const el of icons) {
+                if (footer && footer.contains(el)) continue;
+                const btn = el.closest('div[role="button"], button') || el;
+                const r = btn.getBoundingClientRect();
+                if (r.width > 10 && r.height > 10) {
+                    btn.click();
+                    return true;
+                }
+            }
+            return false;
+        }).catch(() => false);
+
+        if (!clickedSend) {
             await page.keyboard.press('Enter');
         }
 
-        // 6. Wait up to 60s for media message to appear in DOM with our marker
-        const confirmation = await waitForNewMessageConfirmation(knownIds, expectedMarker, 60000);
+        // 6. Wait up to 60s for media message to appear in DOM with our marker AND an attached image
+        const confirmation = await waitForNewMessageConfirmation(knownIds, expectedMarker, 60000, true);
         if (!confirmation.confirmed || !confirmation.messageId) {
-            const errMsg = `Media message confirmation timed out after 60s (expected marker '${expectedMarker || 'any'}').`;
+            const errMsg = `Media message confirmation (with image) timed out after 60s (expected marker '${expectedMarker || 'any'}').`;
             logBridge('ERROR', errMsg);
             return {
                 isSuccess: false,

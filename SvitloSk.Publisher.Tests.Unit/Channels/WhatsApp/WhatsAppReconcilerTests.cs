@@ -406,4 +406,35 @@ public class WhatsAppReconcilerTests : IDisposable
         Assert.Contains("Fail-Closed", result.FatalErrorDescription);
         Assert.Empty(adapter.CallOrder);
     }
+
+    [Fact]
+    public async Task ReconcileAsync_WhenBannerT00IsMissingImageInDom_RebuildsTailFromZero()
+    {
+        string todayIso = KyivClock.TodayIso;
+        string todayDdMm = WhatsAppContentFormatter.FormatMarkerDate(todayIso);
+        var input = BuildSampleEditorialInput(todayIso);
+
+        var t00Clean = input.Packages[0].Content;
+        var t01Clean = input.Packages[1].Content;
+
+        // Simulate T · 00 published as text-only (HasImage = false)
+        var domMessages = new List<WhatsAppTailMessage>
+        {
+            new(0, "m0_no_img", null, $"T · {todayDdMm} · 00", "T", todayDdMm, 0, "*Планові знеструмлення:*", t00Clean, HasImage: false),
+            new(1, "m1", null, $"T · {todayDdMm} · 01", "T", todayDdMm, 1, "*м. СТАРОКОСТЯНТИНІВ*", t01Clean, HasImage: false)
+        };
+
+        var adapter = new FakeWhatsAppReconcilerAdapter
+        {
+            TailState = new WhatsAppTailStateResult(true, domMessages)
+        };
+
+        var sut = CreateSut(adapter);
+        var result = await sut.ReconcileAsync("0029Vb96XUUIN9ixA88Umz3Y", _registryPath, _journalPath, input);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains("m0_no_img", adapter.DeletedIds);
+        Assert.Contains("m1", adapter.DeletedIds);
+        Assert.Equal($"T · {todayDdMm} · 00", adapter.PublishedMarkers[0]);
+    }
 }

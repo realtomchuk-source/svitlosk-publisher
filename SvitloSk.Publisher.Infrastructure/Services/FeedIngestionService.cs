@@ -494,10 +494,6 @@ public class FeedIngestionService
 
                     var tomStats = TerritoryAggregator.CalculateSummaryStats(tomRecords);
                     string tomBannerCaption = WhatsAppContentFormatter.RenderJournalHeader(tomorrowLabel, tomStats);
-                    if (!tomBannerCaption.StartsWith("*ПРОГНОЗ НА ЗАВТРА*", StringComparison.OrdinalIgnoreCase))
-                    {
-                        tomBannerCaption = $"*ПРОГНОЗ НА ЗАВТРА*\n\n{tomBannerCaption}";
-                    }
 
                     byte[] tomSvg = _bannerAssembly.AssembleWhatsAppTomorrowHeaderSvg(tomorrowLabel);
                     byte[] tomPng = _rasterizer.RasterizeSvgToPng(tomSvg, 1080, 480);

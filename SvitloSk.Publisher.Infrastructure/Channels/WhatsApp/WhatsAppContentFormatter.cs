@@ -197,13 +197,16 @@ public static class WhatsAppContentFormatter
 
         if (lines.Count == 0) return null;
 
-        if (lines[0].Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
+        if (lines[0].Contains("ЖУРНАЛ ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase) ||
+            lines.Any(l => l.Contains("Планові знеструмлення:", StringComparison.OrdinalIgnoreCase)) ||
+            lines.Any(l => l.Contains("Аварійні знеструмлення:", StringComparison.OrdinalIgnoreCase)))
         {
             return isTomorrow ? "tomorrow_separator" : "journal_header";
         }
 
         if (lines[0].Contains("ГРАФІК ПОГОДИННИХ", StringComparison.OrdinalIgnoreCase) ||
-            lines[0].Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase))
+            lines[0].Contains("ГРАФІК ЗНЕСТРУМЛЕНЬ", StringComparison.OrdinalIgnoreCase) ||
+            lines.Any(l => l.Contains("12 підчерг", StringComparison.OrdinalIgnoreCase)))
         {
             return "Старокостянтинівська МТГ";
         }
@@ -243,30 +246,12 @@ public static class WhatsAppContentFormatter
 
     public static string RenderGraphicScheduleCaption(string targetDateStr, string territorialScope = "Старокостянтинівська МТГ")
     {
-        var sb = new StringBuilder();
-        sb.AppendLine($"*ГРАФІК ПОГОДИННИХ ВІДКЛЮЧЕНЬ | {territorialScope.ToUpperInvariant()}*");
-        string fullDate = FormatFullUkrainianDate(targetDateStr);
-        if (!string.IsNullOrWhiteSpace(fullDate))
-        {
-            sb.AppendLine($"*{fullDate}*");
-        }
-        sb.AppendLine();
-        sb.AppendLine("_Графік застосовується за розпорядженням НЕК «Укренерго» для 12 підчерг громади_");
-        return CleanOutput(sb.ToString());
+        return "_Графік застосовується за розпорядженням НЕК «Укренерго» для 12 підчерг громади_";
     }
 
     public static string RenderJournalHeader(string rawDate, JournalSummaryStats stats)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("*ЖУРНАЛ ЗНЕСТРУМЛЕНЬ | СТАРОКОСТЯНТИНІВСЬКА МТГ*");
-
-        string fullDate = FormatFullUkrainianDate(rawDate);
-        if (!string.IsNullOrWhiteSpace(fullDate))
-        {
-            sb.AppendLine($"*{fullDate}*");
-        }
-
-        sb.AppendLine();
 
         if (stats.PlannedSettlements != null && stats.PlannedSettlements.Count > 0)
         {
@@ -288,28 +273,14 @@ public static class WhatsAppContentFormatter
             sb.AppendLine("*Аварійні знеструмлення:* відсутні");
         }
 
-        sb.AppendLine();
-        sb.AppendLine("_Інформація оновлюється автоматично протягом доби_");
-
         return CleanOutput(sb.ToString());
     }
 
     public static string RenderNoOutagesPost(string rawDate)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("*ЖУРНАЛ ЗНЕСТРУМЛЕНЬ | СТАРОКОСТЯНТИНІВСЬКА МТГ*");
-
-        string fullDate = FormatFullUkrainianDate(rawDate);
-        if (!string.IsNullOrWhiteSpace(fullDate))
-        {
-            sb.AppendLine($"*{fullDate}*");
-        }
-
-        sb.AppendLine();
         sb.AppendLine("*Планові знеструмлення:* відсутні");
         sb.AppendLine("*Аварійні знеструмлення:* відсутні");
-        sb.AppendLine();
-        sb.AppendLine("_Інформація оновлюється автоматично протягом доби_");
 
         return CleanOutput(sb.ToString());
     }
@@ -351,14 +322,7 @@ public static class WhatsAppContentFormatter
 
         var sb = new StringBuilder();
 
-        // 1. Forecast Header (if tomorrow)
-        if (isTomorrow)
-        {
-            string tomShortDate = !string.IsNullOrWhiteSpace(tomorrowDate) ? FormatShortDate(tomorrowDate) : "завтра";
-            sb.AppendLine($"*ПРОГНОЗ НА ЗАВТРА* • *{tomShortDate}*");
-        }
-
-        // 2. Territory Title
+        // 1. Territory Title
         string territoryTitle;
         if (data.TerritoryId.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase) ||
             data.CanonicalName.Contains("Старокостянтинів", StringComparison.OrdinalIgnoreCase))
@@ -372,7 +336,7 @@ public static class WhatsAppContentFormatter
         sb.AppendLine(territoryTitle);
         sb.AppendLine();
 
-        // 3. Emergency Block (Rendered with > quote callouts)
+        // 2. Emergency Block (Rendered with > quote callouts)
         if (data.EmergencyRecords != null && data.EmergencyRecords.Count > 0)
         {
             var emergBlocks = SplitIntoIntervalBlocks(data.EmergencyRecords);
@@ -381,10 +345,13 @@ public static class WhatsAppContentFormatter
             for (int i = 0; i < emergBlocks.Count; i++)
             {
                 var block = emergBlocks[i];
-                sb.AppendLine("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*");
                 if (!string.IsNullOrEmpty(block.TimeInterval))
                 {
-                    sb.AppendLine($"> *{block.TimeInterval}*");
+                    sb.AppendLine($"> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ* • *{block.TimeInterval}*");
+                }
+                else
+                {
+                    sb.AppendLine("> *АВАРІЙНІ ЗНЕСТРУМЛЕННЯ*");
                 }
 
                 string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName, isEmergency: true, showVillageIntervals: hasMultipleEmergBlocks);
@@ -396,7 +363,7 @@ public static class WhatsAppContentFormatter
             }
         }
 
-        // 4. Planned Block
+        // 3. Planned Block
         if (data.PlannedRecords != null && data.PlannedRecords.Count > 0)
         {
             var planBlocks = SplitIntoIntervalBlocks(data.PlannedRecords);
@@ -406,7 +373,6 @@ public static class WhatsAppContentFormatter
             {
                 // Multi-village district with distinct intervals: main header has no time badge, each village has its own badge
                 sb.AppendLine("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*");
-                sb.AppendLine();
 
                 for (int i = 0; i < planBlocks.Count; i++)
                 {
@@ -424,7 +390,7 @@ public static class WhatsAppContentFormatter
             }
             else
             {
-                // Single block (e.g. City or single village): header gets the time badge
+                // Single block (e.g. City or single village): header gets the inline time badge
                 for (int i = 0; i < planBlocks.Count; i++)
                 {
                     var block = planBlocks[i];
@@ -433,12 +399,14 @@ public static class WhatsAppContentFormatter
                     {
                         sb.AppendLine();
                     }
-                    sb.AppendLine("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*");
                     if (!string.IsNullOrEmpty(block.TimeInterval))
                     {
-                        sb.AppendLine($"*{block.TimeInterval}*");
+                        sb.AppendLine($"*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *{block.TimeInterval}*");
                     }
-                    sb.AppendLine();
+                    else
+                    {
+                        sb.AppendLine("*ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*");
+                    }
 
                     string body = RenderSubBlockDetails(block.Lines, block.TimeInterval, data.CanonicalName, isEmergency: false, showVillageIntervals: false);
                     if (!string.IsNullOrWhiteSpace(body))
@@ -634,8 +602,8 @@ public static class WhatsAppContentFormatter
         });
 
         // Convert headers with time in parentheses directly to avoid nested asterisks:
-        // <b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b> -> *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ*\n*10:00 – 17:00*
-        result = Regex.Replace(result, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1*\n*$2 – $3*");
+        // <b>ПЛАНОВІ ЗНЕСТРУМЛЕННЯ (10:00 – 17:00)</b> -> *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*
+        result = Regex.Replace(result, @"<b>([А-ЯІЇЄҐA-Z\s]+?)\s*\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)</b>", "*$1* • *$2 – $3*");
 
         // Convert HTML tags to WhatsApp Markdown
         result = Regex.Replace(result, @"<b>(.*?)</b>", "*$1*");
@@ -644,10 +612,6 @@ public static class WhatsAppContentFormatter
 
         // Convert (HH:mm–HH:mm) into unified bold badges • *HH:mm – HH:mm*
         result = Regex.Replace(result, @"\(\s*(\d{2}:\d{2})\s*(?:–|-|до|по)\s*(\d{2}:\d{2})\s*\)", "• *$1 – $2*");
-
-        // Convert any remaining inline section headers (e.g. *ПЛАНОВІ ЗНЕСТРУМЛЕННЯ* • *10:00 – 17:00*) into two lines
-        result = Regex.Replace(result, @"(?m)^>\s*\*?((?:АВАРІЙНІ|ПЛАНОВІ)\s+ЗНЕСТРУМЛЕННЯ)\*?\s*•\s*\*?(\d{2}:\d{2}\s*(?:–|-|до|по)\s*\d{2}:\d{2})\*?", "> *$1*\n> *$2*");
-        result = Regex.Replace(result, @"(?m)^\*?((?:АВАРІЙНІ|ПЛАНОВІ)\s+ЗНЕСТРУМЛЕННЯ)\*?\s*•\s*\*?(\d{2}:\d{2}\s*(?:–|-|до|по)\s*\d{2}:\d{2})\*?", "*$1*\n*$2*");
 
         // Clean up any accidental nested bold asterisks: *HEADER • *TIME** -> *HEADER* • *TIME*
         result = Regex.Replace(result, @"\*([^*\n]+?)\s*•\s*\*([^*\n]+?)\*\*", "*$1* • *$2*");

@@ -270,6 +270,16 @@ public class WhatsAppReconciler
                 break;
             }
 
+            // Case 1.5: Desired post requires an image (e.g. T · 00, F · 00, G), but the actual DOM message has no image!
+            // In-place edit cannot add an image to a text-only post, so we must rebuild from index i.
+            bool requiresMedia = desired.GraphicBytes != null && desired.GraphicBytes.Length > 0;
+            if (requiresMedia && !actualAtPos.HasImage)
+            {
+                rebuildFromIndex = i;
+                LogSystem($"[WARN][WhatsAppReconciler] Post '{desired.Marker}' at index {i} (id={actualAtPos.MessageId}) is missing its required banner/graphic image in channel DOM! Scheduling tail rebuild from index {i}.");
+                break;
+            }
+
             // Case 2: Marker matches at position i -> check if content changed
             bool contentChanged = HasPostContentChanged(desired, actualAtPos, journal);
             if (!contentChanged)
@@ -364,7 +374,13 @@ public class WhatsAppReconciler
                 totalProcessed++;
                 var delRes = await DeletePostAsync(channelId, toDel.MessageId, toDel.Marker, cancellationToken).ConfigureAwait(false);
                 if (delRes.IsSuccess) totalSuccessful++;
-                await _delayProvider.DelayAsync(800, cancellationToken).ConfigureAwait(false);
+                await _delayProvider.DelayAsync(1500, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (messagesToDelete.Count > 0)
+            {
+                // Extra settle delay after deletions before opening attachment menu / composer
+                await _delayProvider.DelayAsync(2000, cancellationToken).ConfigureAwait(false);
             }
 
             // Publish desiredNonStatus[rebuildFromIndex .. end] one by one with 5-10s pacing
@@ -557,10 +573,6 @@ public class WhatsAppReconciler
             if (tomBannerPkg != null)
             {
                 string cleanText = WhatsAppContentFormatter.StripMarker(WhatsAppContentFormatter.ConvertToWhatsAppMarkdown(tomBannerPkg.Content ?? string.Empty));
-                if (!cleanText.Contains("ПРОГНОЗ НА ЗАВТРА", StringComparison.OrdinalIgnoreCase))
-                {
-                    cleanText = $"*ПРОГНОЗ НА ЗАВТРА*\n\n{cleanText}".Trim();
-                }
                 string marker = WhatsAppContentFormatter.FormatMarker('F', tomorrowDate, 0);
                 string fullText = WhatsAppContentFormatter.AppendMarker(cleanText, marker);
                 string hash = _hashCalculator.ComputeHash(cleanText, null);
