@@ -2659,6 +2659,237 @@ public class GraphicOrchestrationTests : IDisposable
             File.WriteAllBytes(previewPath, pngBytes);
         }
     }
+
+    [Fact]
+    public void TC_Gpv48SlotFormat_Parses30MinuteIntervalsAndRendersGraphic()
+    {
+        var parser = new OutageFeedParser();
+        string gpv48Json = @"{
+  ""date"": ""2026-11-08"",
+  ""updated_at"": ""2026-11-08T15:14:12+02:00"",
+  ""status"": ""updated"",
+  ""message"": ""За розпорядженням НЕК «Укренерго» оновлено графік погодинних відключень (ГПВ) на 8 листопада. (відповідно до змін станом на 15:14)"",
+  ""queues"": {
+    ""1.1"": ""111111000000111111111111000000001111111111110000"",
+    ""1.2"": ""111111000000111111111111000000000111111111110000"",
+    ""2.1"": ""111111111111000000001111111111110000000011111111"",
+    ""2.2"": ""111111111111000000001111111111110000000011111111"",
+    ""3.1"": ""111111111111000000001111111111110000000011111111"",
+    ""3.2"": ""111111111111111100001111111111110000000011111111"",
+    ""4.1"": ""000000111111111111110000001111111111110000001111"",
+    ""4.2"": ""111111111111111111110000000011111111111100000000"",
+    ""5.1"": ""100000011111111111110000000011111111111100000011"",
+    ""5.2"": ""111111000000111111111111000000001111111111110000"",
+    ""6.1"": ""000000111111111100000000111111111111000000001111"",
+    ""6.2"": ""111111111111111100000000111111111111000000001111""
+  }
+}";
+
+        var pkg = parser.ParseLegacyGraphicJson(gpv48Json, "Старокостянтинівська МТГ");
+        Assert.NotNull(pkg);
+        Assert.True(pkg.HasAnyOutages);
+        Assert.Equal("2026-11-08", pkg.Metadata.TargetDate);
+
+        // Subqueue 1.1: 03:00-06:00, 12:00-16:00, 22:00-24:00
+        var q1 = pkg.Queues.First(q => q.QueueId == "Черга 1");
+        var sq11 = q1.Subqueues.First(sq => sq.SubqueueId == "Черга 1.1");
+        Assert.Equal(3, sq11.Intervals.Count);
+        Assert.Equal("03:00", sq11.Intervals[0].StartTime);
+        Assert.Equal("06:00", sq11.Intervals[0].EndTime);
+        Assert.Equal("12:00", sq11.Intervals[1].StartTime);
+        Assert.Equal("16:00", sq11.Intervals[1].EndTime);
+        Assert.Equal("22:00", sq11.Intervals[2].StartTime);
+        Assert.Equal("24:00", sq11.Intervals[2].EndTime);
+
+        // Subqueue 1.2: 03:00-06:00, 12:00-16:30 (half-hour slot!), 22:00-24:00
+        var sq12 = q1.Subqueues.First(sq => sq.SubqueueId == "Черга 1.2");
+        Assert.Equal(3, sq12.Intervals.Count);
+        Assert.Equal("12:00", sq12.Intervals[1].StartTime);
+        Assert.Equal("16:30", sq12.Intervals[1].EndTime);
+
+        // Subqueue 5.1: 00:30-03:30 (half-hour start and end!), 10:00-14:00, 20:00-23:00
+        var q5 = pkg.Queues.First(q => q.QueueId == "Черга 5");
+        var sq51 = q5.Subqueues.First(sq => sq.SubqueueId == "Черга 5.1");
+        Assert.Equal(3, sq51.Intervals.Count);
+        Assert.Equal("00:30", sq51.Intervals[0].StartTime);
+        Assert.Equal("03:30", sq51.Intervals[0].EndTime);
+        Assert.Equal("10:00", sq51.Intervals[1].StartTime);
+        Assert.Equal("14:00", sq51.Intervals[1].EndTime);
+        Assert.Equal("20:00", sq51.Intervals[2].StartTime);
+        Assert.Equal("23:00", sq51.Intervals[2].EndTime);
+
+        var assembly = new GraphicAssembly();
+        byte[] svgBytes = assembly.AssembleSvg(pkg);
+        string svgText = System.Text.Encoding.UTF8.GetString(svgBytes);
+
+        Assert.Contains("08.11.2026", svgText);
+        Assert.Contains("НЕДІЛЯ", svgText);
+        Assert.Contains("08.11.2026, 15:14", svgText);
+        Assert.Contains("16:30", svgText);
+        Assert.Contains("00:30", svgText);
+        Assert.Contains("03:30", svgText);
+
+        var rasterizer = new SvitloSk.Publisher.Infrastructure.Graphics.SvgSkiaRasterizer();
+        byte[] pngBytes = rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
+        Assert.NotNull(pngBytes);
+        Assert.True(pngBytes.Length > 0);
+
+        string artifactPreviewPath = @"C:\Users\ATom\.gemini\antigravity\brain\2a052e13-3985-4e5e-b554-d63480d0a321\gpv_2026_11_08_preview.png";
+        if (Directory.Exists(Path.GetDirectoryName(artifactPreviewPath)))
+        {
+            File.WriteAllBytes(artifactPreviewPath, pngBytes);
+        }
+    }
+
+    [Fact]
+    public void TC_Gpv48SlotFormat_WaitingAllOnes_HasNoOutages()
+    {
+        var parser = new OutageFeedParser();
+        string gpvWaitingJson = @"{
+  ""date"": ""2026-11-09"",
+  ""updated_at"": ""2026-11-08T15:14:12+02:00"",
+  ""status"": ""waiting"",
+  ""message"": ""Графік погодинних відключень на 09.11 ще не оприлюднено. Попередньо: відключень не прогнозується."",
+  ""queues"": {
+    ""1.1"": ""111111111111111111111111111111111111111111111111"",
+    ""1.2"": ""111111111111111111111111111111111111111111111111"",
+    ""2.1"": ""111111111111111111111111111111111111111111111111"",
+    ""2.2"": ""111111111111111111111111111111111111111111111111"",
+    ""3.1"": ""111111111111111111111111111111111111111111111111"",
+    ""3.2"": ""111111111111111111111111111111111111111111111111"",
+    ""4.1"": ""111111111111111111111111111111111111111111111111"",
+    ""4.2"": ""111111111111111111111111111111111111111111111111"",
+    ""5.1"": ""111111111111111111111111111111111111111111111111"",
+    ""5.2"": ""111111111111111111111111111111111111111111111111"",
+    ""6.1"": ""111111111111111111111111111111111111111111111111"",
+    ""6.2"": ""111111111111111111111111111111111111111111111111""
+  }
+}";
+
+        var pkg = parser.ParseLegacyGraphicJson(gpvWaitingJson, "Старокостянтинівська МТГ");
+        Assert.NotNull(pkg);
+        Assert.False(pkg.HasAnyOutages);
+        Assert.Equal("2026-11-09", pkg.Metadata.TargetDate);
+    }
+
+    [Fact]
+    public async Task TC_GraphicLifecycle_TodayAndTomorrowCoexist_ProperOrdering_AndRolloverPromotesTomorrowGraphic()
+    {
+        var store = new PublisherOrchestratorTests.FakeRegistryStore();
+        var git = new PublisherOrchestratorTests.FakeGitTransport();
+        var adapter = new PublisherOrchestratorTests.FakeTelegramAdapter();
+        var delay = new FakeDelayProvider();
+        var graphicDispatcher = new FakeGraphicDispatcher();
+        var dispatcher = new SequentialDispatcher(adapter, delay, graphicDispatcher: graphicDispatcher);
+        var calculator = new ContentHashCalculator();
+        var decisionEngine = new EditorialDecisionEngine();
+        var parser = new OutageFeedParser();
+        var transformer = new EditorialContentTransformer();
+        var orchestrator = new PublisherOrchestrator(store, git, calculator, decisionEngine, dispatcher, parser, transformer);
+
+        string gpvDay1Json = @"{
+  ""date"": ""2026-11-08"",
+  ""updated_at"": ""2026-11-08T15:14:12+02:00"",
+  ""queues"": {
+    ""1.1"": ""111111000000111111111111000000001111111111110000"",
+    ""1.2"": ""111111111111111111111111111111111111111111111111"",
+    ""2.1"": ""111111111111111111111111111111111111111111111111"",
+    ""2.2"": ""111111111111111111111111111111111111111111111111"",
+    ""3.1"": ""111111111111111111111111111111111111111111111111"",
+    ""3.2"": ""111111111111111111111111111111111111111111111111"",
+    ""4.1"": ""111111111111111111111111111111111111111111111111"",
+    ""4.2"": ""111111111111111111111111111111111111111111111111"",
+    ""5.1"": ""111111111111111111111111111111111111111111111111"",
+    ""5.2"": ""111111111111111111111111111111111111111111111111"",
+    ""6.1"": ""111111111111111111111111111111111111111111111111"",
+    ""6.2"": ""111111111111111111111111111111111111111111111111""
+  }
+}";
+        string gpvDay2Json = gpvDay1Json
+            .Replace("\"2026-11-08\"", "\"2026-11-09\"")
+            .Replace("\"111111000000111111111111000000001111111111110000\"", "\"000011111111111111111111111111111111111111111111\"");
+
+        var day1GraphicPkg = parser.ParseLegacyGraphicJson(gpvDay1Json, "Старокостянтинівська МТГ");
+        var day2GraphicPkg = parser.ParseLegacyGraphicJson(gpvDay2Json, "Старокостянтинівська МТГ");
+
+        // 1. Day 1 Evening: Today text + Today Graphic (08.11) + Tomorrow forecast text + Tomorrow Graphic (09.11)
+        var inputDay1Evening = new EditorialInput(
+            EditionDate: "2026-11-08",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new("journal_header", "<b>ЖУРНАЛ 08.11</b>", null, true),
+                new("starokostiantyniv", "<b>м. Старокостянтинів 08.11</b>", null, true),
+                new("tomorrow_separator", "<b>ПРОГНОЗ 09.11</b>", null, false),
+                new("tomorrow_starokostiantyniv", "<b>м. Старокостянтинів 09.11</b>", null, false)
+            },
+            TomorrowForecastAvailable: true,
+            GraphicPackage: day1GraphicPkg,
+            TomorrowGraphicPackage: day2GraphicPkg
+        );
+
+        var resDay1 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay1Evening);
+        Assert.True(resDay1.IsSuccess);
+        Assert.NotNull(store.CurrentModel);
+
+        // Verify registry section order:
+        // journal_header -> starokostiantyniv -> Today Graphic (Старокостянтинівська МТГ) -> tomorrow_separator -> tomorrow_starokostiantyniv -> Tomorrow Graphic (graphic_tomorrow) -> system_status
+        var day1TerritoryIds = store.CurrentModel!.Publications.Select(p => p.TerritoryId).ToList();
+        Assert.Equal(new[]
+        {
+            "journal_header",
+            "starokostiantyniv",
+            "Старокостянтинівська МТГ",
+            "tomorrow_separator",
+            "tomorrow_starokostiantyniv",
+            "graphic_tomorrow",
+            "system_status"
+        }, day1TerritoryIds);
+
+        var savedTodayGraphic = store.CurrentModel.Publications.First(p => p.TerritoryId == "Старокостянтинівська МТГ");
+        var savedTomorrowGraphic = store.CurrentModel.Publications.First(p => p.TerritoryId == "graphic_tomorrow");
+        Assert.NotEqual(savedTodayGraphic.ExternalMessageId, savedTomorrowGraphic.ExternalMessageId);
+        string day2GraphicMsgIdFromEvening = savedTomorrowGraphic.ExternalMessageId!;
+
+        // 2. Day 2 Rollover (2026-11-09):
+        // Day 2's graphic (published on Day 1 evening) is now in GraphicPackage (today.json), and no new graphic should be created!
+        int graphicPayloadsBeforeRollover = graphicDispatcher.DispatchedOperations.Count;
+        var inputDay2Morning = new EditorialInput(
+            EditionDate: "2026-11-09",
+            Packages: new List<InputTerritoryPackage>
+            {
+                new("journal_header", "<b>ЖУРНАЛ 09.11</b>", null, true),
+                new("starokostiantyniv", "<b>м. Старокостянтинів 09.11</b>", null, true)
+            },
+            TomorrowForecastAvailable: false,
+            GraphicPackage: day2GraphicPkg,
+            TomorrowGraphicPackage: null
+        );
+
+        var resDay2 = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay2Morning);
+        Assert.True(resDay2.IsSuccess);
+
+        // Zero graphic operations on Day 2 rollover (Day 1 graphic is NOT deleted, Day 2 graphic is promoted as NOOP!)
+        Assert.Equal(graphicPayloadsBeforeRollover, graphicDispatcher.DispatchedOperations.Count);
+
+        var promotedTodayGraphicOnDay2 = store.CurrentModel!.Publications.FirstOrDefault(p =>
+            p.PublicationType == "Graphic" && p.TerritoryId == "Старокостянтинівська МТГ");
+        Assert.NotNull(promotedTodayGraphicOnDay2);
+        Assert.Equal(day2GraphicMsgIdFromEvening, promotedTodayGraphicOnDay2!.ExternalMessageId);
+
+        // 3. Day 2 Midday Update: Schedule for 2026-11-09 changes -> Updates the promoted graphic message in-place!
+        string gpvDay2UpdatedJson = gpvDay2Json
+            .Replace("\"000011111111111111111111111111111111111111111111\"", "\"000000001111111111111111111111111111111111111111\"");
+        var day2UpdatedGraphicPkg = parser.ParseLegacyGraphicJson(gpvDay2UpdatedJson, "Старокостянтинівська МТГ");
+
+        var inputDay2Midday = inputDay2Morning with { GraphicPackage = day2UpdatedGraphicPkg };
+        var resDay2Update = await orchestrator.RunOrchestrationAsync(_registryPath, "-100123", inputDay2Midday);
+        Assert.True(resDay2Update.IsSuccess);
+
+        Assert.Equal(graphicPayloadsBeforeRollover + 1, graphicDispatcher.DispatchedOperations.Count);
+        var lastGraphicOp = graphicDispatcher.DispatchedOperations.Last();
+        Assert.Equal("UPDATE", lastGraphicOp.OperationType);
+        Assert.Equal(day2GraphicMsgIdFromEvening, lastGraphicOp.ExternalMessageId);
+    }
 }
 
 

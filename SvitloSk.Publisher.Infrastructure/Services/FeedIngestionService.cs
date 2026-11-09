@@ -145,7 +145,12 @@ public class FeedIngestionService
                     foreach (var tAgg in sortedTomAggregated)
                     {
                         string formattedTom = _transformer.RenderAggregatedTerritoryPost(tAgg, isTomorrow: true, tomorrowDate: tomorrowLabel);
-                        tomorrowTerritoryPackages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", formattedTom, null, false));
+                        var splitTomMsgs = _transformer.SplitTelegramMessage(formattedTom, 3800);
+                        for (int i = 0; i < splitTomMsgs.Count; i++)
+                        {
+                            string tomTid = i == 0 ? $"tomorrow_{tAgg.TerritoryId}" : $"tomorrow_{tAgg.TerritoryId}_part{i + 1}";
+                            tomorrowTerritoryPackages.Add(new InputTerritoryPackage(tomTid, splitTomMsgs[i], null, false));
+                        }
                     }
                 }
             }
@@ -194,9 +199,9 @@ public class FeedIngestionService
             }
         }
 
-        // Ingestion of 12-subqueue graphic schedule from SvitloSk parser repository or local fixture
+        // Ingestion of 12-subqueue graphic schedules (today & tomorrow) from OutagesSk repository or local fixture
         // Only publish if at least one of the 12 subqueues has scheduled outages (HasAnyOutages == true).
-        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "", cancellationToken).ConfigureAwait(false);
+        var (todayGraphicPackage, tomorrowGraphicPackage) = await FetchActiveGraphicSchedulesAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "", cancellationToken).ConfigureAwait(false);
 
         bool hasActiveTomorrowPackages = packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase));
 
@@ -204,8 +209,9 @@ public class FeedIngestionService
             EditionDate: editionDate,
             Packages: packages,
             TomorrowForecastAvailable: hasActiveTomorrowPackages,
-            GraphicPackage: graphicPackage,
-            SourceQueryTime: sourceQueryTime
+            GraphicPackage: todayGraphicPackage,
+            SourceQueryTime: sourceQueryTime,
+            TomorrowGraphicPackage: tomorrowGraphicPackage
         );
     }
 
@@ -312,8 +318,8 @@ public class FeedIngestionService
             }
         }
 
-        // 4. Ingestion of 12-subqueue graphic schedule (only if it has outages across at least one subqueue)
-        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[Facebook]", cancellationToken).ConfigureAwait(false);
+        // 4. Ingestion of 12-subqueue graphic schedules (today & tomorrow, only if outages exist across at least one subqueue)
+        var (todayGraphicPackage, tomorrowGraphicPackage) = await FetchActiveGraphicSchedulesAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[Facebook]", cancellationToken).ConfigureAwait(false);
 
         bool hasTomorrow = packages.Any(p => p.TerritoryId == "fb_tomorrow");
 
@@ -321,7 +327,8 @@ public class FeedIngestionService
             EditionDate: editionDate,
             Packages: packages,
             TomorrowForecastAvailable: hasTomorrow,
-            GraphicPackage: graphicPackage
+            GraphicPackage: todayGraphicPackage,
+            TomorrowGraphicPackage: tomorrowGraphicPackage
         );
     }
 
@@ -471,7 +478,12 @@ public class FeedIngestionService
                 foreach (var agg in aggregatedToday)
                 {
                     string waTerritoryText = WhatsAppContentFormatter.RenderTerritoryPost(agg, isTomorrow: false);
-                    packages.Add(new InputTerritoryPackage(agg.TerritoryId, waTerritoryText, null, true));
+                    var waSplitMsgs = WhatsAppContentFormatter.SplitMessage(waTerritoryText);
+                    for (int i = 0; i < waSplitMsgs.Count; i++)
+                    {
+                        string waTid = i == 0 ? agg.TerritoryId : $"{agg.TerritoryId}_part{i + 1}";
+                        packages.Add(new InputTerritoryPackage(waTid, waSplitMsgs[i], null, true));
+                    }
                 }
             }
         }
@@ -502,25 +514,31 @@ public class FeedIngestionService
                     foreach (var tAgg in sortedTom)
                     {
                         string waTomText = WhatsAppContentFormatter.RenderTerritoryPost(tAgg, isTomorrow: true, tomorrowDate: tomorrowLabel);
-                        packages.Add(new InputTerritoryPackage($"tomorrow_{tAgg.TerritoryId}", waTomText, null, false));
+                        var waTomSplitMsgs = WhatsAppContentFormatter.SplitMessage(waTomText);
+                        for (int i = 0; i < waTomSplitMsgs.Count; i++)
+                        {
+                            string waTomTid = i == 0 ? $"tomorrow_{tAgg.TerritoryId}" : $"tomorrow_{tAgg.TerritoryId}_part{i + 1}";
+                            packages.Add(new InputTerritoryPackage(waTomTid, waTomSplitMsgs[i], null, false));
+                        }
                     }
                 }
             }
         }
 
-        GraphicInputPackage? graphicPackage = await FetchActiveGraphicScheduleAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[WhatsApp]", cancellationToken).ConfigureAwait(false);
+        var (todayGraphicPackage, tomorrowGraphicPackage) = await FetchActiveGraphicSchedulesAsync(httpClient, tomorrowLabel, editionDate, isDryRun, logPrefix: "[WhatsApp]", cancellationToken).ConfigureAwait(false);
         bool hasActiveTomorrow = packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase));
 
         return new EditorialInput(
             EditionDate: editionDate,
             Packages: packages,
             TomorrowForecastAvailable: hasActiveTomorrow,
-            GraphicPackage: graphicPackage,
-            SourceQueryTime: sourceQueryTime
+            GraphicPackage: todayGraphicPackage,
+            SourceQueryTime: sourceQueryTime,
+            TomorrowGraphicPackage: tomorrowGraphicPackage
         );
     }
 
-    private async Task<GraphicInputPackage?> FetchActiveGraphicScheduleAsync(
+    private async Task<(GraphicInputPackage? TodayGraphic, GraphicInputPackage? TomorrowGraphic)> FetchActiveGraphicSchedulesAsync(
         HttpClient httpClient,
         string tomorrowLabel,
         string editionDate,
@@ -539,7 +557,11 @@ public class FeedIngestionService
                     var parsedFixture = _parser.ParseLegacyGraphicJson(fixtureJson, "Старокостянтинівська МТГ");
                     if (parsedFixture.HasAnyOutages)
                     {
-                        return parsedFixture;
+                        if (string.Equals(parsedFixture.Metadata.TargetDate, tomorrowLabel, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return (null, parsedFixture);
+                        }
+                        return (parsedFixture, null);
                     }
                 }
                 catch (Exception ex)
@@ -547,54 +569,63 @@ public class FeedIngestionService
                     Console.WriteLine($"[WARN]{logPrefix} Failed to parse dry-run graphic fixture: {ex.Message}");
                 }
             }
-            return null;
+            return (null, null);
         }
 
-        // Priority 1: Check tomorrow's graphic schedule JSON (e.g., published in the evening for tomorrow)
-        string onlineGraphicTomorrowUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{tomorrowLabel}.json";
-        try
-        {
-            Console.WriteLine($"[INFO]{logPrefix} Checking graphic schedule JSON for tomorrow ({tomorrowLabel})...");
-            string tomJson = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(tomJson))
-            {
-                var tomPkg = _parser.ParseLegacyGraphicJson(tomJson, "Старокостянтинівська МТГ");
-                if (tomPkg.HasAnyOutages)
-                {
-                    Console.WriteLine($"[INFO]{logPrefix} Active 12-subqueue graphic schedule found for tomorrow ({tomorrowLabel}).");
-                    return tomPkg;
-                }
-                Console.WriteLine($"[INFO]{logPrefix} Tomorrow's graphic JSON ({tomorrowLabel}) has no outages across all 12 subqueues. Skipping tomorrow graphic.");
-            }
-        }
-        catch
-        {
-            // Tomorrow's graphic JSON not found (404), proceed to check today's graphic
-        }
+        GraphicInputPackage? todayGraphic = null;
+        GraphicInputPackage? tomorrowGraphic = null;
 
-        // Priority 2: Fallback to today's graphic schedule JSON
-        string onlineGraphicTodayUrl = $"https://raw.githubusercontent.com/realtomchuk-source/SvitloSk/main/parser/tg_posts/{editionDate}.json";
+        // 1. Check today's graphic schedule JSON (belongs to today's journal)
+        string onlineGraphicTodayUrl = "https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/gpv/today.json";
         try
         {
-            Console.WriteLine($"[INFO]{logPrefix} Checking graphic schedule JSON for today ({editionDate})...");
+            Console.WriteLine($"[INFO]{logPrefix} Checking GPV graphic schedule JSON for today ({editionDate})...");
             string todayJson = await httpClient.GetStringAsync(onlineGraphicTodayUrl, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(todayJson))
             {
                 var todayPkg = _parser.ParseLegacyGraphicJson(todayJson, "Старокостянтинівська МТГ");
-                if (todayPkg.HasAnyOutages)
+                if (todayPkg.HasAnyOutages && string.Equals(todayPkg.Metadata.TargetDate, editionDate, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"[INFO]{logPrefix} Active 12-subqueue graphic schedule found for today ({editionDate}).");
-                    return todayPkg;
+                    todayGraphic = todayPkg;
                 }
-                Console.WriteLine($"[INFO]{logPrefix} Today's graphic JSON ({editionDate}) is clean (no outages across all 12 subqueues). Skipping graphic publication.");
+                else
+                {
+                    Console.WriteLine($"[INFO]{logPrefix} Today's GPV graphic JSON (date={todayPkg.Metadata.TargetDate}) has no active outages for {editionDate}.");
+                }
             }
         }
         catch (Exception gEx)
         {
-            Console.WriteLine($"[INFO]{logPrefix} Online graphic JSON for {tomorrowLabel} / {editionDate} is not available ({gEx.Message}). Graphic schedule skipped.");
+            Console.WriteLine($"[INFO]{logPrefix} Online GPV graphic JSON for today ({editionDate}) is not available ({gEx.Message}).");
         }
 
-        return null;
+        // 2. Check tomorrow's graphic schedule JSON (published in the evening for tomorrow's journal)
+        string onlineGraphicTomorrowUrl = "https://raw.githubusercontent.com/realtomchuk-source/OutagesSk/main/data/gpv/tomorrow.json";
+        try
+        {
+            Console.WriteLine($"[INFO]{logPrefix} Checking GPV graphic schedule JSON for tomorrow ({tomorrowLabel})...");
+            string tomJson = await httpClient.GetStringAsync(onlineGraphicTomorrowUrl, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(tomJson))
+            {
+                var tomPkg = _parser.ParseLegacyGraphicJson(tomJson, "Старокостянтинівська МТГ");
+                if (tomPkg.HasAnyOutages && string.Equals(tomPkg.Metadata.TargetDate, tomorrowLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"[INFO]{logPrefix} Active 12-subqueue graphic schedule found for tomorrow ({tomorrowLabel}).");
+                    tomorrowGraphic = tomPkg;
+                }
+                else
+                {
+                    Console.WriteLine($"[INFO]{logPrefix} Tomorrow's GPV graphic JSON (date={tomPkg.Metadata.TargetDate}) has no active outages for {tomorrowLabel}.");
+                }
+            }
+        }
+        catch
+        {
+            // Tomorrow's graphic JSON not found (404) or unavailable
+        }
+
+        return (todayGraphic, tomorrowGraphic);
     }
 
     private async Task<IReadOnlyList<OutageRecord>> GetCumulativeTodayRecordsAsync(

@@ -138,7 +138,12 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 PublicationType type = PublicationType.Text;
                 bool isPersistent = true;
 
-                if (pubRecord.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
+                if (pubRecord.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
+                {
+                    type = PublicationType.Graphic;
+                    isPersistent = true;
+                }
+                else if (pubRecord.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Technical;
                     isPersistent = false;
@@ -162,11 +167,6 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                 else if (pubRecord.TerritoryId.Equals("fb_planned", StringComparison.OrdinalIgnoreCase))
                 {
                     type = PublicationType.Text;
-                    isPersistent = true;
-                }
-                else if (pubRecord.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
-                {
-                    type = PublicationType.Graphic;
                     isPersistent = true;
                 }
 
@@ -257,8 +257,19 @@ public class PublisherOrchestrator : IPublisherOrchestrator
                         }
                         else
                         {
-                            string targetId = _transformer.MapTerritory(rawPkg.TerritoryId);
-                            transformedPackages.Add(rawPkg with { TerritoryId = targetId });
+                            int partIdx = rawPkg.TerritoryId.IndexOf("_part", StringComparison.OrdinalIgnoreCase);
+                            if (partIdx > 0)
+                            {
+                                string baseId = rawPkg.TerritoryId.Substring(0, partIdx);
+                                string partSuffix = rawPkg.TerritoryId.Substring(partIdx);
+                                string targetBaseId = _transformer.MapTerritory(baseId);
+                                transformedPackages.Add(rawPkg with { TerritoryId = $"{targetBaseId}{partSuffix}" });
+                            }
+                            else
+                            {
+                                string targetId = _transformer.MapTerritory(rawPkg.TerritoryId);
+                                transformedPackages.Add(rawPkg with { TerritoryId = targetId });
+                            }
                         }
                     }
                     catch (Exception mapEx)
@@ -270,7 +281,25 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         }
 
 
-        if (transformedPackages.Count == 0 && input.GraphicPackage == null)
+        string tomorrowDateIso = DateTime.TryParse(input.EditionDate, out var parsedEdDt)
+            ? parsedEdDt.AddDays(1).ToString("yyyy-MM-dd")
+            : string.Empty;
+
+        GraphicInputPackage? effectiveTodayGraphic = input.GraphicPackage;
+        GraphicInputPackage? effectiveTomorrowGraphic = input.TomorrowGraphicPackage;
+
+        // If caller passed a tomorrow-dated graphic in GraphicPackage (and TomorrowGraphicPackage is null),
+        // route it to effectiveTomorrowGraphic so today's graphic is not overwritten.
+        if (effectiveTodayGraphic != null &&
+            !string.IsNullOrWhiteSpace(tomorrowDateIso) &&
+            string.Equals(effectiveTodayGraphic.Metadata.TargetDate, tomorrowDateIso, StringComparison.OrdinalIgnoreCase) &&
+            effectiveTomorrowGraphic == null)
+        {
+            effectiveTomorrowGraphic = effectiveTodayGraphic;
+            effectiveTodayGraphic = null;
+        }
+
+        if (transformedPackages.Count == 0 && effectiveTodayGraphic == null && effectiveTomorrowGraphic == null)
         {
             if (registry != null && registry.Publications.Count > 0)
             {
@@ -371,6 +400,30 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
+        // 4.5 Clean up stale multi-part chunks (e.g. tomorrow_starokostiantyniv_part2) if no longer present in transformedPackages
+        if (registry != null && !isDateRollover)
+        {
+            foreach (var oldPart in registry.Publications.Where(p =>
+                p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) &&
+                p.TransmissionState != "DELETED" &&
+                p.TerritoryId.Contains("_part", StringComparison.OrdinalIgnoreCase) &&
+                !seenTerritories.Contains(p.TerritoryId) &&
+                (p.TelegramMessageId.HasValue || (!string.IsNullOrEmpty(p.ExternalMessageId) && !p.ExternalMessageId.StartsWith("wa_virtual_")))))
+            {
+                var classification = oldPart.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase)
+                    ? PublicationClassification.Ephemeral
+                    : PublicationClassification.Persistent;
+                decisions.Add(new EditorialDecision(
+                    DecisionResult.Delete,
+                    classification,
+                    oldPart.PublisherArtifactId,
+                    oldPart.TerritoryId,
+                    null,
+                    oldPart.ExternalMessageId ?? oldPart.TelegramMessageId?.ToString()
+                ) { TelegramMessageId = oldPart.TelegramMessageId });
+            }
+        }
+
         var todayDecisions = decisions.Where(d => d.TerritoryIdentifier == null || 
             (!d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
              !d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
@@ -379,7 +432,65 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             (d.TerritoryIdentifier.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
              d.TerritoryIdentifier.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))).ToList();
 
-        // 5. Evaluate Tomorrow Visibility & Ordering Invariant (Today -> Tomorrow)
+        // 5. Evaluate Graphic Generation for Today and Tomorrow independently
+        // Rule: Each day's journal preserves its own final 12-subqueue graphic in channel history.
+        // Today's graphic belongs to Today's set of posts (above Tomorrow's forecast),
+        // while Tomorrow's graphic belongs to Tomorrow's forecast set of posts.
+        const string TomorrowGraphicTerritoryId = "graphic_tomorrow";
+        string todayGraphicScope = effectiveTodayGraphic?.TerritorialScope ?? "Старокостянтинівська МТГ";
+
+        RegistryPublicationRecord? existingTodayGraphicPub = null;
+        RegistryPublicationRecord? existingTomorrowGraphicPub = null;
+
+        if (registry != null)
+        {
+            if (isDateRollover)
+            {
+                // On date rollover (D -> D+1):
+                // 1. Yesterday's Today graphic (D) stays permanently in the channel history and is NOT carried into D+1's active registry.
+                // 2. Yesterday's Tomorrow graphic (published on evening D for D+1) is promoted to become D+1's Today graphic!
+                var promotedFromYesterdayTomorrow = registry.Publications.FirstOrDefault(p =>
+                    p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
+                    p.TerritoryId.Equals(TomorrowGraphicTerritoryId, StringComparison.OrdinalIgnoreCase) &&
+                    p.TransmissionState != "DELETED");
+
+                if (promotedFromYesterdayTomorrow == null && effectiveTodayGraphic != null && effectiveTodayGraphic.HasAnyOutages)
+                {
+                    string incomingTodayGraphicHash = _hashCalculator.ComputeGraphicHash(effectiveTodayGraphic);
+                    promotedFromYesterdayTomorrow = registry.Publications.FirstOrDefault(p =>
+                        p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
+                        p.TransmissionState != "DELETED" &&
+                        string.Equals(p.ContentHash, incomingTodayGraphicHash, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (promotedFromYesterdayTomorrow != null)
+                {
+                    existingTodayGraphicPub = promotedFromYesterdayTomorrow with { TerritoryId = todayGraphicScope };
+                }
+            }
+            else
+            {
+                existingTodayGraphicPub = registry.Publications.FirstOrDefault(p =>
+                    p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
+                    !p.TerritoryId.Equals(TomorrowGraphicTerritoryId, StringComparison.OrdinalIgnoreCase));
+
+                existingTomorrowGraphicPub = registry.Publications.FirstOrDefault(p =>
+                    p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
+                    p.TerritoryId.Equals(TomorrowGraphicTerritoryId, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        var (todayGraphicDecisionItem, unchangedTodayGraphicRecord) = EvaluateSingleGraphicDecision(
+            effectiveTodayGraphic,
+            existingTodayGraphicPub,
+            todayGraphicScope);
+
+        var (tomorrowGraphicDecisionItem, unchangedTomorrowGraphicRecord) = EvaluateSingleGraphicDecision(
+            effectiveTomorrowGraphic,
+            existingTomorrowGraphicPub,
+            TomorrowGraphicTerritoryId);
+
+        // 6. Evaluate Tomorrow Visibility & Ordering Invariant (Today [Text + Today Graphic] -> Tomorrow [Text + Tomorrow Graphic])
         bool isTomorrowAvailable = input.TomorrowForecastAvailable || input.Packages.Any(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase));
         var tomorrowVisibilityDecisions = new List<EditorialDecision>();
         var tomorrowDecision = _decisionEngine.EvaluateTomorrowVisibility(isTomorrowAvailable);
@@ -387,8 +498,14 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         {
             tomorrowVisibilityDecisions.Add(tomorrowDecision);
 
+            var todayDecisionsWithGraphic = new List<EditorialDecision>(todayDecisions);
+            if (todayGraphicDecisionItem != null)
+            {
+                todayDecisionsWithGraphic.Add(todayGraphicDecisionItem);
+            }
+
             var (repositionDeletes, repositionedTomorrowDecisions) = _policyService.EvaluateTomorrowOrdering(
-                todayDecisions,
+                todayDecisionsWithGraphic,
                 tomorrowDecisions,
                 input.Packages,
                 input.EditionDate,
@@ -404,8 +521,9 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         else if (registry != null && !isDateRollover)
         {
             foreach (var oldTom in registry.Publications.Where(p => 
-                p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
-                p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase)))
+                p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) &&
+                (p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                 p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))))
             {
                 if (oldTom.TransmissionState != "DELETED" && (!string.IsNullOrEmpty(oldTom.ExternalMessageId) || oldTom.TelegramMessageId.HasValue))
                 {
@@ -421,81 +539,24 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // 6. Evaluate Graphic Generation (Only publish when at least one of the 12 subqueues has outages)
-        EditorialDecision? graphicDecisionItem = null;
-        RegistryPublicationRecord? unchangedGraphicRecord = null;
-
-        if (input.GraphicPackage != null && input.GraphicPackage.HasAnyOutages)
-        {
-            string graphicScope = input.GraphicPackage.TerritorialScope;
-            string graphicHash = _hashCalculator.ComputeGraphicHash(input.GraphicPackage);
-
-            var existingGraphicPub = registry?.Publications.FirstOrDefault(p =>
-                p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
-                p.TerritoryId.Equals(graphicScope, StringComparison.OrdinalIgnoreCase));
-
-            Publication? domainGraphicPub = null;
-            if (existingGraphicPub != null)
-            {
-                var pubState = existingGraphicPub.TransmissionState.ToUpperInvariant() switch
-                {
-                    "SENT" => PublicationState.Published,
-                    "UPDATED" => PublicationState.Updated,
-                    "DELETED" => PublicationState.Removed,
-                    _ => PublicationState.Created
-                };
-                domainGraphicPub = new Publication(
-                    existingGraphicPub.PublisherArtifactId,
-                    graphicScope,
-                    PublicationType.Graphic,
-                    DateTime.UtcNow,
-                    existingGraphicPub.ContentHash,
-                    pubState,
-                    IsPersistent: true
-                );
-            }
-
-            var graphicDecision = _decisionEngine.EvaluateGraphicGeneration(graphicHash, domainGraphicPub);
-
-            if (graphicDecision.DecisionResult == DecisionResult.Generate)
-            {
-                bool isCreate = existingGraphicPub == null || existingGraphicPub.TransmissionState == "DELETED" || (!existingGraphicPub.TelegramMessageId.HasValue && string.IsNullOrEmpty(existingGraphicPub.ExternalMessageId));
-                var artifactId = existingGraphicPub?.PublisherArtifactId ?? Guid.NewGuid();
-                byte[] svgBytes = _graphicAssembly.AssembleSvg(input.GraphicPackage);
-
-                graphicDecisionItem = new EditorialDecision(
-                    DecisionResult: isCreate ? DecisionResult.Create : DecisionResult.Update,
-                    Classification: PublicationClassification.Persistent,
-                    PublicationId: artifactId,
-                    TerritoryIdentifier: graphicScope,
-                    TargetHash: graphicHash,
-                    ExternalMessageId: existingGraphicPub?.ExternalMessageId,
-                    GraphicBytes: null,
-                    Type: PublicationType.Graphic,
-                    ScheduleDate: input.GraphicPackage.Metadata.TargetDate,
-                    SvgBytes: svgBytes
-                );
-            }
-            else
-            {
-                unchangedGraphicRecord = existingGraphicPub;
-            }
-        }
-
         // 7. Evaluate System Status via Domain Policy Service (Tail Invariant)
-        // Positioned at the absolute tail of all journal publications (today, tomorrow forecasts, and graphic)
+        // Positioned at the absolute tail of all journal publications (today, tomorrow forecasts, and graphics)
         var techDecisions = new List<EditorialDecision>();
         if (transformedPackages.Count > 0 || (registry != null && registry.Publications.Count > 0) || input.Packages.Any(p => p.TerritoryId.Equals("Громада", StringComparison.OrdinalIgnoreCase) || p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase)))
         {
             var precedingJournalDecisions = new List<EditorialDecision>();
             precedingJournalDecisions.AddRange(todayDecisions);
+            if (todayGraphicDecisionItem != null)
+            {
+                precedingJournalDecisions.Add(todayGraphicDecisionItem);
+            }
             if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
             {
                 precedingJournalDecisions.AddRange(tomorrowDecisions);
             }
-            if (graphicDecisionItem != null)
+            if (tomorrowGraphicDecisionItem != null)
             {
-                precedingJournalDecisions.Add(graphicDecisionItem);
+                precedingJournalDecisions.Add(tomorrowGraphicDecisionItem);
             }
 
             string techContent = _transformer.RenderSystemStatus(syncTime);
@@ -504,17 +565,22 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             techDecisions.AddRange(evaluatedTechDecisions);
         }
 
-        // Assemble Final Decisions for Current Day: Today -> Tomorrow -> Graphic -> System Status (Tail)
+        // Assemble Final Decisions for Current Day:
+        // Today Text -> Today Graphic -> Tomorrow Text -> Tomorrow Graphic -> System Status (Tail)
         decisions.Clear();
         decisions.AddRange(todayDecisions);
+        if (todayGraphicDecisionItem != null)
+        {
+            decisions.Add(todayGraphicDecisionItem);
+        }
         decisions.AddRange(tomorrowVisibilityDecisions);
         if (tomorrowDecision.DecisionResult == DecisionResult.Promote)
         {
             decisions.AddRange(tomorrowDecisions);
         }
-        if (graphicDecisionItem != null)
+        if (tomorrowGraphicDecisionItem != null)
         {
-            decisions.Add(graphicDecisionItem);
+            decisions.Add(tomorrowGraphicDecisionItem);
         }
         decisions.AddRange(techDecisions);
 
@@ -588,14 +654,21 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             if (res.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
             {
                 var pubId = res.PublicationId ?? Guid.NewGuid();
-                string gHash = graphicDecisionItem?.TargetHash ?? "graphic-hash";
+                bool isTomorrowGraphicRes = string.Equals(res.TerritoryIdentifier, TomorrowGraphicTerritoryId, StringComparison.OrdinalIgnoreCase);
+                var matchingGraphicDecision = isTomorrowGraphicRes
+                    ? tomorrowGraphicDecisionItem
+                    : (todayGraphicDecisionItem ?? tomorrowGraphicDecisionItem);
+                string gHash = matchingGraphicDecision?.TargetHash ?? "graphic-hash";
                 string opState = res.DecisionResult == DecisionResult.Create.ToString() ? "SENT" : "UPDATED";
-                string? existingExtId = registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId;
+                string? fallbackExtId = isTomorrowGraphicRes
+                    ? existingTomorrowGraphicPub?.ExternalMessageId
+                    : existingTodayGraphicPub?.ExternalMessageId;
+                string? existingExtId = registry?.Publications.FirstOrDefault(p => p.PublisherArtifactId == pubId && p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))?.ExternalMessageId ?? fallbackExtId;
                 string? finalExtId = res.ExternalMessageId ?? res.MessageId?.ToString() ?? existingExtId;
 
                 graphicRegistryUpdates.Add(new RegistryPublicationRecord(
                     pubId,
-                    res.TerritoryIdentifier ?? "Старокостянтинівська МТГ",
+                    res.TerritoryIdentifier ?? todayGraphicScope,
                     finalExtId,
                     gHash,
                     opState,
@@ -680,16 +753,22 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        if (unchangedGraphicRecord != null)
+        if (unchangedTodayGraphicRecord != null)
         {
-            graphicRegistryUpdates.Add(unchangedGraphicRecord);
+            graphicRegistryUpdates.Add(unchangedTodayGraphicRecord);
         }
-        else if ((input.GraphicPackage == null || !input.GraphicPackage.HasAnyOutages) && registry != null)
+        else if ((effectiveTodayGraphic == null || !effectiveTodayGraphic.HasAnyOutages) && existingTodayGraphicPub != null)
         {
-            foreach (var oldPub in registry.Publications.Where(p => p.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase)))
-            {
-                graphicRegistryUpdates.Add(oldPub);
-            }
+            graphicRegistryUpdates.Add(existingTodayGraphicPub);
+        }
+
+        if (unchangedTomorrowGraphicRecord != null)
+        {
+            graphicRegistryUpdates.Add(unchangedTomorrowGraphicRecord);
+        }
+        else if ((effectiveTomorrowGraphic == null || !effectiveTomorrowGraphic.HasAnyOutages) && existingTomorrowGraphicPub != null)
+        {
+            graphicRegistryUpdates.Add(existingTomorrowGraphicPub);
         }
 
         if (registry != null && !isDateRollover)
@@ -708,17 +787,18 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             }
         }
 
-        // Enforce canonical section ordering in registry: Today -> Tomorrow -> Graphic -> System Status (Tail)
-        updatedPublications = updatedPublications
-            .OrderBy(p => GetRegistryRecordSectionRank(p))
-            .ToList();
-
         foreach (var gRec in graphicRegistryUpdates)
         {
             updatedPublications.Add(gRec);
         }
 
-        // Move active system_status to the absolute tail of the registry list (after Graphic as well)
+        // Enforce canonical section ordering in registry:
+        // Today Text -> Today Graphic -> Tomorrow Text -> Tomorrow Graphic -> System Status (Tail)
+        updatedPublications = updatedPublications
+            .OrderBy(p => GetRegistryRecordSectionRank(p))
+            .ToList();
+
+        // Move active system_status to the absolute tail of the registry list
         var statusRecordsToMove = updatedPublications
             .Where(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -759,6 +839,71 @@ public class PublisherOrchestrator : IPublisherOrchestrator
         return dispatchResult;
     }
 
+    private (EditorialDecision? Decision, RegistryPublicationRecord? UnchangedRecord) EvaluateSingleGraphicDecision(
+        GraphicInputPackage? graphicPkg,
+        RegistryPublicationRecord? existingGraphicPub,
+        string registryTerritoryId)
+    {
+        if (graphicPkg == null || !graphicPkg.HasAnyOutages)
+        {
+            return (null, null);
+        }
+
+        string graphicHash = _hashCalculator.ComputeGraphicHash(graphicPkg);
+
+        Publication? domainGraphicPub = null;
+        if (existingGraphicPub != null)
+        {
+            var pubState = existingGraphicPub.TransmissionState.ToUpperInvariant() switch
+            {
+                "SENT" => PublicationState.Published,
+                "UPDATED" => PublicationState.Updated,
+                "DELETED" => PublicationState.Removed,
+                _ => PublicationState.Created
+            };
+            domainGraphicPub = new Publication(
+                existingGraphicPub.PublisherArtifactId,
+                registryTerritoryId,
+                PublicationType.Graphic,
+                DateTime.UtcNow,
+                existingGraphicPub.ContentHash,
+                pubState,
+                IsPersistent: true
+            );
+        }
+
+        var graphicDecision = _decisionEngine.EvaluateGraphicGeneration(graphicHash, domainGraphicPub);
+
+        if (graphicDecision.DecisionResult == DecisionResult.Generate)
+        {
+            bool isCreate = existingGraphicPub == null ||
+                            existingGraphicPub.TransmissionState == "DELETED" ||
+                            (!existingGraphicPub.TelegramMessageId.HasValue && string.IsNullOrEmpty(existingGraphicPub.ExternalMessageId));
+            var artifactId = existingGraphicPub?.PublisherArtifactId ?? Guid.NewGuid();
+            byte[] svgBytes = _graphicAssembly.AssembleSvg(graphicPkg);
+
+            var decisionItem = new EditorialDecision(
+                DecisionResult: isCreate ? DecisionResult.Create : DecisionResult.Update,
+                Classification: PublicationClassification.Persistent,
+                PublicationId: artifactId,
+                TerritoryIdentifier: registryTerritoryId,
+                TargetHash: graphicHash,
+                ExternalMessageId: existingGraphicPub?.ExternalMessageId,
+                GraphicBytes: null,
+                Type: PublicationType.Graphic,
+                ScheduleDate: graphicPkg.Metadata.TargetDate,
+                SvgBytes: svgBytes
+            )
+            {
+                TelegramMessageId = existingGraphicPub?.TelegramMessageId
+            };
+
+            return (decisionItem, null);
+        }
+
+        return (null, existingGraphicPub);
+    }
+
     private static int GetRegistryRecordSectionRank(RegistryPublicationRecord record)
     {
         string tid = record.TerritoryId ?? string.Empty;
@@ -768,7 +913,8 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             return 1;
         }
 
-        if (tid.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase))
+        if (tid.Equals("starokostiantyniv", StringComparison.OrdinalIgnoreCase) ||
+            tid.StartsWith("starokostiantyniv_part", StringComparison.OrdinalIgnoreCase))
         {
             return 2;
         }
@@ -781,37 +927,44 @@ public class PublisherOrchestrator : IPublisherOrchestrator
             return 3;
         }
 
-        if (tid.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase))
+        if (record.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase) &&
+            !tid.Equals("graphic_tomorrow", StringComparison.OrdinalIgnoreCase))
         {
             return 4;
         }
 
-        if (tid.Equals("tomorrow_header", StringComparison.OrdinalIgnoreCase))
+        if (tid.Equals("tomorrow_separator", StringComparison.OrdinalIgnoreCase))
         {
             return 5;
         }
 
-        if (tid.Equals("tomorrow_starokostiantyniv", StringComparison.OrdinalIgnoreCase))
+        if (tid.Equals("tomorrow_header", StringComparison.OrdinalIgnoreCase))
         {
             return 6;
+        }
+
+        if (tid.Equals("tomorrow_starokostiantyniv", StringComparison.OrdinalIgnoreCase) ||
+            tid.StartsWith("tomorrow_starokostiantyniv_part", StringComparison.OrdinalIgnoreCase))
+        {
+            return 7;
         }
 
         if (tid.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
             tid.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase))
         {
-            return 7;
+            return 8;
         }
 
         if (record.PublicationType.Equals("Graphic", StringComparison.OrdinalIgnoreCase))
         {
-            return 8;
+            return 9;
         }
 
         if (tid.Equals("system_status", StringComparison.OrdinalIgnoreCase))
         {
-            return 9;
+            return 10;
         }
 
-        return 10;
+        return 11;
     }
 }

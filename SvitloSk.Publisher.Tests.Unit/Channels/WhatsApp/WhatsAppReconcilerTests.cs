@@ -215,9 +215,62 @@ public class WhatsAppReconcilerTests : IDisposable
             $"T · {todayDdMm} · 00",
             $"T · {todayDdMm} · 01",
             $"T · {todayDdMm} · 02",
+            $"G · {todayDdMm}",
             $"F · {tomorrowDdMm} · 00",
             $"F · {tomorrowDdMm} · 01",
+            $"S · {todayDdMm}"
+        }, adapter.PublishedMarkers);
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_TodayAndTomorrowGraphicsCoexist_AndPreviousDayGraphicIsPreservedInHistory()
+    {
+        string todayIso = KyivClock.TodayIso;
+        string yesterdayIso = DateTime.Parse(todayIso).AddDays(-1).ToString("yyyy-MM-dd");
+        string tomorrowIso = DateTime.Parse(todayIso).AddDays(1).ToString("yyyy-MM-dd");
+
+        string yesterdayDdMm = WhatsAppContentFormatter.FormatMarkerDate(yesterdayIso);
+        string todayDdMm = WhatsAppContentFormatter.FormatMarkerDate(todayIso);
+        string tomorrowDdMm = WhatsAppContentFormatter.FormatMarkerDate(tomorrowIso);
+
+        var baseInput = BuildSampleEditorialInput(todayIso, withTomorrow: true);
+        var tomorrowGraphicPkg = baseInput.GraphicPackage! with
+        {
+            Metadata = new GraphicMetadata("pkg-tom", "2026-10-26 19:00", tomorrowIso, "TEST-TOM")
+        };
+        var input = baseInput with { TomorrowGraphicPackage = tomorrowGraphicPkg };
+
+        // Simulate yesterday's posts (including G · yesterday) sitting in DOM history above today's tail
+        var domMessages = new List<WhatsAppTailMessage>
+        {
+            new(0, "y_t00", null, $"T · {yesterdayDdMm} · 00", "T", yesterdayDdMm, 0, "*ЖУРНАЛ*", "вчора", true),
+            new(1, "y_g", null, $"G · {yesterdayDdMm}", "G", yesterdayDdMm, null, "*ГРАФІК*", "вчора графік", true)
+        };
+
+        var adapter = new FakeWhatsAppReconcilerAdapter
+        {
+            TailState = new WhatsAppTailStateResult(true, domMessages)
+        };
+
+        var sut = CreateSut(adapter);
+        var result = await sut.ReconcileAsync("0029Vb96XUUIN9ixA88Umz3Y", _registryPath, _journalPath, input);
+
+        Assert.True(result.IsSuccess);
+        // Yesterday's graphic (y_g) and text (y_t00) must NEVER be deleted!
+        Assert.DoesNotContain("y_t00", adapter.DeletedIds);
+        Assert.DoesNotContain("y_g", adapter.DeletedIds);
+
+        // Published order must place Today's Graphic (G · today) in Today's block (above F · tomorrow),
+        // and Tomorrow's Graphic (G · tomorrow) in Tomorrow's forecast block (after F · tomorrow, before S · today)
+        Assert.Equal(new[]
+        {
+            $"T · {todayDdMm} · 00",
+            $"T · {todayDdMm} · 01",
+            $"T · {todayDdMm} · 02",
             $"G · {todayDdMm}",
+            $"F · {tomorrowDdMm} · 00",
+            $"F · {tomorrowDdMm} · 01",
+            $"G · {tomorrowDdMm}",
             $"S · {todayDdMm}"
         }, adapter.PublishedMarkers);
     }

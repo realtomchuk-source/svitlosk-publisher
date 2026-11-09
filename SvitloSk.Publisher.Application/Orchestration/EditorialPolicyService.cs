@@ -218,10 +218,10 @@ public class EditorialPolicyService
             }
         }
 
-        // Check physical message ordering in Telegram (any active tomorrow message has ID < any active today message ID)
+        // Check physical message ordering in Telegram (any active tomorrow message has ID < any active today message ID, including today's graphic)
         var activeTodayRecords = existingRecords.Where(p =>
             p.TransmissionState != "DELETED" &&
-            p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase) &&
+            !p.TerritoryId.Equals("graphic_tomorrow", StringComparison.OrdinalIgnoreCase) &&
             !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
             !p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
             !p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) &&
@@ -232,18 +232,20 @@ public class EditorialPolicyService
             tom.TelegramMessageId.HasValue &&
             activeTodayRecords.Any(tod => tod.TelegramMessageId.HasValue && tod.TelegramMessageId.Value > tom.TelegramMessageId.Value));
 
-        // Check registry / channel sequence ordering (e.g., WhatsApp where newly created today posts were placed before unchanged tomorrow posts while other today posts are after, or vice versa)
+        // Check registry / channel sequence ordering (e.g., Facebook/WhatsApp where newly created today posts or today's graphic were placed after tomorrow posts)
         bool isTomorrowOutOfOrderInRegistry = false;
         if (!activeTomorrowRecords.Any(t => t.TelegramMessageId.HasValue))
         {
-            var recordsList = existingRecords.Where(p => p.TransmissionState != "DELETED" && p.PublicationType.Equals("Text", StringComparison.OrdinalIgnoreCase)).ToList();
+            var recordsList = existingRecords.Where(p => p.TransmissionState != "DELETED").ToList();
             int firstTomorrowIdx = recordsList.FindIndex(p =>
                 p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) ||
-                p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase));
+                p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) ||
+                p.TerritoryId.Equals("graphic_tomorrow", StringComparison.OrdinalIgnoreCase));
             int lastTodayIdx = recordsList.FindLastIndex(p =>
                 !p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase) &&
                 !p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase) &&
-                !p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase));
+                !p.TerritoryId.Equals("fb_tomorrow", StringComparison.OrdinalIgnoreCase) &&
+                !p.TerritoryId.Equals("graphic_tomorrow", StringComparison.OrdinalIgnoreCase));
 
             // Also check if system_status is currently sitting BEFORE tomorrow_separator in the registry (symptom of a mid-day today post creation before this fix)
             int statusIdx = recordsList.FindIndex(p => p.TerritoryId.Equals("system_status", StringComparison.OrdinalIgnoreCase));

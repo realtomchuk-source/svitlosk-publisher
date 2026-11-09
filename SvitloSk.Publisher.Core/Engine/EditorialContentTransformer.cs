@@ -557,11 +557,12 @@ public class EditorialContentTransformer
 
                 // Safe split if exceeding Telegram limit
                 var splitMsgs = SplitTelegramMessage(formattedContent, 3800);
-                foreach (var chunk in splitMsgs)
+                for (int i = 0; i < splitMsgs.Count; i++)
                 {
+                    string tid = i == 0 ? agg.TerritoryId : $"{agg.TerritoryId}_part{i + 1}";
                     packages.Add(new TransformedPackage(
-                        agg.TerritoryId,
-                        chunk,
+                        tid,
+                        splitMsgs[i],
                         null,
                         true
                     ));

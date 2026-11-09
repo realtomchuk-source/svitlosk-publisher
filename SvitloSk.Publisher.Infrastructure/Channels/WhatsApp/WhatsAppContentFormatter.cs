@@ -244,9 +244,26 @@ public static class WhatsAppContentFormatter
         return null;
     }
 
+    public static string FormatDayAndMonthUkrainian(string dateStr)
+    {
+        if (string.IsNullOrWhiteSpace(dateStr)) return dateStr;
+
+        if (DateTime.TryParse(dateStr, out var dt) ||
+            DateTime.TryParseExact(dateStr, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt) ||
+            DateTime.TryParseExact(dateStr, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
+        {
+            string day = dt.Day.ToString();
+            string month = dt.Month >= 1 && dt.Month <= 12 ? UkrainianMonthGenitive[dt.Month] : dt.Month.ToString();
+            return $"{day} {month}";
+        }
+
+        return dateStr;
+    }
+
     public static string RenderGraphicScheduleCaption(string targetDateStr, string territorialScope = "Старокостянтинівська МТГ")
     {
-        return "_Графік застосовується за розпорядженням НЕК «Укренерго» для 12 підчерг громади_";
+        string dayMonth = FormatDayAndMonthUkrainian(targetDateStr);
+        return $"_Графік погодинних знеструмлень на {dayMonth} відповідно до розпорядження НЕК «Укренерго»_";
     }
 
     public static string RenderJournalHeader(string rawDate, JournalSummaryStats stats)

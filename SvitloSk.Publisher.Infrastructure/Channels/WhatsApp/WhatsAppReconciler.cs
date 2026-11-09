@@ -186,7 +186,7 @@ public class WhatsAppReconciler
         }
 
         // 5. Step 2 of Reconciliation: Remove duplicate markers in channel (keep first for T/F/G; for S keep only latest if multiple)
-        var duplicateDeletes = FindDuplicateMarkerMessages(actualMessages, todayDdMm);
+        var duplicateDeletes = FindDuplicateMarkerMessages(actualMessages, todayDdMm, editionDate);
         foreach (var dup in duplicateDeletes)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -210,7 +210,9 @@ public class WhatsAppReconciler
             var existingEntry = journal.Entries.FirstOrDefault(e => string.Equals(e.Marker, actual.Marker, StringComparison.OrdinalIgnoreCase));
             if (existingEntry == null && matchingDesired != null)
             {
-                string actualCleanHash = _hashCalculator.ComputeHash(WhatsAppContentFormatter.StripMarker(actual.TextWithoutMarker), null);
+                string actualCleanHash = matchingDesired.MarkerType == 'G'
+                    ? matchingDesired.ContentHash
+                    : _hashCalculator.ComputeHash(WhatsAppContentFormatter.StripMarker(actual.TextWithoutMarker), null);
                 UpsertJournalEntry(
                     journal,
                     matchingDesired.Marker,
@@ -231,7 +233,7 @@ public class WhatsAppReconciler
         var desiredStatus = desiredPosts.First(d => d.MarkerType == 'S');
 
         // Active tail messages belonging to today's working set (from T · today · 00 onwards, plus any active F, G, S)
-        var workingTail = GetCurrentDayWorkingTail(actualMessages, todayDdMm, journal);
+        var workingTail = GetCurrentDayWorkingTail(actualMessages, todayDdMm, editionDate, journal);
 
         // Check if any existing F or G in workingTail is no longer desired (e.g. tomorrow forecast cancelled)
         var desiredMarkersSet = desiredPosts.Select(d => d.Marker).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -556,6 +558,63 @@ public class WhatsAppReconciler
                 marker, 'T', editionDate, seq, pkg.TerritoryId, cleanText, fullText, hash, pkg.GraphicBytes, PublicationType.Text));
         }
 
+        // Normalize graphic packages for Today vs Tomorrow
+        string tomorrowDateIso = DateTime.TryParse(editionDate, out var parsedEdDt)
+            ? parsedEdDt.AddDays(1).ToString("yyyy-MM-dd")
+            : string.Empty;
+
+        GraphicInputPackage? effectiveTodayGraphic = input.GraphicPackage;
+        GraphicInputPackage? effectiveTomorrowGraphic = input.TomorrowGraphicPackage;
+
+        if (effectiveTodayGraphic != null &&
+            !string.IsNullOrWhiteSpace(tomorrowDateIso) &&
+            string.Equals(effectiveTodayGraphic.Metadata.TargetDate, tomorrowDateIso, StringComparison.OrdinalIgnoreCase) &&
+            effectiveTomorrowGraphic == null)
+        {
+            effectiveTomorrowGraphic = effectiveTodayGraphic;
+            effectiveTodayGraphic = null;
+        }
+
+        // 1c. Today's 12-subqueue Graphic (G · todayDdMm) — placed at the end of Today's set of messages (above Tomorrow's forecast)
+        if (effectiveTodayGraphic != null && effectiveTodayGraphic.HasAnyOutages)
+        {
+            string gDate = !string.IsNullOrWhiteSpace(effectiveTodayGraphic.Metadata.TargetDate)
+                ? effectiveTodayGraphic.Metadata.TargetDate
+                : editionDate;
+            byte[] svgBytes = _graphicAssembly.AssembleSvg(effectiveTodayGraphic);
+            byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
+
+            string cleanCaption = WhatsAppContentFormatter.RenderGraphicScheduleCaption(gDate, effectiveTodayGraphic.TerritorialScope);
+            string gMarker = WhatsAppContentFormatter.FormatMarker('G', gDate);
+            string fullCaption = WhatsAppContentFormatter.AppendMarker(cleanCaption, gMarker);
+            string gHash = _hashCalculator.ComputeGraphicHash(effectiveTodayGraphic);
+
+            result.Add(new DesiredWhatsAppPost(
+                gMarker, 'G', gDate, null, effectiveTodayGraphic.TerritorialScope, cleanCaption, fullCaption, gHash, pngBytes, PublicationType.Graphic));
+        }
+        else
+        {
+            // If today's graphic was already published earlier today in the channel, retain it as persistent in today's journal set
+            string expectedTodayGMarker = WhatsAppContentFormatter.FormatMarker('G', editionDate);
+            var existingTodayGInDom = actualTailMessages.FirstOrDefault(m =>
+                string.Equals(m.Marker, expectedTodayGMarker, StringComparison.OrdinalIgnoreCase) && m.HasImage);
+            var existingTodayGInJournal = journal.Entries.FirstOrDefault(e =>
+                string.Equals(e.Marker, expectedTodayGMarker, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(e.State, "DELETED", StringComparison.OrdinalIgnoreCase));
+
+            if (existingTodayGInDom != null && existingTodayGInJournal != null)
+            {
+                string scope = !string.IsNullOrWhiteSpace(existingTodayGInJournal.TerritoryId)
+                    ? existingTodayGInJournal.TerritoryId
+                    : "Старокостянтинівська МТГ";
+                string cleanCaption = WhatsAppContentFormatter.RenderGraphicScheduleCaption(editionDate, scope);
+                string fullCaption = WhatsAppContentFormatter.AppendMarker(cleanCaption, expectedTodayGMarker);
+
+                result.Add(new DesiredWhatsAppPost(
+                    expectedTodayGMarker, 'G', editionDate, null, scope, cleanCaption, fullCaption, existingTodayGInJournal.ContentHash, new byte[] { 1 }, PublicationType.Graphic));
+            }
+        }
+
         // 2. Tomorrow Forecast packages (F · dd.MM · 00..NN)
         var tomorrowPackages = input.Packages
             .Where(p => p.TerritoryId.StartsWith("tomorrow", StringComparison.OrdinalIgnoreCase))
@@ -563,9 +622,7 @@ public class WhatsAppReconciler
 
         if (input.TomorrowForecastAvailable && tomorrowPackages.Count > 0)
         {
-            string tomorrowDate = DateTime.TryParse(editionDate, out var dt)
-                ? dt.AddDays(1).ToString("yyyy-MM-dd")
-                : editionDate;
+            string tomorrowDate = !string.IsNullOrWhiteSpace(tomorrowDateIso) ? tomorrowDateIso : editionDate;
             string tomDdMm = WhatsAppContentFormatter.FormatMarkerDate(tomorrowDate);
             var tomSeqMap = BuildSequenceMap('F', tomorrowDate, tomDdMm, journal, actualTailMessages);
 
@@ -600,22 +657,22 @@ public class WhatsAppReconciler
             }
         }
 
-        // 3. Graphic 12-subqueue schedule (G · dd.MM)
-        if (input.GraphicPackage != null && input.GraphicPackage.HasAnyOutages)
+        // 2c. Tomorrow's 12-subqueue Graphic (G · tomorrowDdMm) — placed inside the Tomorrow Forecast set of messages
+        if (effectiveTomorrowGraphic != null && effectiveTomorrowGraphic.HasAnyOutages)
         {
-            string gDate = !string.IsNullOrWhiteSpace(input.GraphicPackage.Metadata.TargetDate)
-                ? input.GraphicPackage.Metadata.TargetDate
-                : editionDate;
-            byte[] svgBytes = _graphicAssembly.AssembleSvg(input.GraphicPackage);
+            string tomGDate = !string.IsNullOrWhiteSpace(effectiveTomorrowGraphic.Metadata.TargetDate)
+                ? effectiveTomorrowGraphic.Metadata.TargetDate
+                : tomorrowDateIso;
+            byte[] svgBytes = _graphicAssembly.AssembleSvg(effectiveTomorrowGraphic);
             byte[] pngBytes = _rasterizer.RasterizeSvgToPng(svgBytes, 1080, 1080);
 
-            string cleanCaption = WhatsAppContentFormatter.RenderGraphicScheduleCaption(gDate, input.GraphicPackage.TerritorialScope);
-            string gMarker = WhatsAppContentFormatter.FormatMarker('G', gDate);
+            string cleanCaption = WhatsAppContentFormatter.RenderGraphicScheduleCaption(tomGDate, effectiveTomorrowGraphic.TerritorialScope);
+            string gMarker = WhatsAppContentFormatter.FormatMarker('G', tomGDate);
             string fullCaption = WhatsAppContentFormatter.AppendMarker(cleanCaption, gMarker);
-            string gHash = _hashCalculator.ComputeGraphicHash(input.GraphicPackage);
+            string gHash = _hashCalculator.ComputeGraphicHash(effectiveTomorrowGraphic);
 
             result.Add(new DesiredWhatsAppPost(
-                gMarker, 'G', gDate, null, input.GraphicPackage.TerritorialScope, cleanCaption, fullCaption, gHash, pngBytes, PublicationType.Graphic));
+                gMarker, 'G', tomGDate, null, "graphic_tomorrow", cleanCaption, fullCaption, gHash, pngBytes, PublicationType.Graphic));
         }
 
         // 4. Technical Status (S · dd.MM) - Always last
@@ -783,12 +840,13 @@ public class WhatsAppReconciler
     private static List<WhatsAppTailMessage> GetCurrentDayWorkingTail(
         List<WhatsAppTailMessage> actualMessages,
         string todayDdMm,
+        string editionDate,
         WhatsAppPostJournalModel journal)
     {
         int startIdx = actualMessages.FindIndex(m =>
             (m.MarkerType == "T" && m.MarkerDate == todayDdMm) ||
             m.MarkerType == "F" ||
-            m.MarkerType == "G" ||
+            (m.MarkerType == "G" && !IsMarkerDateStrictlyBeforeToday(m.MarkerDate, editionDate)) ||
             m.MarkerType == "S");
 
         if (startIdx < 0)
@@ -797,13 +855,16 @@ public class WhatsAppReconciler
         }
 
         return actualMessages.Skip(startIdx)
-            .Where(m => !string.IsNullOrEmpty(m.Marker))
+            .Where(m => !string.IsNullOrEmpty(m.Marker) &&
+                        !(m.MarkerType == "T" && m.MarkerDate != todayDdMm) &&
+                        !(m.MarkerType == "G" && IsMarkerDateStrictlyBeforeToday(m.MarkerDate, editionDate)))
             .ToList();
     }
 
     private static List<WhatsAppTailMessage> FindDuplicateMarkerMessages(
         List<WhatsAppTailMessage> actualMessages,
-        string todayDdMm)
+        string todayDdMm,
+        string editionDate)
     {
         var duplicates = new List<WhatsAppTailMessage>();
         var seenMarkers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -820,6 +881,7 @@ public class WhatsAppReconciler
             if (string.IsNullOrEmpty(msg.Marker) || msg.MarkerType == "S") continue;
             // Only deduplicate within today's and tomorrow's active tail (never touch previous days' history)
             if (msg.MarkerType == "T" && msg.MarkerDate != todayDdMm) continue;
+            if (msg.MarkerType == "G" && IsMarkerDateStrictlyBeforeToday(msg.MarkerDate, editionDate)) continue;
 
             if (!seenMarkers.Add(msg.Marker))
             {
@@ -828,6 +890,32 @@ public class WhatsAppReconciler
         }
 
         return duplicates;
+    }
+
+    private static bool IsMarkerDateStrictlyBeforeToday(string? markerDateDdMm, string todayIso)
+    {
+        if (string.IsNullOrWhiteSpace(markerDateDdMm)) return false;
+        if (!DateTime.TryParse(todayIso, out var todayDt)) return false;
+
+        var parts = markerDateDdMm.Split('.');
+        if (parts.Length != 2 || !int.TryParse(parts[0], out int day) || !int.TryParse(parts[1], out int month))
+        {
+            return false;
+        }
+
+        int year = todayDt.Year;
+        if (todayDt.Month == 12 && month == 1) year++;
+        else if (todayDt.Month == 1 && month == 12) year--;
+
+        try
+        {
+            var markerDt = new DateTime(year, month, day);
+            return markerDt.Date < todayDt.Date;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool IsMarkerDateLessOrEqualToday(string? markerDateDdMm, string todayIso)

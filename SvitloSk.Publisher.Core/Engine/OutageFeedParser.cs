@@ -325,32 +325,47 @@ public class OutageFeedParser : IOutageFeedParser
                 }
 
                 string mask = prop.Value.GetString() ?? string.Empty;
-                if (mask.Length == 24)
+                if (mask.Length == 48 || mask.Length == 24)
                 {
-                    // Convert 24-character bitmask (0 = outage / Restricted, 1 = powered, 2 = possible / Possible)
-                    int hour = 0;
-                    while (hour < 24)
+                    // Convert 48-character (30 min/slot) or 24-character (60 min/slot) bitmask
+                    // (0 = outage / Restricted, 1 = powered, 2 = possible / Possible)
+                    int totalSlots = mask.Length;
+                    int minutesPerSlot = totalSlots == 48 ? 30 : 60;
+                    int slot = 0;
+                    while (slot < totalSlots)
                     {
-                        char state = mask[hour];
+                        char state = mask[slot];
                         if (state == '0' || state == '2')
                         {
-                            int startHour = hour;
+                            int startSlot = slot;
                             char currentStatusChar = state;
-                            while (hour < 24 && mask[hour] == currentStatusChar)
+                            while (slot < totalSlots && mask[slot] == currentStatusChar)
                             {
-                                hour++;
+                                slot++;
                             }
-                            int endHour = hour;
+                            int endSlot = slot;
 
-                            string startStr = $"{startHour:D2}:00";
-                            string endStr = endHour == 24 ? "24:00" : $"{endHour:D2}:00";
+                            var startTs = TimeSpan.FromMinutes(startSlot * minutesPerSlot);
+                            string startStr = $"{startTs.Hours:D2}:{startTs.Minutes:D2}";
+
+                            string endStr;
+                            if (endSlot == totalSlots)
+                            {
+                                endStr = "24:00";
+                            }
+                            else
+                            {
+                                var endTs = TimeSpan.FromMinutes(endSlot * minutesPerSlot);
+                                endStr = $"{endTs.Hours:D2}:{endTs.Minutes:D2}";
+                            }
+
                             string status = currentStatusChar == '2' ? "Possible" : "Restricted";
 
                             subqueueMap[canonicalSqId].Add(new GraphicInterval(startStr, endStr, status));
                         }
                         else
                         {
-                            hour++;
+                            slot++;
                         }
                     }
                 }

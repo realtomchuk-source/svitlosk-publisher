@@ -68,9 +68,14 @@ public class GraphicAssembly : IGraphicAssembly
             formattedDate = parsedDate.ToString("dd.MM.yyyy");
         }
 
-        // Format generation timestamp DD.MM.YYYY, HH:mm
+        // Format generation timestamp DD.MM.YYYY, HH:mm in Kyiv time
         string formattedTimestamp = inputPackage.Metadata.GenerationTimestamp;
-        if (DateTime.TryParse(inputPackage.Metadata.GenerationTimestamp, out var parsedGenTime))
+        if (DateTimeOffset.TryParse(inputPackage.Metadata.GenerationTimestamp, out var parsedGenOffset))
+        {
+            var kyivTime = KyivClock.ToKyiv(parsedGenOffset.UtcDateTime);
+            formattedTimestamp = kyivTime.ToString("dd.MM.yyyy, HH:mm");
+        }
+        else if (DateTime.TryParse(inputPackage.Metadata.GenerationTimestamp, out var parsedGenTime))
         {
             formattedTimestamp = parsedGenTime.ToString("dd.MM.yyyy, HH:mm");
         }
