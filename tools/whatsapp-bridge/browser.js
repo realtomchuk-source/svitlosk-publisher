@@ -393,7 +393,12 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
 
                 if (await svitloSkCellLocator.count() > 0) {
                     await svitloSkCellLocator.scrollIntoViewIfNeeded().catch(() => {});
-                    await svitloSkCellLocator.click({ timeout: 5000 });
+                    const cellBox = await svitloSkCellLocator.boundingBox();
+                    if (cellBox) {
+                        await page.mouse.click(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2);
+                    } else {
+                        await svitloSkCellLocator.click({ timeout: 5000 });
+                    }
                     clicked = true;
                     logBridge('INFO', 'Clicked SvitloSk newsletter-cell in channels list.');
                 } else {
@@ -405,10 +410,12 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                     if (await svitloSkTitleLocator.count() > 0) {
                         await svitloSkTitleLocator.scrollIntoViewIfNeeded().catch(() => {});
                         const parentBtn = svitloSkTitleLocator.locator('xpath=ancestor::div[@role="button" or @data-testid="newsletter-tab-newsletter-cell"][1]');
-                        if (await parentBtn.count() > 0) {
-                            await parentBtn.click({ timeout: 5000 });
+                        const targetLoc = (await parentBtn.count() > 0) ? parentBtn : svitloSkTitleLocator;
+                        const tBox = await targetLoc.boundingBox();
+                        if (tBox) {
+                            await page.mouse.click(tBox.x + tBox.width / 2, tBox.y + tBox.height / 2);
                         } else {
-                            await svitloSkTitleLocator.click({ timeout: 5000 });
+                            await targetLoc.click({ timeout: 5000 });
                         }
                         clicked = true;
                         logBridge('INFO', 'Clicked SvitloSk channel button via title anchor.');
@@ -436,9 +443,9 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                     }
                 }
 
-                // Wait up to 8s for #main header & composer to become active
+                // Wait up to 12s for #main header & composer to become active
                 let verified = false;
-                for (let w = 0; w < 16; w++) {
+                for (let w = 0; w < 24; w++) {
                     await page.waitForTimeout(500);
                     if (await isSvitloSkChannelActiveInMain()) {
                         verified = true;
@@ -450,6 +457,8 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                     throw new Error(`Channel SvitloSk did not open in #main (clicked=${clicked}, header or composer missing after click).`);
                 }
 
+                // Additional safeguard: wait for composer or footer to settle
+                await page.waitForTimeout(1000);
                 await scrollToBottom();
                 logBridge('INFO', 'Channel SvitloSk successfully verified in #main and ready.');
                 return;
@@ -887,11 +896,16 @@ async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeTyp
             '#main footer span[data-icon="ic-attach-file"], ' +
             '#main footer span[data-icon="plus"], ' +
             '#main footer button:has(span[data-icon="clip"]), ' +
+            '#main footer [data-icon="plus"], ' +
             'footer [data-icon="ic-attach-file"]';
         const attachBtn = page.locator(attachSelector).first();
-        const attachVisible = await attachBtn.waitFor({ state: 'visible', timeout: 7000 }).then(() => true).catch(() => false);
+        const attachVisible = await attachBtn.waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
 
         if (!attachVisible) {
+            try {
+                const errShot = path.resolve(LOGS_DIR, 'attach-error.png');
+                await page.screenshot({ path: errShot }).catch(() => {});
+            } catch (_) {}
             throw new Error('Attachment clip button could not be found in channel composer.');
         }
 
