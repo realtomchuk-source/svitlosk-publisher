@@ -388,8 +388,7 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                 // Priority 3a: Explicit newsletter cell with aria-label matching SvitloSk
                 const svitloSkCellLocator = page.locator(
                     'div[data-testid="newsletter-tab-newsletter-cell"][aria-label*="SvitloSk" i], ' +
-                    'div[role="button"][aria-label*="Канал \"SvitloSk" i], ' +
-                    'div[role="button"][aria-label*="SvitloSk Журнал" i]'
+                    'div[role="button"][aria-label*="SvitloSk" i]'
                 ).first();
 
                 if (await svitloSkCellLocator.count() > 0) {
