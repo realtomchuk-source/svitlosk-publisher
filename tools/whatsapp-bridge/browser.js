@@ -368,18 +368,21 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                 logBridge('INFO', `Navigating to SvitloSk channel (Attempt ${attempt}/${maxRetries})...`);
                 await dismissOverlays();
 
-                // Stage 2: Ensure we are on the Channels ("Каналы") pane on the left navigation rail
-                const railLoc = page.locator(
-                    'button[aria-label*="Канал" i], button[aria-label*="Channel" i], ' +
-                    'div[role="button"][aria-label*="Канал" i], div[role="button"][aria-label*="Channel" i], ' +
-                    'span[data-icon*="newsletter"], span[data-icon*="channel"], ' +
-                    '[data-testid*="newsletter"], [data-testid*="channel"]'
-                ).first();
+                // Stage 2: Ensure we are on the Channels ("Каналы") pane on the left navigation rail ONLY if not already visible
+                const hasChannelCells = await page.locator('div[data-testid="newsletter-tab-newsletter-cell"]').count() > 0;
+                if (!hasChannelCells) {
+                    const railLoc = page.locator(
+                        'button[aria-label*="Канал" i], button[aria-label*="Channel" i], ' +
+                        'div[role="button"][aria-label*="Канал" i], div[role="button"][aria-label*="Channel" i], ' +
+                        'span[data-icon*="newsletter"], span[data-icon*="channel"], ' +
+                        '[data-testid*="newsletter"], [data-testid*="channel"]'
+                    ).first();
 
-                if (await railLoc.count() > 0) {
-                    await railLoc.click({ timeout: 5000 }).catch(() => {});
-                    logBridge('INFO', 'Clicked Channels icon on left navigation rail.');
-                    await page.waitForTimeout(1200);
+                    if (await railLoc.count() > 0) {
+                        await railLoc.click({ timeout: 5000 }).catch(() => {});
+                        logBridge('INFO', 'Clicked Channels icon on left navigation rail.');
+                        await page.waitForTimeout(1200);
+                    }
                 }
 
                 // Stage 3: Click SvitloSk channel item strictly targeting the SvitloSk newsletter cell or title
@@ -503,11 +506,12 @@ async function dismissOverlays() {
         }
 
         // 2. If in media preview dialog (close via 'x-alt' or 'x' icon)
+        // STRICT: ONLY close inside div[data-animate-modal-popup], NEVER match generic button[aria-label="Закрыть"] in the sidebar!
         const closePreview = await page.$(
             'div[data-animate-modal-popup] span[data-icon="x-alt"], ' +
             'div[data-animate-modal-popup] span[data-icon="x"], ' +
-            'div[aria-label*="Закр" i] span[data-icon="x"], ' +
-            'button[aria-label="Close"], button[aria-label="Закрыть"], button[aria-label="Закрити"]'
+            'div[data-animate-modal-popup] button[aria-label="Close"], ' +
+            'div[data-animate-modal-popup] button[aria-label*="Закр" i]'
         );
         if (closePreview) {
             await closePreview.click({ force: true }).catch(() => {});
