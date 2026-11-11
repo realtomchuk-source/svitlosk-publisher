@@ -321,6 +321,22 @@ async function isSvitloSkChannelActiveInMain() {
     }
 }
 
+// Verify whether #main is currently open strictly on SvitloSk channel
+async function assertSvitloSkChannelActive() {
+    if (!page || page.isClosed()) {
+        throw new Error('Browser page is closed or not available.');
+    }
+    const isActive = await isSvitloSkChannelActiveInMain();
+    if (!isActive) {
+        logBridge('WARN', 'Current #main is NOT on SvitloSk channel. Forcing ensureChannelOpen...');
+        await ensureChannelOpen(DEFAULT_CHANNEL_ID, 2);
+        const recheck = await isSvitloSkChannelActiveInMain();
+        if (!recheck) {
+            throw new Error('Action blocked: current active view in WhatsApp is NOT SvitloSk channel! Aborting to prevent interaction with foreign chats or channels.');
+        }
+    }
+}
+
 // 3-Stage Navigation to SvitloSk channel with strict #main verification and concurrency lock
 async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
     if (channelOpenPromise) {
@@ -366,38 +382,58 @@ async function ensureChannelOpen(channelIdentifier, maxRetries = 3) {
                     await page.waitForTimeout(1200);
                 }
 
-                // Stage 3: Click SvitloSk channel row TITLE (`span[title^="SvitloSk"]`) using real Playwright pointer event
-                // Never use broad `:has-text("SvitloSk")` on listitem because personal chat previews may contain SvitloSk invite links!
-                const svitloSkTitleLocator = page.locator(
-                    'span[title^="SvitloSk"], span[title*="SvitloSk Журнал"]'
+                // Stage 3: Click SvitloSk channel item strictly targeting the SvitloSk newsletter cell or title
+                let clicked = false;
+
+                // Priority 3a: Explicit newsletter cell with aria-label matching SvitloSk
+                const svitloSkCellLocator = page.locator(
+                    'div[data-testid="newsletter-tab-newsletter-cell"][aria-label*="SvitloSk" i], ' +
+                    'div[role="button"][aria-label*="Канал \"SvitloSk" i], ' +
+                    'div[role="button"][aria-label*="SvitloSk Журнал" i]'
                 ).first();
 
-                let clicked = false;
-                if (await svitloSkTitleLocator.count() > 0) {
-                    await svitloSkTitleLocator.scrollIntoViewIfNeeded().catch(() => {});
-                    await svitloSkTitleLocator.click({ timeout: 5000 });
+                if (await svitloSkCellLocator.count() > 0) {
+                    await svitloSkCellLocator.scrollIntoViewIfNeeded().catch(() => {});
+                    await svitloSkCellLocator.click({ timeout: 5000 });
                     clicked = true;
-                    logBridge('INFO', 'Clicked SvitloSk channel title in channels list via real Playwright mouse event.');
+                    logBridge('INFO', 'Clicked SvitloSk newsletter-cell in channels list.');
                 } else {
-                    // Fallback coordinate click strictly on a row whose primary title starts with SvitloSk
-                    const box = await page.evaluate(() => {
-                        const spans = Array.from(document.querySelectorAll('span[title], span'));
-                        const target = spans.find(el => {
-                            const r = el.getBoundingClientRect();
-                            if (r.width === 0 || r.height === 0 || r.x > 550) return false;
-                            const title = (el.getAttribute('title') || '').trim().toLowerCase();
-                            const txt = (el.innerText || '').trim().toLowerCase();
-                            return title.startsWith('svitlosk') || txt === 'svitlosk журнал знеструмлень' || txt === 'svitlosk';
-                        });
-                        if (!target) return null;
-                        const row = target.closest('div[role="listitem"], div[role="button"]') || target;
-                        const r = row.getBoundingClientRect();
-                        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-                    });
-                    if (box) {
-                        await page.mouse.click(box.x, box.y);
+                    // Priority 3b: Click span[title] with SvitloSk or its parent button
+                    const svitloSkTitleLocator = page.locator(
+                        'span[title^="SvitloSk"], span[title*="SvitloSk Журнал"]'
+                    ).first();
+
+                    if (await svitloSkTitleLocator.count() > 0) {
+                        await svitloSkTitleLocator.scrollIntoViewIfNeeded().catch(() => {});
+                        const parentBtn = svitloSkTitleLocator.locator('xpath=ancestor::div[@role="button" or @data-testid="newsletter-tab-newsletter-cell"][1]');
+                        if (await parentBtn.count() > 0) {
+                            await parentBtn.click({ timeout: 5000 });
+                        } else {
+                            await svitloSkTitleLocator.click({ timeout: 5000 });
+                        }
                         clicked = true;
-                        logBridge('INFO', `Clicked SvitloSk channel row at coordinates (${Math.round(box.x)}, ${Math.round(box.y)}).`);
+                        logBridge('INFO', 'Clicked SvitloSk channel button via title anchor.');
+                    } else {
+                        // Priority 3c: Fallback coordinate click strictly on element containing SvitloSk title
+                        const box = await page.evaluate(() => {
+                            const spans = Array.from(document.querySelectorAll('span[title], span, div[aria-label]'));
+                            const target = spans.find(el => {
+                                const r = el.getBoundingClientRect();
+                                if (r.width === 0 || r.height === 0 || r.x > 550) return false;
+                                const title = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
+                                const txt = (el.innerText || '').trim().toLowerCase();
+                                return title.includes('svitlosk') || txt.startsWith('svitlosk');
+                            });
+                            if (!target) return null;
+                            const row = target.closest('div[data-testid="newsletter-tab-newsletter-cell"], div[role="button"]') || target;
+                            const r = row.getBoundingClientRect();
+                            return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                        });
+                        if (box) {
+                            await page.mouse.click(box.x, box.y);
+                            clicked = true;
+                            logBridge('INFO', `Clicked SvitloSk channel row at coordinates (${Math.round(box.x)}, ${Math.round(box.y)}).`);
+                        }
                     }
                 }
 
@@ -628,6 +664,7 @@ async function waitForNewMessageConfirmation(knownIdsSet, expectedMarker, timeou
 // Read the tail of the channel feed from bottom up (GET /tail-state)
 async function getTailState(channelIdentifier, stopBeforeDateDdMm = null, maxScrollScreens = 6) {
     await ensureChannelOpen(channelIdentifier);
+    await assertSvitloSkChannelActive();
     await dismissOverlays();
     await scrollToBottom();
 
@@ -778,6 +815,7 @@ async function getTailState(channelIdentifier, stopBeforeDateDdMm = null, maxScr
 // 1. Send Text Message (Atomic: no hidden side-effect deletions, verifies new message by marker)
 async function sendTextMessage(channelIdentifier, text) {
     await ensureChannelOpen(channelIdentifier);
+    await assertSvitloSkChannelActive();
     await scrollToBottom();
     await dismissOverlays();
 
@@ -826,6 +864,7 @@ async function sendTextMessage(channelIdentifier, text) {
 // 2. Send Media Message (Atomic: never sends bare image + separate text post; cancels modal if caption fails)
 async function sendMediaMessage(channelIdentifier, caption, imageBase64, mimeType = 'image/png') {
     await ensureChannelOpen(channelIdentifier);
+    await assertSvitloSkChannelActive();
     await scrollToBottom();
 
     const parsedMarker = extractMarkerFromText(caption);
@@ -1240,6 +1279,7 @@ async function deleteMessageRow(targetElement, messageId = null, marker = null) 
 // 3. Delete Message via Context Menu (Strict: only by messageId or marker, returns deleted / notFound / failed)
 async function deleteMessage(channelIdentifier, messageId, marker = null) {
     await ensureChannelOpen(channelIdentifier);
+    await assertSvitloSkChannelActive();
 
     logBridge('INFO', `Attempting to delete message (id='${messageId || 'none'}', marker='${marker || 'none'}')...`);
 
@@ -1279,6 +1319,7 @@ async function deleteMessage(channelIdentifier, messageId, marker = null) {
 // 4. Edit Message (In-place edit with explicit status: updated / windowExpired / notFound / failed)
 async function editMessage(channelIdentifier, messageId, newText, marker = null) {
     await ensureChannelOpen(channelIdentifier);
+    await assertSvitloSkChannelActive();
 
     const parsedMarker = extractMarkerFromText(newText);
     const searchMarker = marker || (parsedMarker ? parsedMarker.marker : null);
